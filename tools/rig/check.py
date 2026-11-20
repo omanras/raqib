@@ -23,10 +23,12 @@ its PROCESS EVENTS section, every round asked was answered, no helper was starte
 was past the reader's bounds, and the processes that began are at least the children the stand-in said it started
 (its "start" lines; a floor: the count holds every process of the machine); MISSED otherwise, or where it says a
 refusal (X31's rule: n/a where the refusal names a right this user lacks, EPERM or EACCES).
-X36 (ADR-0007 BY-7; read from --report and --workload): the stand-in's wget, a child that lives under a second,
-is a NET-TOOL finding of the stand-in's tree that names wget (the watch took it from the process events); MISSED
-where the stand-in ran it and none does; n/a off Linux, where wget is not installed, where the stand-in did not run
-it, or where the helper was refused.
+X36 (ADR-0007 BY-7, BZ-10; read from --report, --workload and --sources): the stand-in's wget, a child that lives
+under a second (one try), is a NET-TOOL finding of the stand-in's tree that names wget, and the HostChild line of
+the tree's source that names wget cites the process events (the reader's word, not the sample's); MISSED where the
+stand-in ran it and no finding names it, where the line that names it is the sample's own (said so), or where its
+source line is not found; n/a off Linux, where wget is not installed, where the stand-in did not run it, or where
+the helper was refused.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -924,11 +926,34 @@ SHORT_TOOL_NAME = ("X36 the stand-in's wget, a child that lives under a second, 
                    " names wget")
 
 
-def read_short_tool(report, workload, platform):
-    """X36 (ADR-0007 BY-7): MET where a NET-TOOL line of the stand-in's tree (its pid, from the workload) names
-    wget; MISSED where the stand-in ran wget and none does; n/a off Linux, where wget is not installed, where the
-    stand-in did not run it, or where the helper was refused (its PROCESS EVENTS section says a refusal). It never
-    raises: a report that cannot be read is MISSED."""
+READER_SRC = "procevents"   # the source a HostChild line's cite names for a child the reader gave (BY-1)
+
+
+def _tool_lines(sources, pid, tool):
+    """The HostChild lines of the tree of `pid` in the watch's source files that name `tool`: [(file, its cites'
+    sources)]. A line that is not JSON is passed over."""
+    out = []
+    for name, text in sources or ():
+        for raw in str(text or "").splitlines():
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue
+            meta = line.get("input_meta") if isinstance(line, dict) else None
+            if (isinstance(meta, dict) and line.get("tool") == "HostChild" and meta.get("pid") == pid
+                    and tool in (meta.get("command_programs") or ())):
+                out.append((name, sorted({c.get("src") for c in meta.get("cites") or () if isinstance(c, dict)},
+                                         key=str)))
+    return out
+
+
+def read_short_tool(report, workload, platform, sources=()):
+    """X36 (ADR-0007 BY-7, BZ-10): MET where a NET-TOOL line of the stand-in's tree (its pid, from the workload)
+    names wget and a HostChild line of that tree's source that names wget cites the process events; MISSED where
+    the stand-in ran wget and no finding names it, where every line that names it cites the sample alone ("the
+    sample's own"), or where no such line is in the sources given; n/a off Linux, where wget is not installed,
+    where the stand-in did not run it, or where the helper was refused (its PROCESS EVENTS section says a
+    refusal). It never raises: a report that cannot be read is MISSED."""
     name = SHORT_TOOL_NAME
     try:
         if not str(platform or "").startswith("linux"):
@@ -951,10 +976,22 @@ def read_short_tool(report, workload, platform):
         hits = [f for f in listed if pid is not None and re.search(r"NET-TOOL on \S+ pid %d\b" % pid, f)
                 and re.search(r"\bwget\b", f)]
         rc = ran.group(1) if ran else "not said"
-        if hits:
-            return [(name, MET, "%d NET-TOOL line(s) on pid %s name wget (its rc=%s): %s" % (
-                len(hits), pid, rc, hits[0].strip()[:110]))]
-        return [(name, MISSED, "the stand-in ran wget (rc=%s) and no NET-TOOL line on pid %s names it" % (rc, pid))]
+        if not hits:
+            return [(name, MISSED, "the stand-in ran wget (rc=%s) and no NET-TOOL line on pid %s names it" % (
+                rc, pid))]
+        found = _tool_lines(sources, pid, "wget")
+        reader = [f for f in found if READER_SRC in f[1]]
+        if reader:
+            return [(name, MET, "%d NET-TOOL line(s) on pid %s name wget (its rc=%s), and its HostChild line cites"
+                     " the process events (%s): %s" % (len(hits), pid, rc, ", ".join(found[0][1]),
+                                                       hits[0].strip()[:110]))]
+        if found:
+            return [(name, MISSED, "the sample's own: the HostChild line that names wget on pid %s cites %s, not the"
+                     " process events (the wget lived to a sample; rc=%s)" % (pid, ", ".join(map(str, found[0][1]))
+                                                                             or "nothing", rc))]
+        return [(name, MISSED, "%d NET-TOOL line(s) on pid %s name wget, but no HostChild line of its tree's source"
+                 " that names wget was found%s: whose word it is cannot be told" % (
+                     len(hits), pid, "" if sources else " (no sources given)"))]
     except Exception as exc:   # never raises
         return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
 
@@ -997,7 +1034,7 @@ def main(argv=None):
         events = text(a.events) if os.path.isfile(a.events) else ""
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
     rows += read_watch_events(text(a.report), text(a.workload), a.platform)   # X35 (ADR-0007 BU-5)
-    rows += read_short_tool(text(a.report), text(a.workload), a.platform)     # X36 (ADR-0007 BY-7)
+    rows += read_short_tool(text(a.report), text(a.workload), a.platform, sources)   # X36 (BY-7, BZ-10)
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

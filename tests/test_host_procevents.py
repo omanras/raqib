@@ -44,6 +44,9 @@ def _home(tmp_path, monkeypatch):
     return path
 
 
+E, F = "2026-11-20T00:00:01.500000Z", "2026-11-20T00:00:02.500000Z"   # M14.1c REDO (BZ-4): an end is a readable time
+
+
 def rec(pid, began="2026-11-20T00:00:01.000000Z", ended=None, exe="/usr/bin/true", **kw):
     return dict({"pid": pid, "ppid": 1, "exe": exe, "earlier": [], "started_ticks": 9, "began": began,
                  "ended": ended, "code": 0 if ended else None, "signal": None, "unread": {}}, **kw)
@@ -128,15 +131,15 @@ def fake_client(drains=True, script=()):
 def test_e3_one_helper_started_at_the_first_round_before_its_sample_and_asked_after_each_sample(monkeypatch):
     log = []
     fake_round(monkeypatch, log)
-    make = factory(StandIn([answer([rec(1, ended="E"), rec(2), rec(3, began=None)], missed=1, beyond=4),
-                            answer([rec(1, ended="E"), rec(4, ended="F")], missed=3, more=True, beyond=4)], log=log))
+    make = factory(StandIn([answer([rec(1, ended=E), rec(2), rec(3, began=None)], missed=1, beyond=4),
+                            answer([rec(1, ended=E), rec(4, ended=F)], missed=3, more=True, beyond=4)], log=log))
     reader = host.live_reader(CATALOG, 0.0, "linux", helper=make)
     one, two, three = rounds(reader, 3)
     assert len(make.made) == 1
     assert log == ["start", "sample", ("ask", 2.0), "sample", ("ask", 2.0), "sample", ("ask", 2.0)]
     assert one == {"began": 2, "inside": 1, "unread_exe": 1, "beyond": 4, "lost": {"count": 0, "events": 0,
                    "why": None}, "refused": None, "hole": None, "more": False, "restarts": 0, "asked": True,
-                   "answered": True}
+                   "answered": True, "own": 0}   # M14.1c REDO (BZ-7): the watch's own left out of the round
     assert (two["began"], two["inside"], two["unread_exe"], two["more"]) == (1, 1, 2, True)   # pid 1 given again
     assert (three["began"], three["unread_exe"], three["hole"], three["beyond"]) == (0, 0, None, 0)
 
@@ -158,10 +161,10 @@ def test_e1_bw1_a_late_answer_is_taken_by_the_round_that_reads_it_and_counted_on
     reader = host.live_reader(CATALOG, 0.0, "linux", helper=make)
     first = reader()["procevents"]
     assert first["hole"] == host.PE_LATE % 2.0 and make.procs[0].asked == [b"read 1\n"]
-    make.procs[0].say(answer([rec(1, ended="E"), rec(2)], ask=1))
+    make.procs[0].say(answer([rec(1, ended=E), rec(2)], ask=1))
     second = reader()["procevents"]
     assert (second["began"], second["inside"], second["answered"]) == (2, 1, True)
-    make.procs[0].say(answer([rec(1, ended="E"), rec(2, ended="F")], ask=2))
+    make.procs[0].say(answer([rec(1, ended=E), rec(2, ended=F)], ask=2))
     third = reader()["procevents"]
     assert third["began"] == 0 and make.procs[0].asked == [b"read 1\n", b"read 2\n"]
 
@@ -386,7 +389,8 @@ def judged(w, code, home):
 @pytest.mark.parametrize("names", [["linux", "linux"], ["benign/windows-desktop", "windows"]])
 @pytest.mark.parametrize("events,gaps", [([pe(5, 3), pe(2, 2, 1)], 0), ([pe(hole=host.PE_LATE % 2.0), pe(lost=1)], 1),
                                          ([pe(hole="refused: " + procevents.PREFIX + "x", refused="x")] * 2, 0),
-                                         ([pe(1, beyond=3, more=True), pe(hole=host.PE_ENDED % "x", restarts=1)], 2)])
+                                         ([pe(1, beyond=3, more=True), pe(hole=host.PE_ENDED % "x", restarts=1)],
+                                          3)])   # M14.1c REDO (BZ-6): a rest held back is a hole of the result too
 def test_e9_no_finding_no_source_line_no_result_and_no_exit_code_changes_with_the_helper(tmp_path, names, events,
                                                                                          gaps):
     w0, c0 = watch(tmp_path / "without", feed(names))
@@ -466,6 +470,11 @@ def test_e3_where_the_reader_was_not_healthy_the_old_words_stand_with_the_reason
     w, clock = watch(tmp_path, feed(["linux"] * 3, events))
     text, _ = run(w, clock, 3)
     flat_ = " ".join(text.split())
+    if any(e["answered"] for e in events):   # M14.1c REDO (BZ-2): after an answered ask, what was heard and judged
+        note = next(x for x in w.notes if x.startswith(host.BETWEEN_HEARD))
+        assert note.startswith(host.BETWEEN_HEARD + "; the reader was not whole for the whole watch: ")
+        assert reason in note and host.BETWEEN_LINUX not in flat_
+        return
     note = next(x for x in w.notes if x.startswith(host.BETWEEN_HOLE % host.BETWEEN_LINUX))
     assert note.startswith(host.BETWEEN_HOLE % host.BETWEEN_LINUX + "; the process events are not counted for the"
                            " whole watch: ") and reason in note and host.BETWEEN_HEARD not in flat_
@@ -511,7 +520,7 @@ def test_e6_each_hole_is_a_blind_spot_of_its_own_kind_said_once_while_it_lasts_a
 def test_e4_bu4_a_programs_path_through_the_real_client_reaches_no_output_no_event_and_no_file(tmp_path,
                                                                                              monkeypatch):
     fake_round(monkeypatch, [])
-    evil = [rec(11, exe=EVIL, ended="E", unread={"exe": EVIL}, earlier=[{"exe": EVIL, "unread": {}}]),
+    evil = [rec(11, exe=EVIL, ended=E, unread={"exe": EVIL}, earlier=[{"exe": EVIL, "unread": {}}]),
             rec(12, exe=None, unread={"exe": "ENOENT " + EVIL})]
     make = fake_client(script=[answer(evil, missed=1, ask=n) for n in (1, 2, 3)])
     w, clock = watch(tmp_path, host.live_reader(CATALOG, 0.0, "linux", helper=make))
@@ -596,8 +605,8 @@ def test_e6_the_documents_say_what_the_helper_reads_loads_and_bounds_and_what_is
         assert sentence in guide, sentence
     threat = flat("docs/THREAT_MODEL.md")
     for sentence in ("a second process of Raqib's", "it ends when its input ends",
-                     "A program's path, text a process chose, reaches a tree's line only through the gate a sampled"
-                     " child's name goes through",   # M14.1c (BY-4)
+                     "A program's path, text a process chose, reaches a tree's programs only through the gate a"
+                     " sampled child's name goes through",   # M14.1c (BY-4); its REDO (BZ-11): "programs", not "line"
                      "it opens no other file, writes only its output and starts no program",
                      "so it loads Raqib from where the watch did and from nowhere else",
                      "costs the watch a hole, never its round or its Stop",

@@ -1043,12 +1043,15 @@ class Helper:
             self.proc = None
             return "the helper could not be started (%s)" % _flat(exc)
         self._fd = None   # BY-6: the ask is written to a pipe that does not block; a full one is the helper's end
-        try:
-            fd = self.proc.stdin.fileno()
-            os.set_blocking(fd, False)
-            self._fd = fd
-        except Exception:
-            pass          # an input with no descriptor (a test's stand-in) is written as it is
+        fileno = getattr(self.proc.stdin, "fileno", None)
+        if fileno is not None:   # an input with no descriptor (a test's stand-in) is written as it is
+            try:
+                fd = fileno()
+                os.set_blocking(fd, False)
+                self._fd = fd
+            except Exception as exc:   # BZ-12: an input that cannot be made unblocking is the helper not started
+                self.stop(0)
+                return "the helper's input could not be made unblocking (%s)" % _flat(exc)
         try:   # the thread holds the pipe and the queue, not the client: a client let go ends its helper
             self._thread = self._thread_class(target=_pump, args=(self.proc.stdout, self._lines, self._stop),
                                               name="raqib-procevents-helper", daemon=True)

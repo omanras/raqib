@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -157,17 +158,21 @@ def test_e2_the_same_pid_and_start_is_one_process_and_another_start_is_another()
     assert {"pid": 1750, "image": "sleep", "started": "boot+2300"} in inv["processes"]   # the sampled one stays
 
 
-def test_e2_without_ticks_a_record_is_one_with_the_sample_by_the_time_of_its_fork_else_another():
+def test_e2_without_ticks_a_record_joins_a_sampled_process_by_pid_only_where_the_sample_read_no_start_for_it():
+    """BZ-5: the sample read 1700's ticks, the reader did not: kept apart, near in time or far; where the sample read
+    no start for 1700, the two are one by the pid."""
     texts, holes = texts_of(reader=False)
-    sample = texts["proc"][1].replace('"start_ticks": 2100,', '"start_ticks": 2100, "started": '
-                                      '"2026-11-20T09:59:59.000000Z",')
-    assert sample != texts["proc"][1]
     near = line(1700, exe=None, ticks=None, began="2026-11-20T09:59:59.900000Z", ended=None, code=None)
     far = line(1700, exe="/usr/bin/nc", ticks=None, began="2026-11-20T10:00:09.000000Z", ended=None, code=None)
-    for text, apart in ((near, 0), (far, 1)):
-        inv = build(dict(texts, proc=("p", sample, None), procevents=("x", text, None)), holes)
-        assert inv["from_reader"]["by_fork"] == 1 and inv["from_reader"]["apart"] == apart
-        assert len([a for a in tree(inv, 1600)["acts"] if a["pid"] == 1700]) == 1 + apart
+    for text in (near, far):
+        inv = build(dict(texts, procevents=("x", text, None)), holes)
+        assert inv["from_reader"]["by_fork"] == 1 and inv["from_reader"]["apart"] == 1
+        assert len([a for a in tree(inv, 1600)["acts"] if a["pid"] == 1700]) == 2
+        assert acts(inv, 1600)[(1700, "bash")]["cites"][0]["src"] == "proc"   # no program named on the sampled one
+    unread = texts["proc"][1].replace('"start_ticks": 2100, ', "")
+    assert unread != texts["proc"][1]
+    inv = build(dict(texts, proc=("p", unread, None), procevents=("x", near, None)), holes)
+    assert inv["from_reader"]["apart"] == 0 and [a["pid"] for a in tree(inv, 1600)["acts"]].count(1700) == 1
 
 
 def test_e2_a_child_is_linked_to_the_parent_alive_at_its_fork_where_the_reader_gave_two_of_one_pid():
@@ -401,7 +406,8 @@ def test_e5_the_helper_always_runs_isolated():
 
 
 class FullInput:
-    """A helper whose input is a real pipe nobody reads, filled to the brim; its output says the ready line."""
+    """A helper whose input is a real pipe nobody reads, filled to the brim, its writing end then made to block
+    again (BZ-9: only the client's own unblocking keeps the ask from waiting); its output says the ready line."""
 
     def __init__(self, argv, **kw):
         self.args, self.pid, self.returncode = argv, 4343, None
@@ -412,6 +418,7 @@ class FullInput:
                 os.write(w, b"x" * 4096)
         except BlockingIOError:
             pass
+        os.set_blocking(w, True)
         self._r, self.stdin = r, os.fdopen(w, "wb")
         out_r, self._out_w = os.pipe()
         self.stdout = os.fdopen(out_r, "rb")
@@ -427,19 +434,45 @@ class FullInput:
     terminate = kill
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="os.set_blocking on a pipe: Linux (the helper's own)")
 def test_e5_the_ask_never_blocks_a_full_input_is_an_end_and_said_so():
-    procs = []
+    procs, got = [], []
 
     def popen(argv, **kw):
         procs.append(FullInput(argv, **kw))
         return procs[-1]
     events = host.ProcEvents(lambda: procevents.Helper(popen=popen), timeout=0.5)
     events.begin()
-    t0 = time.monotonic()
-    got = events.round()
-    assert time.monotonic() - t0 < 2.0
-    assert got["hole"] == host.PE_ENDED % procevents.FULL and got["restarts"] == 1
+    asking = threading.Thread(target=lambda: got.append(events.round()), daemon=True)
+    asking.start()
+    asking.join(3.0)   # a write that blocks would hold the round here: the test fails, never hangs
+    assert not asking.is_alive(), "the ask's write blocked on a full input"
+    assert got[0]["hole"] == host.PE_ENDED % procevents.FULL and got[0]["restarts"] == 1
     events.close()
+
+
+class NoUnblock(FullInput):
+    """An input whose descriptor cannot be made unblocking."""
+
+    def __init__(self, argv, **kw):
+        super().__init__(argv, **kw)
+        self.stdin = self
+
+    def fileno(self):
+        raise OSError(22, "Invalid argument")
+
+    def close(self):
+        pass
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="os.set_blocking on a pipe: Linux (the helper's own)")
+def test_e11_an_input_that_cannot_be_made_unblocking_is_the_helper_not_started_and_said():
+    events = host.ProcEvents(lambda: procevents.Helper(popen=NoUnblock), timeout=0.5)
+    events.begin()
+    got = events.round()
+    assert got["hole"].startswith("not started: the helper of the process events could not be started (the"
+                                  " helper's input could not be made unblocking (")
+    assert not got["asked"]
 
 
 # --- E6 (the words) -------------------------------------------------------------------------------------------------
@@ -452,15 +485,20 @@ def test_e6_the_section_and_the_note_say_what_is_judged_and_what_is_not(tmp_path
     text, _ = run(w, clock, 2)
     flat_ = " ".join(text.split())
     for words in ("judged: a process that began between two samples under a tree that talks at a sample is that"
-                  " tree's child, by its program's name, from the reader (the helper's lines are its word, not"
-                  " checked by the watch)",
-                  "not judged: a tree that lives whole between two samples, a child's own connections, a program not"
-                  " read",
+                  " tree's child, by the name of its program's file (a link's target, not the name it was called"
+                  " by), from the reader (the helper's lines are its word, not checked by the watch)",
+                  "not judged: a tree that lives whole between two samples, a child's own connections, a program a"
+                  " process changes to after its line was written and the programs it had before, a child whose"
+                  " parent was given in an earlier round and ended before the sample; a program not read is counted,"
+                  " with no line",
                   "given to the rounds: 0; joined to a tree as its child: 0; of them with no program read (no line): 0",
-                  "a tree that lives whole between two snapshots, what a child talks to and a program not read are in"
-                  " no round"):
-        assert words in flat_, words
+                  "not judged: a tree that lives whole between two snapshots, what a child talks to, a program a"
+                  " process changes to after its line was written and the programs it had before, and a child whose"
+                  " parent was given in an earlier round and ended before the sample; a program not read is counted,"
+                  " with no line"):
+        assert words in flat_, words   # M14.1c REDO (BZ-3)
     assert "heard and counted, not judged" not in flat_ and "not judged yet" not in flat_
+    assert "a program not read are in no round" not in flat_
 
 
 def test_e6_the_documents_follow():
@@ -471,11 +509,29 @@ def test_e6_the_documents_follow():
                      " not read",
                      "The helper's lines are its word: what is judged from them comes from the reader, and the watch"
                      " does not check them.",
-                     "always with `-I`", "an input that is full (a part of the ask written, or none) is `ended`"):
+                     "always with `-I`", "an input that is full (a part of the ask written, or none) is `ended`",
+                     # M14.1c REDO (BZ-1, BZ-3, BZ-5, BZ-6, BZ-8)
+                     "The search for act-roots takes as a root only a process a sample held (BZ-1)",
+                     "A program a process changes to after its line was written (a shell that runs its last command in"
+                     " its own place, in a later round) gets no second line, and a process's earlier programs are"
+                     " never given.",
+                     "A child whose parent was given in an earlier round and ended before this sample is in no tree.",
+                     "A child is named by its program's file (the target of a link: `nc.openbsd`, `busybox`), not by"
+                     " the name it was called by",
+                     "where the sample read one, the two are kept apart",
+                     "or an answer that holds back a rest for a next one",
+                     "The round reads no /proc start of a child the reader alone gave and said ended"):
         assert sentence in spec, sentence
     guide = flat("docs/GUIDE.md")
-    for sentence in ("so NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred as they judge a sampled child",
+    for sentence in ("so NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred whose file has that name",
                      "Not judged: a tree that lives whole between two samples",
+                     "a program a process changes to after its line was written and the programs it had before, and a"
+                     " child whose parent was given in an earlier round and ended before the sample.",
+                     "A program not read is in the round and counted; it gets no line.",
+                     "the root of a tree, and of an act-root, is always a process a sample held",
+                     "where the reader answered and was not whole, the note says what was heard and judged and why it"
+                     " was not whole",
+                     "the result is INCOMPLETE unless a finding makes it an alarm",
                      "What is judged from the helper is the helper's word: the watch does not check its lines.",
                      "a hole of the result of its own kind (`procevents`)"):
         assert sentence in guide, sentence
@@ -484,9 +540,16 @@ def test_e6_the_documents_follow():
                      "A process of the same user that writes in the helper's place could make the watch write"
                      " HostChild lines for children that never ran under a tree that talks",
                      "it could leave out what did run, so a short child is not judged",
-                     "always `-I`", "the watch's record takes that image as the image it was"):
+                     "always `-I`", "the watch's record takes that image as the image it was",
+                     # M14.1c REDO (BZ-3, BZ-8, BZ-11)
+                     "not the name it was called by, so a rule's list of names can miss it",
+                     "a child whose parent was given in an earlier round and ended before the sample",
+                     "The watch reads no /proc start of a process the reader said ended (BZ-8)",
+                     "a tree's line holds the reader's record itself, its path included, made printable and cut as a"
+                     " sampled child's record is"):
         assert sentence in threat, sentence
     assert "and judges nothing from it yet" not in threat and "`-P` otherwise" not in threat
+    assert "It cannot make the watch run anything or read a file" not in threat
 
 
 def test_e8_ascii_outside_docs():
@@ -495,3 +558,127 @@ def test_e8_ascii_outside_docs():
         assert (ROOT / path).read_text(encoding="utf-8").isascii(), path
     for path in sorted((ROOT / "tests" / "fixtures" / "procevents-round").rglob("*")):
         assert path.is_dir() or path.read_bytes().isascii(), path
+
+
+# --- M14.1c REDO (ADR-0007 Amendment BZ) ----------------------------------------------------------------------------
+def proc_line(pid, ppid, argv0, exe, ticks, **kw):
+    return json.dumps(dict({"argv": [argv0], "at": "2026-11-20T10:00:00.000Z", "cwd": "/home/user", "env_keys": [],
+                            "exe": exe, "name": argv0, "pid": pid, "ppid": ppid, "sockets": [], "unread": [],
+                            "start_ticks": ticks}, **kw), sort_keys=True) + "\n"
+
+
+TERMINAL = proc_line(2000, 1, "gnome-terminal-server", "/usr/libexec/gnome-terminal-server", 2400) + \
+    proc_line(2010, 2000, "bash", "/usr/bin/bash", 2410)
+CHAIN = [(2020, 2010, "tool", "/home/user/.local/bin/tool", 2420), (2021, 2020, "sh", "/usr/bin/sh", 2421),
+         (2022, 2021, "git", "/usr/bin/git", 2422)]
+
+
+def test_r1_bz1_a_chain_the_reader_alone_gave_under_a_sampled_terminal_shell_is_no_act_root_and_no_tree():
+    texts, holes = texts_of(reader=False)
+    sample = texts["proc"][1] + TERMINAL
+    reader = "".join(line(pid, ppid=ppid, exe=exe, ticks=ticks, ended=None, code=None)
+                     for pid, ppid, _, exe, ticks in CHAIN)
+    inv = build(dict(texts, proc=("p", sample, None), procevents=("x", reader, None)), holes)
+    assert inv["act_roots"] == [] and not [t for t in inv["candidates"] if t["pid"] in (2010, 2020)]
+    assert inv["from_reader"]["given"] == 3 and inv["from_reader"]["joined"] == 0
+    # the same chain held by the sample is an act-root, as before: the root's being sampled is what tells them apart
+    sampled = sample + "".join(proc_line(pid, ppid, argv0, exe, ticks) for pid, ppid, argv0, exe, ticks in CHAIN)
+    assert [r["pid"] for r in build(dict(texts, proc=("p", sampled, None)), holes)["act_roots"]] == [2020]
+
+
+@pytest.mark.parametrize("field,value", [("began", "9999-12-31T23:59:59-01:00"), ("began", "0000-01-01T00:00:00Z"),
+                                         ("ended", "9999-12-31T23:59:59-01:00"), ("ended", "soon"),
+                                         ("pid", 10 ** 10), ("ppid", 10 ** 10)])
+def test_r4_bz4_a_time_the_round_cannot_read_or_a_pid_past_the_bound_is_no_line_and_never_raises(
+        field, value, tmp_path, monkeypatch):
+    kw = {"pid": 5, field: value} if field != "pid" else {"pid": value}
+    records, problems = discover.parse_procevents(line(**kw) + line(6))
+    assert [r["pid"] for r in records] == [6] and len(problems) == 1
+    stand_in_sample(monkeypatch)
+    rec = reader_rec(1801, "/usr/bin/curl", 2200)
+    rec[{"began": "began", "ended": "ended", "pid": "pid", "ppid": "ppid"}[field]] = value
+    make = factory(StandIn([answer([rec]), answer([reader_rec(1802, "/usr/bin/curl", 2210)])]))
+    reader = host.live_reader(CATALOG, 0.0, "linux", helper=make)
+    one, two = reader(), reader()
+    assert one["procevents"]["hole"] == host.PE_NOT_A_LINE and "from_reader" not in one
+    assert [t["pid"] for t in one["candidates"]] == [1600]   # the round is kept: the sample's alone
+    assert two["procevents"]["hole"] is None and two["from_reader"]["given"] == 1
+
+
+def test_r2_bz2_after_an_answered_ask_a_watch_not_whole_says_what_was_heard_and_judged_and_why(tmp_path):
+    w, clock = make_watch(tmp_path, feed_inv([pe(2), pe(1), pe(hole=host.PE_LATE % 2.0)]))
+    text, _ = run(w, clock, 3)
+    note = next(x for x in w.notes if x.startswith(host.BETWEEN_HEARD))
+    assert note == host.BETWEEN_HEARD + host.BETWEEN_NOT_WHOLE % ("1 of 3 ask(s) not answered in their round; round 3:"
+                                                                 " late: the helper's answer did not come within 2 s"
+                                                                 + host.PE_OF_RESULT)
+    assert host.BETWEEN_LINUX not in " ".join(text.split())
+
+
+def test_r2_bz2_where_no_ask_was_answered_the_rounds_read_proc_only(tmp_path):
+    w, clock = make_watch(tmp_path, feed_inv([pe(hole=host.PE_LATE % 2.0)] * 2))
+    text, _ = run(w, clock, 2)
+    note = next(x for x in w.notes if x.startswith(host.BETWEEN_HOLE % host.BETWEEN_LINUX))
+    assert host.BETWEEN_NOT_HEARD.split(":")[0] in note and host.BETWEEN_HEARD not in " ".join(text.split())
+
+
+def test_r6_bz6_an_answer_that_holds_back_a_rest_is_a_hole_of_the_result_once_an_episode(tmp_path):
+    w, clock = make_watch(tmp_path, feed_inv([pe(2), pe(1, more=True), pe(1, more=True), pe(1), pe(1, more=True)]))
+    text, code = run(w, clock, 5)
+    holes = [h for h in w.holes if h["kind"] == host.PE_HOLE_KIND]
+    assert [h["round"] for h in holes] == [2, 5] and all(host.PE_MORE in h["detail"] for h in holes)
+    assert code == 3 and "  hole, round 2: " + host.PE_MORE + host.PE_OF_RESULT in text
+
+
+class Counting(StandIn):
+    """A stand-in helper that counts the asks it was written, as procevents.Helper does: `asks` after each round."""
+
+    def __init__(self, script, asks):
+        super().__init__(script)
+        self.counts, self.asks = list(asks), 0
+
+    def ask(self, timeout):
+        self.asks = self.counts.pop(0)
+        return super().ask(timeout)
+
+
+def test_r7_bz7_the_watchs_own_socket_tool_stays_its_own_in_an_answer_taken_a_round_late(monkeypatch):
+    me = os.getpid()
+    texts, holes = texts_of(reader=False)
+    sample = texts["proc"][1].replace('"self": 500,', '"helpers": [], "self": %d,' % me) + proc_line(
+        me, 1, "python3", sys.executable, 50)
+    assert '"self": %d' % me in sample
+
+    def collect_live(catalog, **kw):
+        own.RECORD.alive({}, {}, since=time.time())   # the sample forgets what it does not hold, as snapshot_proc
+        return dict(texts, proc=("p", sample, None)), list(holes), 1
+    monkeypatch.setattr(discover, "collect_live", collect_live)
+    monkeypatch.setattr(discover, "read_conn_bytes", lambda paths: ({}, "fake ss", None))
+    monkeypatch.setattr(discover, "proc_start_times", lambda pids: ({}, None))
+    began = datetime.datetime.fromtimestamp(time.time(), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    ss = dict(reader_rec(4194000, "/usr/sbin/ss", 60, ppid=me, began=began), started_ticks=60)
+    helper = Counting([answer([], ask=1), procevents.LATE, answer([ss], ask=2)], asks=[1, 2, 2])
+    reader = host.live_reader(CATALOG, 0.0, "linux", helper=factory(helper))
+    reader()
+    own.RECORD.add(4194000, image="ss")   # the round's socket tool, run after round 1's build
+    two, three = reader(), reader()
+    stranger = "that the watch did not start"
+    assert two["procevents"]["hole"] == host.PE_LATE % 2.0 and three["procevents"]["answered"]
+    assert three["procevents"]["own"] == 1 and "from_reader" not in three
+    assert not [h for h in three["holes"] if stranger in h]
+    # without the watch's record it is a stranger under the watch's pid: what the copies kept prevented
+    given = {"pid": 4194000, "ppid": me, "exe": "/usr/sbin/ss", "ticks": 60, "began": began, "ended": ss["ended"],
+             "code": 0}
+    inv = build(dict(texts, proc=("p", sample, None), procevents=("x", host.reader_text([given], {}), None)), holes)
+    assert [h for h in inv["holes"] if stranger in h]
+
+
+def test_r8_bz8_no_proc_read_for_the_start_of_a_child_the_reader_said_ended(monkeypatch):
+    stand_in_sample(monkeypatch)
+    read = []
+    monkeypatch.setattr(discover, "proc_start_times", lambda pids: read.append(sorted(pids)) or ({}, None))
+    make = factory(StandIn([answer([reader_rec(1801, "/usr/bin/curl", 2200),
+                                    reader_rec(1805, "/usr/bin/wget", 2230, ended=None)])]))
+    inv = host.live_reader(CATALOG, 0.0, "linux", helper=make)()
+    assert read == [[1700, 1805]]   # the sampled bash and the child alive at the ask; never the ended curl
+    assert inv["child_started"]["by"]["1801"] == "2026-11-20T10:00:05.000000Z"   # its start is the record's

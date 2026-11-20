@@ -230,31 +230,37 @@ of its own that runs the reader of the kernel's process events
 helper once what it heard, waiting at most 2 s and at most a quarter of the interval. What the
 helper gave since the round before is given to the round beside its sample (M14.1c): a process that
 began between two samples under a tree that talks at a sample is that tree's child, with its
-HostChild line by its program's name, through the gate a sampled child's name goes through, so
-NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred as they judge a sampled child; a process
-the sample also holds (the same pid and the same start ticks) is one process. A tree that is a
-candidate only by what the reader gave is listed `by the channel`, as on Windows. Not judged: a tree
-that lives whole between two samples (a tree needs a talker at a sample, and a connection that opens
-and closes between two samples is still unseen), a child's own connections, and a program not read
-(counted, with no line). What is judged from the helper is the helper's word: the watch does not
-check its lines. Its report has a section `PROCESS EVENTS (Linux):` after the place of Windows'
-CHANNEL line: what is judged and what is not, the rounds asked and answered, the processes that
-began, those of them that began and ended between two asks, the programs not read (reads at an exec
-that failed: a process can end before its program is read), how many processes were given to the
-rounds, joined to a tree as its child and, of them, had no program read, what was past the reader's
-bounds, and what the reader lost, in its own words, over every helper the watch had. No program's
-name or path is shown in that section: only numbers. Only where every ask was answered in its round,
-no helper was started again, nothing was lost, nothing was past the reader's bounds and the last
-answer left nothing for a next one, the note that what lives between two rounds is not seen on Linux
-says instead what is now seen and what is not; otherwise the old words stand with each reason beside
-them. A helper refused at its first start (a container, a right not given), or late or ended before
-its first answer, is a blind spot of its own kind: it does not change the result, and the rounds are
-the sample's alone. After its first answer, a late answer, a line that is not the helper's, an end
-(and its one restart), a loss of events or a bound passed is a hole of the result of its own kind
-(`procevents`): what was being judged has a gap, and the result is INCOMPLETE. Each is said once
-while it lasts, and at most 10 such episodes are printed, then how many more. A helper that ends, or
-is late three rounds running, is started again once, and the section says that nothing was heard
-between its end and the new start; a second end is final.
+HostChild line by the name of its program's file (a link's target, such as `nc.openbsd` or
+`busybox`, not the name it was called by), through the gate a sampled child's name goes through, so
+NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred whose file has that name; a process the
+sample also holds (the same pid and the same start ticks) is one process. A tree that is a candidate
+only by what the reader gave is listed `by the channel`, as on Windows; the root of a tree, and of
+an act-root, is always a process a sample held. Not judged: a tree that lives whole between two
+samples (a tree needs a talker at a sample, and a connection that opens and closes between two
+samples is still unseen), a child's own connections, a program a process changes to after its line
+was written and the programs it had before, and a child whose parent was given in an earlier round
+and ended before the sample. A program not read is in the round and counted; it gets no line. What
+is judged from the helper is the helper's word: the watch does not check its lines. Its report has a
+section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: what is judged and what
+is not, the rounds asked and answered, the processes that began, those of them that began and ended
+between two asks, the programs not read (reads at an exec that failed: a process can end before its
+program is read), how many processes were given to the rounds, joined to a tree as its child and, of
+them, had no program read, how many of the watch's own processes were left out, what was past the
+reader's bounds, and what the reader lost, in its own words, over every helper the watch had. No
+program's name or path is shown in that section: only numbers. Only where every ask was answered in
+its round, no helper was started again, nothing was lost, nothing was past the reader's bounds and
+the last answer left nothing for a next one, the note that what lives between two rounds is not seen
+on Linux says instead what is now seen and what is not; where the reader answered and was not whole,
+the note says what was heard and judged and why it was not whole; where it never answered, the old
+words stand with each reason beside them. A helper refused at its first start (a container, a right
+not given), or late or ended before its first answer, is a blind spot of its own kind: it does not
+change the result, and the rounds are the sample's alone. After its first answer, a late answer, a
+line that is not the helper's, an end (and its one restart), a loss of events, a bound passed or an
+answer that holds back a rest for a next one is a hole of the result of its own kind (`procevents`):
+what was being judged has a gap, and the result is INCOMPLETE unless a finding makes it an alarm.
+Each is said once while it lasts, and at most 10 such episodes are printed, then how many more. A
+helper that ends, or is late three rounds running, is started again once, and the section says that
+nothing was heard between its end and the new start; a second end is final.
 
 A tree whose root process is still in the round's sample and is not in the round is `quiet (its root
 alive in round N; not seen talking with an act at the sample; source kept)` ("source kept" only when

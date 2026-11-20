@@ -81,7 +81,7 @@ def main():
     run(["curl", "-s", "--max-time", "10", "-o", nul, "https://example.com/"])          # a short child
     if sys.platform.startswith("linux"):   # ADR-0007 BY-7 (X36): a network tool that lives under a second
         if shutil.which("wget"):
-            run(["wget", "-q", "-O", "/dev/null", "--timeout=5", "https://example.com/"])
+            run(["wget", "-q", "-O", "/dev/null", "--timeout=5", "--tries=1", "https://example.com/"])   # BZ-10
         else:
             say("wget not installed")
     if windows:

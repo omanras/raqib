@@ -2,6 +2,7 @@
 prints (documentation addresses, synthetic names) is read as all MET; each expectation is then broken in turn, by
 the words of the field run that taught it, and must be the one that is MISSED."""
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -357,9 +358,20 @@ WGET_LINE = ("  [medium] NET-TOOL on python pid 9828 via host: HostChild may rea
              " wget, programs [\"wget\"]); off\n")
 
 
-def x36(report=None, workload=WGET_WORKLOAD, platform="linux", section=EVENTS_SECTION):
+def child_line(pid=9828, programs=("wget",), srcs=("procevents",), seq=5):
+    """A HostChild line of the stand-in's tree's source file, its cites of the sources `srcs` (hashes only)."""
+    return json.dumps({"seq": seq, "tool": "HostChild", "source": "host", "input_meta": {
+        "command_programs": list(programs), "pid": pid, "children": [{"pid": 9900, "image": programs[0]}],
+        "cites": [{"src": x, "line": 3, "text_sha256": "0" * 64} for x in srcs]}}) + "\n"
+
+
+READER_SOURCES = [("20261120T075035.000Z-1-9828-ab.jsonl", "not json\n" + child_line(programs=("curl",), srcs=("proc",),
+                                                                                         seq=1) + child_line())]
+
+
+def x36(report=None, workload=WGET_WORKLOAD, platform="linux", section=EVENTS_SECTION, sources=READER_SOURCES):
     report = REPORT.replace("TREES SEEN:", section + "TREES SEEN:", 1) if report is None else report
-    ((ident, state, words),) = check.read_short_tool(report, workload, platform)
+    ((ident, state, words),) = check.read_short_tool(report, workload, platform, sources)
     assert ident.startswith("X36 ")
     return state, words
 
@@ -369,9 +381,20 @@ def with_wget(report=REPORT):
     return report[:at] + WGET_LINE + report[at:]
 
 
-def test_x36_met_where_a_net_tool_line_of_the_stand_ins_tree_names_wget():
+def test_x36_met_where_a_net_tool_line_of_the_stand_ins_tree_names_wget_and_its_line_cites_the_process_events():
     state, words = x36(report=with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1))
-    assert state == check.MET and words.startswith("1 NET-TOOL line(s) on pid 9828 name wget (its rc=0)")
+    assert state == check.MET and words.startswith("1 NET-TOOL line(s) on pid 9828 name wget (its rc=0), and its"
+                                                   " HostChild line cites the process events (procevents)")
+
+
+def test_x36_not_met_where_the_line_that_names_wget_is_the_samples_own_or_its_line_is_not_found():
+    report = with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
+    state, words = x36(report=report, sources=[("t.jsonl", child_line(srcs=("proc",)))])
+    assert state == check.MISSED and words.startswith("the sample's own: the HostChild line that names wget on pid"
+                                                      " 9828 cites proc, not the process events")
+    for sources in ((), [("t.jsonl", child_line(pid=77))], [("t.jsonl", child_line(programs=("curl",)))]):
+        state, words = x36(report=report, sources=sources)
+        assert state == check.MISSED and "whose word it is cannot be told" in words
 
 
 def test_x36_missed_where_the_stand_in_ran_wget_and_no_line_of_its_tree_names_it():
@@ -397,5 +420,10 @@ def test_x36_is_a_row_of_main(tmp_path, capsys):
     (tmp_path / "w.out").write_text(with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1),
                                     encoding="utf-8")
     (tmp_path / "l.out").write_text(WGET_WORKLOAD, encoding="utf-8")
-    check.main(["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "linux"])
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "sources" / READER_SOURCES[0][0]).write_text(READER_SOURCES[0][1], encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "linux"]
+    check.main(base + ["--sources", str(tmp_path / "sources")])
     assert "MET     X36 " in capsys.readouterr().out
+    check.main(base)   # no sources: whose word it is cannot be told
+    assert "MISSED  X36 " in capsys.readouterr().out

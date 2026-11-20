@@ -303,20 +303,25 @@ not held for it. A line the watch cannot count (a record with no usable pid, cou
 another shape) is `not a line`, never an exception. On Windows and elsewhere
 no helper is started and the key is absent.
 
-## The round (M14.1c, ADR-0007 Amendment BY)
+## The round (M14.1c, ADR-0007 Amendments BY and BZ)
 
 The text. After each answered ask the watch keeps the processes of the
 answer (at most SERVE_MAX entries, as an answer is bounded; a process of
-another shape makes the answer `not a line`) for that round alone, and
-gives discover one text of the kind `procevents`: one JSON line per
-process whose fork was heard, `{pid, ppid, exe, ticks, began, ended, code}`
-and nothing else (`exe` and `ticks` null where not read). A round whose
-helper gave nothing has no such text, and is the round it was, byte for
-byte. A process the watch started itself (its pid in the watch's record of
-what it started, raqib/own.py, its parent the watch, its program the
-recorded image and its fork within the record's window) is the watch's
-own: it is not given (BY-6). The socket tool the round runs (`ss`) is in
-that record when it starts.
+another shape, a time the round cannot read or one that is no real
+instant, or a pid at or above discover's bound for keying instances apart
+makes the answer `not a line`, BZ-4) for that round alone, and gives
+discover one text of the kind `procevents`: one JSON line per process
+whose fork was heard, `{pid, ppid, exe, ticks, began, ended, code}` and
+nothing else (`exe` and `ticks` null where not read). A round whose helper
+gave nothing has no such text, and is the round it was, byte for byte. A
+process the watch started itself (its pid in the watch's record of what it
+started, raqib/own.py, its parent the watch, its program the recorded image
+and its fork within the record's window) is the watch's own: it is not
+given (BY-6). The watch keeps its copies of that record until the answer
+that covers the round they were copied in is taken (a late answer, a rest
+held back), at most 1024 (BZ-7), and the section counts the processes of
+its own left out. The socket tool the round runs (`ss`) is in that record
+when it starts.
 
 The parser. `discover.parse_procevents` makes of each line a process
 record as `parse_proc` makes one of a sampled process: the pid, the parent
@@ -324,45 +329,64 @@ the kernel named, the image by the same naming of the program's path, that
 path as its exe, no argument (the reader reads none), the start key
 `boot+<ticks>` where the ticks were read, and the time its fork was heard;
 it is marked as the reader's (`created`). A line that is not such a line
-is a problem of the round, never an exception.
+(BZ-4 as above) is a problem of the round, never an exception.
 
 The join. A record is one process with the sampled process of its pid
-where their start ticks are the same; where the reader's ticks were not
-read, where the time its fork was heard and the start the sample shows are
-within 2 s, or the sample's start was not read (as the merge by pid was);
-otherwise it is another process, keyed apart. A child the reader gave is
-linked to the instance of its parent pid alive when its fork was heard,
-where the reader gave that instance. Then the round is built as any: each
-process goes to its nearest talking ancestor as an act, and an act is its
-tree's child and its HostChild line, so NET-TOOL and DESTRUCT-CMD judge it.
-A tree that is a candidate only by what the reader gave is as one that is
-so only by the channel on Windows (`candidate_by` "channel", AA-1), and the
-footprints are those of the round built without the reader's records
-(AD-1). An end heard from the reader never ends a process the sample holds:
-the round's process list is the sample's.
+where their start ticks are the same, or where the sample read no start
+for that process (as the merge by pid was). A record whose ticks were not
+read joins the sampled process of its pid only where the sample read no
+start for it; where the sample read one, the two are kept apart (BZ-5: a
+line more, never a program named on another process). Otherwise it is
+another process, keyed apart. A child the reader gave is linked to the
+instance of its parent pid alive when its fork was heard, where the reader
+gave that instance. Then the round is built as any: each process goes to
+its nearest talking ancestor as an act, and an act is its tree's child and
+its HostChild line, so NET-TOOL and DESTRUCT-CMD judge it by the name of
+its program's file. A tree that is a candidate only by what the reader
+gave is as one that is so only by the channel on Windows (`candidate_by`
+"channel", AA-1), and the footprints are those of the round built without
+the reader's records (AD-1). The search for act-roots takes as a root only
+a process a sample held (BZ-1): a chain of the reader's processes alone is
+no act-root. An end heard from the reader never ends a process the sample
+holds: the round's process list is the sample's. The round reads no /proc
+start of a child the reader alone gave and said ended: its start is the
+record's (BZ-8).
 
-What is not judged (BY-3). A tree needs a talker at a sample, and a
+What is not judged (BY-3, BZ-3). A tree needs a talker at a sample, and a
 connection that opens and closes between two samples is unseen (M14.2): a
 tree that lives whole between two samples is in no round, and a child's own
-connections are not read. A child whose program was not read gives no line
-and no hole; it is counted.
+connections are not read. A program a process changes to after its line was
+written (a shell that runs its last command in its own place, in a later
+round) gets no second line, and a process's earlier programs are never
+given. A child whose parent was given in an earlier round and ended before
+this sample is in no tree. A child is named by its program's file (the
+target of a link: `nc.openbsd`, `busybox`), not by the name it was called
+by, so a rule's list of names can miss it. A child whose program was not
+read is in the round and counted; it gets no line and no hole.
 
-The words (BY-4). A program's name reaches a line only through the gate a
-sampled child's name goes through (a plain program name, else the
-existing hole). The helper's lines are its word: what is judged from them
-comes from the reader, and the watch does not check them. The report's
-PROCESS EVENTS section says what is judged and what is not, and counts the
-processes given to the rounds, those joined to a tree as its child, and of
-them those with no program read.
+The words (BY-4). A program's name reaches a line's programs only through
+the gate a sampled child's name goes through (a plain program name, else
+the existing hole); the line's cites hold the reader's record itself, made
+printable and cut as a sampled child's is. The helper's lines are its
+word: what is judged from them comes from the reader, and the watch does
+not check them. The report's PROCESS EVENTS section says what is judged
+and what is not, and counts the processes given to the rounds, those
+joined to a tree as its child, and of them those with no program read.
 
-When the reader is not whole (BY-5). A refusal at the first start (a
-container, a right not given), a helper that could not start, or a hole
+When the reader is not whole (BY-5, BZ-2, BZ-6). A refusal at the first
+start (a container, a right not given), a helper that could not start (an
+input that cannot be made unblocking among the causes, said), or a hole
 before its first answer: the blind spot as before, and the rounds are the
 sample's alone. After at least one answered ask: a late answer, an end
-(and its one restart), a loss of events, a bound passed or a line that is
-not the helper's is a hole of the result of the kind `procevents`, said
-once per episode with its round; the result is INCOMPLETE as any hole makes
-it.
+(and its one restart), a loss of events, a bound passed, a line that is
+not the helper's, or an answer that holds back a rest for a next one (a
+child among the rest is judged a round late, and one whose parent has left
+by then is in no tree) is a hole of the result of the kind `procevents`,
+said once per episode with its round; the result is INCOMPLETE as any hole
+makes it, unless a finding makes it an alarm. The note of what lives
+between two rounds then says what was heard and judged and why the reader
+was not whole; "the rounds read /proc only" is said only where no ask was
+answered.
 
 ## What was measured
 

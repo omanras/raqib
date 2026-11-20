@@ -520,22 +520,32 @@ Rulings: ADR-0003 Amendments C and D.
     nothing else; a live watch on Linux runs it in a helper and gives what
     it heard to each round beside the sample (BY-2): a process that began
     between two samples under a tree that talks at a sample is that tree's
-    child, and NET-TOOL and DESTRUCT-CMD judge it by its program's name. A
-    tree that lives whole between two samples, a child's own connections and
-    a program not read are not judged (a tree needs a talker at a sample;
-    a connection between two samples is still unseen);
+    child, and NET-TOOL and DESTRUCT-CMD judge it by the name of its
+    program's file (a link's target, such as `nc.openbsd` or `busybox`, not
+    the name it was called by, so a rule's list of names can miss it). The
+    root of a tree, and of an act-root, is always a process a sample held
+    (BZ-1). Not judged (BZ-3): a tree that lives whole between two samples
+    (a tree needs a talker at a sample; a connection between two samples is
+    still unseen), a child's own connections, a program a process changes
+    to after its line was written and the programs it had before, and a
+    child whose parent was given in an earlier round and ended before the
+    sample. A program not read is in the round and counted, with no line;
   - the helper's lines are its word, not a fact the watch checked (BY-4,
     BX-5): what is judged from them is said to come from the reader, and a
-    program's name reaches a line only through the gate a sampled child's
-    name goes through. A process of the same user that writes in the
+    program's name reaches a line's programs only through the gate a sampled
+    child's name goes through. A process of the same user that writes in the
     helper's place could make the watch write HostChild lines for children
     that never ran under a tree that talks (with the names it chose, if
     plain program names), so findings of NET-TOOL or DESTRUCT-CMD on that
     tree that nothing did; it could leave out what did run, so a short child
     is not judged; and it could name the watch's own pid as a child's
-    parent. It cannot make the watch run anything or read a file; it holds
-    no right the user does not hold, and such a process could as well stop
-    the watch itself;
+    parent. It cannot make the watch run anything or write a file. The
+    watch reads no /proc start of a process the reader said ended (BZ-8),
+    but it reads /proc/PID/stat for the start of each other child the
+    round names, so such a process could make the watch read that file of
+    pids it names (read-only, a start time, nothing kept but the time). It
+    holds no right the user does not hold, and such a process could as well
+    stop the watch itself;
   - the watch's own short programs (the socket tool it runs each round) are
     in its record of what it started when they start (BY-6), so the reader's
     word of them is the watch's own: a process the reader gives under the
@@ -576,9 +586,11 @@ Rulings: ADR-0003 Amendments C and D.
     once, a second end is final, and the watch then hears nothing between
     two samples for the rest of its run. A process of the same user can end
     or stop the helper: that is said, never silent;
-  - A program's path, text a process chose, reaches a tree's line only
+  - A program's path, text a process chose, reaches a tree's programs only
     through the gate a sampled child's name goes through (a plain program
-    name, else a hole); the PROCESS EVENTS section says only numbers;
+    name, else a hole); a tree's line holds the reader's record itself, its
+    path included, made printable and cut as a sampled child's record is
+    (BZ-11); the PROCESS EVENTS section says only numbers;
   - when the interpreter's file is replaced on disk while the watch runs (a
     package upgrade), /proc shows the helper's program with " (deleted)"
     after it; the watch's record takes that image as the image it was

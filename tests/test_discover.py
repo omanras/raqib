@@ -783,7 +783,8 @@ def test_e6_discover_opens_no_socket_touches_no_process_and_runs_nothing_by_bare
     (ss_def,) = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run_ss"]
     run_ss_calls = [n for n in ast.walk(ss_def) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                     and n.func.attr in ("Popen", "kill")]
-    assert sorted(n.func.attr for n in run_ss_calls) == ["Popen", "kill"]
+    # M14.1c REDO (ADR-0007 BZ-12): the ss it started is killed at its timeout and at any other error of its reading
+    assert sorted(n.func.attr for n in run_ss_calls) == ["Popen", "kill", "kill"]
     (popen,) = [n for n in run_ss_calls if n.func.attr == "Popen"]
     assert any(isinstance(n, ast.Call) and ast.unparse(n.func) == "own.started" and n.args == [popen]
                for n in ast.walk(ss_def))   # BY-6: recorded in the statement that starts it

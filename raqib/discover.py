@@ -1182,6 +1182,15 @@ def _count_value(value, low=0):
     return isinstance(value, int) and not isinstance(value, bool) and low <= value < 1 << 63
 
 
+def reader_time(value):
+    """ADR-0007 BZ-4: a time of the reader's line as an aware UTC datetime, or None where it is no text, cannot be
+    read, or is no real instant (one whose reading raises). Never raises."""
+    try:
+        return _ts(value) if isinstance(value, str) else None
+    except (ValueError, OverflowError, TypeError):
+        return None
+
+
 def parse_procevents(text, src=READER):
     """ADR-0007 BY-1 (M14.1c): the processes the watch's helper of Linux's
     process events gave since the round before (raqib/host.py writes the
@@ -1210,13 +1219,15 @@ def parse_procevents(text, src=READER):
                                      % ", ".join(READER_KEYS)))
             continue
         pid, ppid, exe, ticks, code = (obj[k] for k in ("pid", "ppid", "exe", "ticks", "code"))
-        began, ended = _ts(obj["began"]), obj["ended"]
-        if not (_count_value(pid, 1) and (ppid is None or _count_value(ppid)) and (exe is None or isinstance(exe, str))
+        began, ended = reader_time(obj["began"]), obj["ended"]
+        if not (_count_value(pid, 1) and pid < REUSE and (ppid is None or (_count_value(ppid) and ppid < REUSE))
+                and (exe is None or isinstance(exe, str))
                 and (ticks is None or _count_value(ticks)) and began is not None
-                and (ended is None or _ts(ended) is not None) and (code is None or (isinstance(code, int) and not isinstance(code, bool)
+                and (ended is None or reader_time(ended) is not None) and (code is None or (isinstance(code, int) and not isinstance(code, bool)
                                          and -(1 << 31) < code < 1 << 31))):
-            problems.append(_problem(src, number, "a process of the process events needs an int pid, an int or null"
-                                                  " ppid, ticks and code, a text or null exe and ended, and the time"
+            problems.append(_problem(src, number, "a process of the process events needs an int pid and an int or"
+                                                  " null ppid (each below the bound of a pid), ticks and code, a text"
+                                                  " or null exe, a readable time or null ended, and the readable time"
                                                   " its fork was heard"))
             continue
         exe = exe or None
@@ -1414,6 +1425,9 @@ def run_ss(path, args=SS_ARGS, at=None):
         except subprocess.TimeoutExpired as exc:   # as subprocess.run: the ss it started is ended, then waited for
             proc.kill()
             proc.communicate()
+            return None, "%s failed: %s" % (path, exc)
+        except Exception as exc:   # ADR-0007 BZ-12: any other error of its reading ends it too
+            proc.kill()
             return None, "%s failed: %s" % (path, exc)
     if proc.returncode != 0:
         return None, "%s exited %d: %s" % (path, proc.returncode, bounded((err or "").strip(), 160))
@@ -2436,10 +2450,11 @@ def _reader_instances(records):
     """ADR-0007 BY-1, BY-2 (M14.1c): (records, keyed apart, joined by the
     time of their fork). A process the reader gave is one process with the
     sampled process of its pid where their start ticks are the same (the
-    sample's key "boot+N"); where the reader's ticks were not read, where
-    the time its fork was heard and the start the sample shows for the pid
-    are within GUID_SAME_SECONDS, or the sample's start was not read (as
-    the merge by pid was). Otherwise it is another process, keyed apart
+    sample's key "boot+N"), or where the sample read no start for it (as
+    the merge by pid was); a record whose ticks were not read joins it only
+    where the sample read no start for it (BZ-5: where the sample read one,
+    the two are kept apart - a line more, never a program named on another
+    process). Otherwise it is another process, keyed apart
     (pid + REUSE * n, as _instances keys a reused pid), and so is a second
     record of the reader with the same pid and another start. A child the
     reader gave is linked to the instance of its parent pid that was alive
@@ -2448,17 +2463,14 @@ def _reader_instances(records):
     of no reader are returned as they were."""
     if not any(r["kind"] == "proc" and _reader_src(r) for r in records):
         return records, 0, 0
-    sampled = {}   # pid -> {"keys": start keys of the sample, "shown": the shown starts, "unread": a start unread}
+    sampled = {}   # pid -> {"keys": the sample's boot keys, "read": whether the sample read any start for it}
     for r in records:
         if r["kind"] == "proc" and not r.get("derived") and not _reader_src(r) and r.get("pid") is not None:
-            s = sampled.setdefault(r["pid"], {"keys": set(), "shown": [], "unread": False})
+            s = sampled.setdefault(r["pid"], {"keys": set(), "read": False})
             key = _start_key(r.get("started"))
             if key is not None and key[0] == "boot":
                 s["keys"].add(key)
-            else:
-                s["unread"] = True
-            if r.get("started_at"):
-                s["shown"].append(_ts(r["started_at"]))
+            s["read"] = s["read"] or key is not None
     insts = {}     # pid -> [(keyed pid, its identity, began, ended)] of the reader's records
     keyed, apart, by_fork = {}, 0, 0
     for i, r in enumerate(records):
@@ -2470,11 +2482,7 @@ def _reader_instances(records):
         s = sampled.get(pid)
         same = next((k for k, x, _, _ in insts.get(pid, ()) if x == ident), None)
         if same is None and s is not None:
-            if key is not None:
-                one = key in s["keys"] or (s["unread"] and not s["keys"])
-            else:
-                shown = [t for t in s["shown"] if t is not None]
-                one = not shown or any(_start_close(t, began) for t in shown)
+            one = (key is not None and key in s["keys"]) or not s["read"]   # BZ-5
             same = pid if one else None
         if same is None:
             taken = {k for k, _, _, _ in insts.get(pid, ())} | ({pid} if s is not None else set())
@@ -3152,6 +3160,8 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         up = procs.get(_parent(p)) if _parent(p) is not None else None
         if pid in talkers or any(i in never for i in p["images"]) or place is None or _helper(p) \
                 or up is None or not any(i in parents for i in up["images"]):
+            continue
+        if not any(not _reader_src(r) for r in p["recs"]):   # ADR-0007 BZ-1: a root is a process a sample held
             continue
         acts, heads = [], []
         for s, under in chains[pid]:
