@@ -3060,6 +3060,44 @@ commit that files the review, after measuring the first (the probe branch 172730
   program's name, read too late. Ruled: under the watch the reader runs in a process of its own, never as a
   thread of the watch. FOR: the watch's own work does not blind it to the programs an agent starts.
 
+## Amendment BU (the Table, 2026-11-20) - M14.1b: the reader in a process of its own, counted by the watch
+BQ-2 gave M14.1b the whole road: the watch takes the reader's events. BT-6 measured that the reader must not
+share the watch's interpreter. The road is taken in two tasks, so that each is reviewed for what it can get
+wrong: first the process and its channel to the watch, with nothing judged from it; then what discover does
+with the processes it names.
+- BU-1 (the helper). On Linux the watch starts one process of Raqib's own that runs the reader and nothing
+  else, by the interpreter the watch runs under and with the same isolation; it is in the watch's record of
+  what it started (BH-1), so no round takes it for a tree. It speaks to the watch over its own standard
+  input and output alone: one line asked, one line of JSON answered. It opens no file, starts no program,
+  and ends when its input ends, so a watch that dies leaves none behind. FOR: the reader hears a process that
+  lives under a millisecond while the watch works. MUST NOT TOUCH: Windows and every other system start no
+  helper; a watch on Linux whose helper cannot start is the watch it was, with one hole more.
+- BU-2 (what a round asks). Each round, after its sample, the watch asks the helper once and waits a bounded
+  time. The answer holds what the reader gave since the last ask (bounded: what does not fit comes with the
+  next, and says so) and the reader's counts. A late answer, an answer that is not the helper's line, a
+  helper that ended: each is a hole of its own kind, said once while it lasts, and the next round asks again
+  (a helper that ended is started again once, and a second end is final for the watch and said).
+- BU-3 (what the watch does with it in this task: it counts, and says). Nothing is judged from the reader's
+  processes yet, and no line of a tree's record is written from them. The inventory of a round carries what
+  the reader said (how many processes began, how many of them began and ended inside the round's interval,
+  how many programs were not read, what was lost by the kernel's count), and the report says it in one
+  section, with the reader's own word where it lost or refused. Where the reader is healthy, the watch's
+  word that it "sees nothing between two samples" on Linux is replaced by what it is now: heard, counted,
+  not judged until the next task. FOR: a person reads on his own machine how much lives between two samples
+  before any rule stands on it. MUST NOT TOUCH: every finding, every line of a tree's source, the result and
+  the exit code of a watch are what they were.
+- BU-4 (text an agent chose). A process's program path is text the process chose. In this task it reaches
+  no report, no event and no file: only numbers do. Where a later task shows a name it goes through the gate
+  a child's name goes through (a plain program name, else a hole).
+- BU-5 (the service). The unit's limits already let the reader hear (measured under them: the two
+  capabilities, AF_NETLINK allowed). The helper is a child of the unit's process and is ended with it. The
+  rig's service run says whether the unit's watch heard.
+- BU-6 (recorded for the next task, M14.1c). The reader's processes given to discover as the round's channel
+  is on Windows: a child that began and ended between two samples is its tree's child and its HostChild
+  line, so the rules that read a program's name judge it. BT-5 stands: after a loss every word about threads
+  and ends is a hint beside the sample. A record's join to a sampled process is by pid and the kernel's start
+  ticks together. A short connection given to its process stays M14.2.
+
 ## Amendment BV (the Table, 2026-11-20) - an empty ProcessGuid is no ProcessGuid (found on the way to M15.2)
 Found while measuring M15.2 (ADR-0014 AC-9): in some runs every line of the stand-in's tree stopped about
 thirty seconds before the tree ended, and nothing said so. Measured (the probe branch, GitHub's Windows
@@ -3090,3 +3128,72 @@ machine; one line written for each pass of a follow and each round, for the prob
 - BV-4 (not measured). How long a process must live, or how busy a machine must be, before Sysmon lets go of
   it; a real desktop. The commander's field run with a named agent that lived for minutes is where to look
   first: the watch now says the hole when it happens.
+
+## Amendment BW (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1b.md (a661e0d): REDO
+The reviewer said REDO: the client can block the watch and its Stop for ever, two sentences of the report can
+be false, and the rig's claim cannot fail. In the field the build did what BU asks on a healthy machine (the
+probe branch f94b9bd, kernel 7.0: six asks answered, 210 processes counted, nothing lost, no helper left); the
+review is about the machine that is not healthy, which is where a watch must not lie.
+- BW-1 (L1, L11: the client never blocks, and holds one ask). At most one ask is ever unanswered: where the
+  last is not answered yet, the client writes nothing, waits for it within its time, and says late. An answer
+  that comes after its round is not thrown away: it is the reader's word, and the round that reads it takes
+  its numbers. A line is bounded (the helper packs entries up to the bound and sends the rest with the next
+  answer; the client takes a longer line for no line), and so is what the client holds unread. A helper late
+  three rounds running is ended by the watch and started again, under the same rule as one that ended: once.
+  FOR: a helper that is stopped, slow or wrong costs the watch a hole, never its round or its Stop.
+- BW-2 (L2: a loss is the watch's). What a helper lost is kept when it is started again: the section adds the
+  losses of every helper the watch had, and a start again says its own gap (between the first's end and the
+  second's start nothing was heard).
+- BW-3 (L3, L4: "heard and counted" only where it is so). The Linux words that the processes between two
+  samples are heard and counted stand only for a watch in which every ask was answered in its round, no helper
+  was started again, nothing was lost, the reader passed none of its bounds (`beyond`, carried and said), and
+  the last answer left nothing for a next one (`more`). Otherwise the old words stand with the reason.
+- BW-4 (L7: the ask's time is the round's). The ask waits at most two seconds and at most a quarter of the
+  watch's interval. A helper's start is not waited for inside a round: until its first line comes the ask
+  says starting, which is no hole for the first five seconds and late after.
+- BW-5 (L5: what the helper loads). The helper loads Raqib from where the watch loaded it and from nowhere
+  else: it is started with the watch's own import path, entry for entry, and no path of its own before it;
+  its directory is the file system's root. FOR: a second start of the helper trusts nothing the watch did
+  not already trust at its own start. Recorded for M14.1c: what stands under the helper (BH-3 takes it for
+  the watch's own; the helper starts nothing).
+- BW-6 (L8, L10, L14, L15: said as it is). The helper's reader reads the kernel's socket and each exec's two
+  /proc files: the documents say that, not "nothing but its input". No run of the rig reads the unit's own
+  watch yet: SERVICE.md says so, and BU-5's last sentence waits (M12.3). The section's words say between two
+  asks. The lines of a helper's episodes are bounded.
+- BW-7 (L9: the rig's claim). X35 is MET only where every ask was answered, no helper was started again and
+  nothing was lost; its count is said as a floor (it holds every process of the machine, the watch's own `ss`
+  among them).
+- BW-8 (L12, L13, L16: a wrong line is a hole). Whatever a helper's line holds - a number that is no number,
+  a record with no pid, a helper of another version - the round says "not a line" and goes on; the lines
+  carry the protocol's version. Tests hold: that the helper is in the watch's record; that the real helper is
+  the watch's own in a sample; that `serve` and the Reader start no program.
+- BW-9 (recorded for M14.1c). There a refused, late or ended helper is a gap in what is judged, so a hole of
+  the result (the builder's Q1). An interpreter replaced on disk reads as "(deleted)" and the record of the
+  watch's own no longer matches it (L6): said in the threat model now, fixed with the join. The watch's own
+  short children (`ss` each round) are heard like any other.
+
+## Amendment BX (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1b-redo.md (269dd9e): M14.1b lands
+The reviewer said NEXT: the REDO closes the hang of a real helper, the erased loss, the false healthy words and
+the rig's empty claim. Four small things were left, and the Table made them by hand in the commit that files
+the review. Measured in the field before the merge (the probe branch b9eb9d3, two Ubuntu images, kernel 7.0):
+a watch of ten rounds of three seconds whose helper was stopped under it at eight seconds ended in 27 and 28
+seconds; it answered seven asks of ten, said the late round, ended the helper at the third and started it
+again once, said that nothing was heard between the two, and kept the old words on what lives between two
+samples. Its result was the machine's own (a runner's process made an unknown tree on both).
+- BX-1 (M1: a round is not held to end a helper). A helper the watch ends inside a round - late three rounds
+  running, ended, refused - is ended at once, and each wait is at most the ask's own time. The Stop of the
+  watch still gives its helper two seconds to end by itself. FOR: with a short interval the round that ends a
+  helper is not late, so no hole of the result comes from the helper (BU-3).
+- BX-2 (M3: a number is a count). A number of a helper's line that is too large to be a count is no number,
+  and the line is no line. FOR: nothing a line holds can stop the watch's report.
+- BX-3 (M2, M4, M5: said as it is). A process of the same user that writes in the helper's place is not told
+  apart from it, and the threat model says so and what it could do. What the interpreter reads at a helper's
+  start before the fixed program sets its path is said. The spec no longer says that the next round asks
+  again while an ask is unanswered.
+- BX-4 (the tests). The rounds that end a helper are timed; the line's bound has a test that fails without it.
+- BX-5 (recorded for M14.1c, from the review). The helper's lines are not proof of who wrote them: a name
+  from them goes through the name gate, and the "heard and counted" words are the helper's word, not a fact
+  the watch checked. The ask's write is to be made unable to block. Whether the helper always runs isolated.
+  The rounds before a helper's first line. One line that is no line costs three late rounds and the one
+  restart: whether that is meant. X35 and the reader's bounds. A loss after a retired helper's last answer is
+  not known, and is to be said so.
