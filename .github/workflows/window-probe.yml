@@ -1,0 +1,37 @@
+name: window-probe
+# Probe only (never merged): the window's rail on Windows, x64 and ARM64, as main's `raqib app` opens it.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/window_probe.py, .github/workflows/window-probe.yml]
+permissions:
+  contents: read
+jobs:
+  window:
+    name: the window's rail (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib, installed as a person installs it
+        shell: pwsh
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -c "import platform, sys; print(sys.version); print(platform.machine())"
+          python -m pip install --disable-pip-version-check -q .
+          raqib --version
+      - name: the window opened as raqib app opens it, its tabs said
+        shell: pwsh
+        run: |
+          python tools\rig\window_probe.py 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\window.out"
+          "=== app.log"; Get-Content "$HOME\.raqib\app.log" -ErrorAction SilentlyContinue | Select-Object -First 20
