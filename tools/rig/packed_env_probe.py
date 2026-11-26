@@ -88,7 +88,25 @@ def say(label, way, code, got, err, env, mark, base):
     print("      its environment beside the one handed: %s" % (env_diff(env, got["env"]) or "the same"))
     if "dll_directory" in got:
         print("      the folder Windows searches first for it: %r" % got["dll_directory"])
-    for child in ("child_inherited", "child_handed"):
+    if "reset" in got:
+        print("      the folder put back to none at its start: %s; then %r" % (got["reset"], got.get("after_reset")))
+    bad = dict((k, v) for k, v in got.get("late", {}).items() if v != "ok" and "No module named" not in v)
+    print("      modules with a library of their own, loaded late: %d ok (%s were loaded already), failed: %s; "
+          "ssl %s; sqlite %s" % (sum(1 for v in got.get("late", {}).values() if v == "ok"),
+                                 got.get("loaded_before") or "none", bad or "none", got.get("ssl"), got.get("sqlite")))
+    me = got.get("self_cleaned")
+    if me is not None:
+        if "env" in me:
+            whole = me["flags"] == got["flags"] and me["home"] == got["home"] and not [
+                v for k, v in me["late"].items() if got["late"].get(k) != v]
+            print("      itself, started with the cleaned environment: %s; its environment beside the one handed "
+                  "to its parent: %s%s" % ("whole (the same flags, home and late modules)" if whole else
+                                           "NOT as its parent: %s" % me["flags"], env_diff(env, me["env"]) or "the same",
+                                           "; the folder Windows searches first for it: %r" % me["dll_directory"]
+                                           if "dll_directory" in me else ""))
+        else:
+            print("      itself, started with the cleaned environment: did not run: %s" % me)
+    for child in ("child_inherited", "child_handed", "child_cleaned"):
         c = got.get(child)
         if c is None:
             continue
@@ -114,6 +132,7 @@ def scenarios(temp, packed):
     lib = {"linux": {"LD_LIBRARY_PATH": empty}, "darwin": {"DYLD_LIBRARY_PATH": empty,
                                                          "DYLD_FALLBACK_LIBRARY_PATH": empty}}
     yield "plain", {}
+    yield "plain, and on Windows the folder searched first put back to none at the start", {"RAQIB_PROBE_RESET": "1"}
     yield "the interpreter's variables", {
         "PYTHONPATH": plant, "PYTHONVERBOSE": "1", "PYTHONINSPECT": "1", "PYTHONOPTIMIZE": "2",
         "PYTHONHASHSEED": "0", "PYTHONUTF8": "1", "PYTHONDEVMODE": "1", "PYTHONDONTWRITEBYTECODE": "1",
