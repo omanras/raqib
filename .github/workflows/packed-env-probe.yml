@@ -1,6 +1,6 @@
 name: packed-env-probe
 # Probe only (never merged): the field's word for ADR-0007 CI-5 - a branch's raqib.own and Raqib's entry, packed
-# with the rig's packer's own options, on the three systems.
+# with the rig's packer's own options, on the three systems. Run again for the branch's later commit.
 on:
   push:
     branches: [claude/rig-probe]
