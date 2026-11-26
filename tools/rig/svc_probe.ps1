@@ -105,6 +105,33 @@ icacls $root /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(C
 icacls $root | Select-Object -First 5 | ForEach-Object { "    $_" }
 As-User "closed"
 
+"=== a folder closed by the system's own calls (no outside program), with a file and a folder already in it"
+$r2 = "C:\ProgramData\RaqibProbe2"
+New-Item -ItemType Directory -Force "$r2\sub" | Out-Null
+"x" | Set-Content "$r2\before.txt"
+"y" | Set-Content "$r2\sub\deep.txt"
+function As-User2($tag) {
+  $cmd = "$pub\try2-$tag.cmd"
+  $o = "$pub\out2-$tag.txt"
+  @"
+@echo off
+echo x > $r2\by-user.txt 2>nul && (echo write into the folder: DONE > $o) || (echo write into the folder: REFUSED > $o)
+type $r2\before.txt > nul 2>&1 && (echo read the file that was in it: DONE >> $o) || (echo read the file that was in it: REFUSED >> $o)
+type $r2\sub\deep.txt > nul 2>&1 && (echo read the file in its folder: DONE >> $o) || (echo read the file in its folder: REFUSED >> $o)
+echo x > $r2\sub\by-user.txt 2>nul && (echo write into its folder: DONE >> $o) || (echo write into its folder: REFUSED >> $o)
+"@ | Set-Content -Encoding ascii $cmd
+  try {
+    Start-Process cmd.exe -ArgumentList "/c", $cmd -Credential $cred -WorkingDirectory $pub -WindowStyle Hidden -Wait -ErrorAction Stop
+    "as the plain user ($tag):"
+    Get-Content $o -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | ForEach-Object { "    " + ($_ -replace "\s+", " ") }
+  } catch { "as the plain user ($tag): NOT MEASURED: $($_.Exception.Message)" }
+}
+As-User2 "open"
+Remove-Item "$r2\by-user.txt", "$r2\sub\by-user.txt" -ErrorAction SilentlyContinue
+python $script --close $r2
+As-User2 "closed"
+"the administrator still reads it: $([bool](Get-Content "$r2\before.txt" -ErrorAction SilentlyContinue))"
+
 "=== removed"
 Stop-Service RaqibProbe -ErrorAction SilentlyContinue
 sc.exe delete RaqibProbe | Select-Object -First 1

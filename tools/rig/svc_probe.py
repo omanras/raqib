@@ -90,7 +90,65 @@ class Service:
         self.ended.set()
 
 
+CLOSED = "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"   # the system and the administrators, whole; nobody else; no inheriting
+DACL_INFO, PROTECTED_DACL = 0x4, 0x80000000
+SE_FILE_OBJECT = 1
+
+
+def sddl_of(path):
+    """The folder's access list as the system writes it (SDDL), or why it could not be read."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.LocalFree.argtypes = [wintypes.LPVOID]
+    sd, text, size = wintypes.LPVOID(), wintypes.LPWSTR(), wintypes.ULONG()
+    adv.GetNamedSecurityInfoW.argtypes = [wintypes.LPCWSTR, ctypes.c_int, wintypes.DWORD] + [wintypes.LPVOID] * 5
+    rc = adv.GetNamedSecurityInfoW(path, SE_FILE_OBJECT, DACL_INFO, None, None, None, None, ctypes.byref(sd))
+    if rc:
+        return "not read: error %d" % rc
+    adv.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
+        wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.LPWSTR),
+        ctypes.POINTER(wintypes.ULONG)]
+    ok = adv.ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, 1, DACL_INFO, ctypes.byref(text),
+                                                                ctypes.byref(size))
+    out = text.value if ok else "not written as text: error %d" % ctypes.get_last_error()
+    k32.LocalFree(sd)
+    if ok:
+        k32.LocalFree(ctypes.cast(text, wintypes.LPVOID))
+    return out
+
+
+def close(path):
+    """Give the folder CLOSED as its access list, by the system's own calls; say it before and after, and for a
+    file and a folder that were in it before."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    inside = [os.path.join(path, n) for n in sorted(os.listdir(path))][:3]
+    print("before: %s" % sddl_of(path))
+    for p in inside:
+        print("  before, inside (%s): %s" % (os.path.basename(p), sddl_of(p)))
+    sd, size = wintypes.LPVOID(), wintypes.ULONG()
+    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.ULONG)]
+    if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(CLOSED, 1, ctypes.byref(sd), ctypes.byref(size)):
+        print("the text was not taken: error %d" % ctypes.get_last_error())
+        return 1
+    present, dacl, defaulted = wintypes.BOOL(), wintypes.LPVOID(), wintypes.BOOL()
+    adv.GetSecurityDescriptorDacl.argtypes = [wintypes.LPVOID, ctypes.POINTER(wintypes.BOOL),
+                                              ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.BOOL)]
+    adv.GetSecurityDescriptorDacl(sd, ctypes.byref(present), ctypes.byref(dacl), ctypes.byref(defaulted))
+    adv.SetNamedSecurityInfoW.argtypes = [wintypes.LPWSTR, ctypes.c_int, wintypes.DWORD] + [wintypes.LPVOID] * 4
+    rc = adv.SetNamedSecurityInfoW(path, SE_FILE_OBJECT, DACL_INFO | PROTECTED_DACL, None, None, dacl, None)
+    print("set: %s" % ("ok" if rc == 0 else "error %d" % rc))
+    after = sddl_of(path)
+    print("after:  %s" % after)
+    print("as asked: %s (asked %s)" % (after == CLOSED, CLOSED))
+    for p in inside:
+        print("  after, inside (%s): %s" % (os.path.basename(p), sddl_of(p)))
+    return 0 if rc == 0 else 1
+
+
 def main(argv):
+    if len(argv) == 3 and argv[1] == "--close":
+        return close(argv[2])
     if len(argv) < 4 or argv[1] != "--service":
         print(__doc__)
         return 2
