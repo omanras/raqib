@@ -2,9 +2,12 @@
 
 E1 (CI-1): own.handed() - not packed, a copy of the environment value for value; packed, without the packer's
 names, and on Linux with the loader's search path put back to what was handed. The fixtures are the environments
-Amendment CI measured (what a packed start adds on each system), written with made-up folders and values.
-E3 (CI-2): every start of a program in raqib/ names the environment it gives (read by `ast`, not by a pattern).
+Amendment CI measured (what a packed start adds on each system), written with made-up folders and values - all but
+LINUX_EMPTY, which is MADE UP and NOT MEASURED (an LD_LIBRARY_PATH handed empty; ADR-0007 CJ-6).
+E3 (CI-2), REDO E4 (CJ-4): every start of a program in raqib/ of the kinds tests/test_own_tree.py lists hands on no
+whole environment but own.handed(...) (read by `ast`, not by a pattern; what the scan does not see: _scan_all).
 E4 (CI-3): own.library_folder() - packed and on Windows, SetDllDirectoryW(NULL) once; never an exception.
+REDO E2 (CJ-2), E3 (item 14): own.library_folder_hole() in each state; the words of a result that raised.
 """
 from __future__ import annotations
 
@@ -20,7 +23,10 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+sys.path.insert(0, str(ROOT / "tests"))
+
 from raqib import own  # noqa: E402
+from test_own_tree import OTHER_STARTS, STARTS  # noqa: E402  (CJ-4: the one list of starts, the tree's)
 
 FOLDER = "/opt/raqib.example/raqib/_internal"   # a made-up packed program's folder
 
@@ -36,7 +42,8 @@ LINUX_WITH = dict(LINUX_HANDED, **PACKER_ADDED, LD_LIBRARY_PATH=FOLDER + ":/usr/
                   LD_LIBRARY_PATH_ORIG="/usr/lib/handed.example")
 # Linux, handed none: the start sets it to its own folder, and keeps no _ORIG
 LINUX_WITHOUT = dict(HANDED, **PACKER_ADDED, LD_LIBRARY_PATH=FOLDER)
-# Linux, handed an empty one: _ORIG holds the empty value, and it is what is put back
+# Linux, handed an empty one: MADE UP, NOT MEASURED (CJ-6: no run of CI handed an empty value; what the packer does
+# with one is this fixture's guess): _ORIG holds the empty value, and it is what is put back
 LINUX_EMPTY_HANDED = dict(HANDED, LD_LIBRARY_PATH="")
 LINUX_EMPTY = dict(LINUX_EMPTY_HANDED, **PACKER_ADDED, LD_LIBRARY_PATH=FOLDER + ":", LD_LIBRARY_PATH_ORIG="")
 # Windows: os.environ's names are upper case; the system takes a name in any case
@@ -122,60 +129,55 @@ def test_e1_pure_it_starts_nothing_and_changes_neither_its_mapping_nor_os_enviro
     assert "NEW" not in given and "NEW" not in os.environ and env == before
 
 
-# --- E3 (CI-2): no start in raqib/ without a named environment ------------------------------------------------------
-SUBPROCESS_STARTS = {"Popen", "run", "call", "check_call", "check_output"}
-OS_STARTS = ("system", "popen", "startfile", "spawn", "exec")   # os.spawn*, os.exec* by their beginning
+# --- E3 (CI-2), REDO E4 (CJ-4): no start in raqib/ hands on a whole environment but own.handed(...) ---------------------
+# One list of what starts a program: tests/test_own_tree.py's (STARTS: subprocess's; OTHER_STARTS: os's and asyncio's).
+# Of it, these take an environment by name (env=); every other name in it can take none by name and fails outright.
+TAKES_ENV = {"Popen", "run", "call", "check_call", "check_output", "create_subprocess_exec", "create_subprocess_shell"}
+MODULES = {"subprocess": STARTS, "os": OTHER_STARTS, "asyncio": OTHER_STARTS}   # as test_own_tree.py reads them
+# CJ-4: the starts the scan finds in raqib/ today, by (file, function); a scan gone blind finds fewer and fails
+RAQIB_STARTS = {("raqib/discover.py", "run_ss"), ("raqib/doctor.py", "run_version"),
+                ("raqib/hooks/os_sysmon.py", "read_live"), ("raqib/hooks/os_sysmon.py", "read_live_bounded"),
+                ("raqib/notify.py", "run_program"), ("raqib/procevents.py", "start"),
+                ("raqib/service.py", "run_systemctl")}
 
 
-def _os_start(name):
-    return name in ("system", "popen", "startfile") or name.startswith(("spawn", "exec"))
+def _scan_all(source, filename, modules=MODULES):
+    """[(filename, line, function, what, fault)] of every start in `source`: function is the nearest def that holds
+    it ("<module>" where none); fault is None where it names an environment the scan takes, else why not (CJ-4):
+    a start in the list that can take no environment by name; env= absent, None, os.environ, dict(os.environ) or
+    os.environ.copy() (a copy with more in it too: dict(os.environ, ...), {**os.environ, ...}), as a keyword or as
+    the "env" value of a dict given with ** (every plain assignment of that name in its function is read).
+    own.handed(...) passes, as does any other value (a named list).
 
-
-def _given_env(call, function):
-    """True where the call gives an environment: env= of a value that is not None, or **name where every
-    assignment of that name in its function is a dict holding "env" (a dict display, or dict(..., env=...))."""
-    for kw in call.keywords:
-        if kw.arg == "env":
-            return not (isinstance(kw.value, ast.Constant) and kw.value.value is None)
-    for kw in call.keywords:
-        if kw.arg is None and isinstance(kw.value, ast.Name) and function is not None:
-            values = [n.value for n in ast.walk(function) if isinstance(n, ast.Assign)
-                      and any(isinstance(t, ast.Name) and t.id == kw.value.id for t in n.targets)]
-            if values and all(_dict_with_env(v) for v in values):
-                return True
-    return False
-
-
-def _dict_with_env(node):
-    if isinstance(node, ast.Dict):
-        return any(isinstance(k, ast.Constant) and k.value == "env" for k in node.keys if k is not None)
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "dict":
-        return any(k.arg == "env" for k in node.keywords)
-    return False
-
-
-def _scan(source, filename):
-    """[(filename, line, what)] of every start in `source` that gives no environment (CI-2)."""
+    What it does not see, and so does not fail on (CJ-4): a start reached by getattr(subprocess, "Popen"); a module
+    bound again by assignment (sp = subprocess); functools.partial; a subclass of Popen; a start handed to a
+    function by position (only defaults and keyword arguments bind); a tuple target; a ** dict changed after it is
+    assigned (kw.update, kw["env"] = ..., del, pop, +=); an environment name reached otherwise than by os.environ or
+    a name imported from os. It fails on a start of the kinds it lists, not on every start that inherits."""
     tree = ast.parse(source, filename)
-    modules = {"subprocess": set(), "os": set()}   # the names each module is bound to in this file
-    bound = {}                                      # a name bound to a start -> ("subprocess"|"os", its name)
+    bound_to = {m: set() for m in modules}   # the names each module is bound to in this file
+    bound = {}                               # a name bound to a start -> (module, its name)
+    environ = set()                          # names bound to os.environ by `from os import environ`
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for a in node.names:
                 if a.name in modules:
-                    modules[a.name].add(a.asname or a.name)
+                    bound_to[a.name].add(a.asname or a.name)
+                elif a.asname is None and a.name.split(".")[0] in modules:   # import os.path binds os
+                    bound_to[a.name.split(".")[0]].add(a.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom) and node.module in modules and not node.level:
             for a in node.names:
-                if (node.module == "subprocess" and a.name in SUBPROCESS_STARTS) or (
-                        node.module == "os" and _os_start(a.name)):
+                if a.name == "*":
+                    bound.update({n: (node.module, n) for n in modules[node.module]})
+                elif a.name in modules[node.module]:
                     bound[a.asname or a.name] = (node.module, a.name)
+                elif node.module == "os" and a.name == "environ":
+                    environ.add(a.asname or a.name)
 
     def start_of(expr):
-        """("subprocess"|"os", name) where expr is a start of one of them, else None."""
         if isinstance(expr, ast.Attribute) and isinstance(expr.value, ast.Name):
-            for module, names in modules.items():
-                if expr.value.id in names and ((module == "subprocess" and expr.attr in SUBPROCESS_STARTS) or (
-                        module == "os" and _os_start(expr.attr))):
+            for module, names in bound_to.items():
+                if expr.value.id in names and expr.attr in modules[module]:
                     return module, expr.attr
         if isinstance(expr, ast.Name) and expr.id in bound:
             return bound[expr.id]
@@ -202,6 +204,59 @@ def _scan(source, filename):
                         target, "attr", None)
                     if found and name:
                         bound[name] = found
+
+    def is_environ(node):
+        return (isinstance(node, ast.Attribute) and node.attr == "environ" and isinstance(node.value, ast.Name)
+                and node.value.id in bound_to.get("os", ())) or (isinstance(node, ast.Name) and node.id in environ)
+
+    def value_fault(node):
+        if isinstance(node, ast.IfExp):
+            return value_fault(node.body) or value_fault(node.orelse)
+        if isinstance(node, ast.Constant) and node.value is None:
+            return "env None: it inherits"
+        if is_environ(node):
+            return "env os.environ: the whole environment, the packer's names in it"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "dict" and (
+                node.args and is_environ(node.args[0])):
+            return "env dict(os.environ): a copy of the whole environment"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "copy" and (
+                is_environ(node.func.value)):
+            return "env os.environ.copy(): a copy of the whole environment"
+        if isinstance(node, ast.Dict) and any(k is None and is_environ(v) for k, v in zip(node.keys, node.values)):
+            return "env {**os.environ}: a copy of the whole environment"
+        return None
+
+    def dict_env(node):
+        """(True, the env value) for a dict display or dict(...) holding "env", else (False, None)."""
+        if isinstance(node, ast.Dict):
+            for k, v in zip(node.keys, node.values):
+                if isinstance(k, ast.Constant) and k.value == "env":
+                    return True, v
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "dict":
+            for k in node.keywords:
+                if k.arg == "env":
+                    return True, k.value
+        return False, None
+
+    def env_fault(call, function):
+        for kw in call.keywords:
+            if kw.arg == "env":
+                return value_fault(kw.value)
+        for kw in call.keywords:
+            if kw.arg is not None:
+                continue
+            if isinstance(kw.value, (ast.Dict, ast.Call)):
+                values = [kw.value]
+            elif isinstance(kw.value, ast.Name) and function is not None:
+                values = [n.value for n in ast.walk(function) if isinstance(n, ast.Assign)
+                          and any(isinstance(t, ast.Name) and t.id == kw.value.id for t in n.targets)]
+            else:
+                values = []
+            held = [dict_env(v) for v in values]
+            if held and all(has for has, _ in held):
+                return next((f for f in (value_fault(v) for _, v in held) if f), None)
+        return "no env given: it inherits"
+
     out = []
 
     def visit(node, function):
@@ -210,21 +265,49 @@ def _scan(source, filename):
             if isinstance(child, ast.Call):
                 found = start_of(child.func)
                 if found is None and isinstance(child.func, ast.Attribute) and child.func.attr in bound and not (
-                        isinstance(child.func.value, ast.Name) and child.func.value.id in modules["os"]):
+                        isinstance(child.func.value, ast.Name) and any(
+                            child.func.value.id in names for names in bound_to.values())):
                     found = bound[child.func.attr]   # self.runner = subprocess.run ... self.runner(...)
-                if found and (found[0] == "os" or not _given_env(child, function)):
-                    out.append((filename, child.lineno, "%s.%s" % found))
+                if found:
+                    fault = ("%s takes no environment by name: it inherits" % found[1]) if (
+                        found[1] not in TAKES_ENV) else env_fault(child, function)
+                    out.append((filename, child.lineno, function.name if function is not None else "<module>",
+                                "%s.%s" % found, fault))
             visit(child, fn)
     visit(tree, None)
     return out
 
 
-def test_e3_every_start_in_raqib_names_the_environment_it_gives():
+def _scan(source, filename, modules=MODULES):
+    """[(filename, line, what)] of every start in `source` that hands on a whole environment (CI-2, CJ-4)."""
+    return [(f, line, what) for f, line, _, what, fault in _scan_all(source, filename, modules) if fault]
+
+
+def _raqib(modules=MODULES):
     found = []
     for path in sorted((ROOT / "raqib").rglob("*.py")):
-        found += _scan(path.read_text(encoding="utf-8"), str(path.relative_to(ROOT)))
-    assert not found, "a start that inherits its environment (ADR-0007 CI-2): %s" % "; ".join(
-        "%s line %d: %s" % f for f in found)
+        found += _scan_all(path.read_text(encoding="utf-8"), path.relative_to(ROOT).as_posix(), modules)
+    return found
+
+
+def test_e3_every_start_in_raqib_names_the_environment_it_gives():
+    found = _raqib()
+    faults = [(f, line, what, fault) for f, line, _, what, fault in found if fault]
+    assert not faults, "a start that hands on a whole environment (ADR-0007 CI-2, CJ-4): %s" % "; ".join(
+        "%s line %d: %s (%s)" % f for f in faults)
+    assert {(f, fn) for f, _, fn, _, _ in found} == RAQIB_STARTS   # CJ-4: what it found, so a blind scan fails
+
+
+def test_cj4_one_list_of_starts_the_trees_and_a_blind_scan_fails():
+    assert TAKES_ENV <= STARTS | OTHER_STARTS and MODULES["subprocess"] is STARTS and MODULES["os"] is OTHER_STARTS
+    assert {"getoutput", "getstatusoutput"} <= STARTS - TAKES_ENV   # CJ-4's starts that take no environment
+    assert {"system", "popen", "startfile", "fork", "forkpty", "execv", "execve", "spawnv", "spawnve",
+            "posix_spawn"} <= OTHER_STARTS - TAKES_ENV
+    blind = _raqib({"subprocess": set(), "os": set(), "asyncio": set()})   # the negative: a scan with no list
+    assert blind == [] and {(f, fn) for f, _, fn, _, _ in blind} != RAQIB_STARTS   # ... finds nothing: it fails
+
+
+H = "import os, subprocess\nfrom raqib import own\n"   # the head of each fixture below
 
 
 @pytest.mark.parametrize("source,lines", [
@@ -246,10 +329,67 @@ def test_e3_every_start_in_raqib_names_the_environment_it_gives():
      "    p(['x'], **kw)\n", []),                                                           # negative: **kw with env
     ("import os\nos.path.join('a')\nos.getenv('x')\nos.environ.get('x')\n", []),             # negative: no start
     ("def run(x):\n    pass\nrun(['x'])\n", []),                                             # negative: not subprocess's
+    # REDO (CJ-4), a positive and a negative for each clause:
+    # env absent, as a keyword and in a ** dict
+    (H + "subprocess.Popen(['x'], cwd='/')\n", [3]),
+    (H + "subprocess.Popen(['x'], cwd='/', env=own.handed())\n", []),
+    (H + "def f():\n    kw = dict(cwd='/')\n    subprocess.run(['x'], **kw)\n", [5]),
+    (H + "def f():\n    kw = dict(cwd='/', env=own.handed())\n    subprocess.run(['x'], **kw)\n", []),
+    # env None
+    (H + "subprocess.call(['x'], env=None)\n", [3]),
+    (H + "subprocess.call(['x'], env=own.handed(None))\n", []),
+    (H + "def f():\n    kw = {'env': None}\n    subprocess.run(['x'], **kw)\n", [5]),
+    (H + "def f():\n    kw = dict(env=None)\n    subprocess.run(['x'], **kw)\n", [5]),
+    (H + "def f():\n    kw = {'env': own.handed()}\n    subprocess.run(['x'], **kw)\n", []),
+    (H + "subprocess.run(['x'], **{'env': None})\n", [3]),
+    (H + "subprocess.run(['x'], **{'env': own.handed()})\n", []),
+    (H + "subprocess.run(['x'], env=None if own else own.handed())\n", [3]),
+    # env os.environ
+    (H + "subprocess.check_call(['x'], env=os.environ)\n", [3]),
+    (H + "subprocess.check_call(['x'], env=own.handed(os.environ))\n", []),
+    ("import os as o, subprocess\nsubprocess.run(['x'], env=o.environ)\n", [2]),
+    ("import os.path, subprocess\nsubprocess.run(['x'], env=os.environ)\n", [2]),
+    ("from os import environ as e\nimport subprocess\nsubprocess.run(['x'], env=e)\n", [3]),
+    (H + "def f():\n    kw = {'env': os.environ}\n    subprocess.run(['x'], **kw)\n", [5]),
+    (H + "def f():\n    kw = {'env': own.handed(os.environ)}\n    subprocess.run(['x'], **kw)\n", []),
+    # env dict(os.environ)
+    (H + "subprocess.check_output(['x'], env=dict(os.environ))\n", [3]),
+    (H + "subprocess.check_output(['x'], env=dict(os.environ, LC_ALL='C'))\n", [3]),
+    (H + "subprocess.check_output(['x'], env={**os.environ})\n", [3]),
+    (H + "subprocess.check_output(['x'], env=own.handed(dict(os.environ)))\n", []),
+    (H + "subprocess.check_output(['x'], env=dict(LC_ALL='C'))\n", []),                       # a named list
+    (H + "def f():\n    kw = dict(env=dict(os.environ))\n    subprocess.run(['x'], **kw)\n", [5]),
+    (H + "def f():\n    kw = dict(env={'LC_ALL': 'C'})\n    subprocess.run(['x'], **kw)\n", []),
+    # env os.environ.copy()
+    (H + "subprocess.Popen(['x'], env=os.environ.copy())\n", [3]),
+    (H + "subprocess.Popen(['x'], env=own.handed(os.environ.copy()))\n", []),
+    (H + "def f():\n    kw = {'env': os.environ.copy()}\n    subprocess.run(['x'], **kw)\n", [5]),
+    (H + "def f():\n    kw = {'env': own.handed().copy()}\n    subprocess.run(['x'], **kw)\n", []),
+    # a start that can take no environment fails outright, whatever it is given
+    (H + "subprocess.getoutput('x')\nsubprocess.getstatusoutput('x')\nos.fork()\nos.forkpty()\n"
+     "os.posix_spawn('x', ['x'], own.handed())\nos.spawnve(0, 'x', ['x'], own.handed())\n"
+     "os.execvpe('x', ['x'], own.handed())\n", [3, 4, 5, 6, 7, 8, 9]),
+    ("from subprocess import getoutput\ngetoutput('x')\n", [2]),
+    ("from subprocess import *\ngetstatusoutput('x')\nrun(['x'])\n", [2, 3]),
+    (H + "os.getpid()\nos.getcwd()\nsubprocess.list2cmdline(['x'])\n", []),                 # negative: no start
+    # asyncio's starts take an environment as subprocess's do
+    ("import asyncio\nasync def f():\n    await asyncio.create_subprocess_exec('x')\n", [3]),
+    ("import asyncio\nfrom raqib import own\nasync def f():\n"
+     "    await asyncio.create_subprocess_shell('x', env=own.handed())\n", []),
 ])
 def test_e3_the_scan_finds_a_start_that_inherits_and_names_its_file_and_line(source, lines):
     got = _scan(source, "raqib/made_up.py")
     assert [line for _, line, _ in got] == lines and all(f == "raqib/made_up.py" for f, _, _ in got)
+
+
+def test_cj4_the_scan_holds_each_start_by_file_and_function():
+    source = H + ("def a():\n    subprocess.run(['x'], env=own.handed())\n"
+                  "class B:\n    def b(self):\n        return subprocess.getoutput('x')\n"
+                  "subprocess.call(['x'], env={})\n")
+    got = [(f, fn, what, fault is None) for f, _, fn, what, fault in _scan_all(source, "raqib/made_up.py")]
+    assert got == [("raqib/made_up.py", "a", "subprocess.run", True),
+                   ("raqib/made_up.py", "b", "subprocess.getoutput", False),
+                   ("raqib/made_up.py", "<module>", "subprocess.call", True)]
 
 
 # --- E4 (CI-3): own.library_folder ---------------------------------------------------------------------------------
@@ -297,6 +437,84 @@ def test_e4_a_stand_in_that_returns_0_or_raises_is_a_result_said_in_words_never_
     assert words in hole and hole.isascii() and fresh.calls == [None]
 
 
+FAILURE = "SetDllDirectoryW(NULL) returned 0"
+
+
+@pytest.mark.parametrize("kept,frozen,platform,said", [
+    (None, True, "win32", "no call"),     # packed, Windows, no call made in this process: words of its own
+    (None, 1, "win32", "no call"),
+    (None, False, "win32", None),         # not packed
+    (None, None, "win32", None),          # not packed: sys.frozen absent
+    (None, True, "linux", None),          # not Windows
+    (None, True, "darwin", None),
+    (True, True, "win32", None),          # put back
+    (FAILURE, True, "win32", "failed"),   # the call failed
+    (FAILURE, False, "linux", "failed"),  # a failure kept is said whatever is asked
+])
+def test_cj2_the_hole_in_each_state_and_own_library_folder_reset_around_it(kept, frozen, platform, said,
+                                                                           monkeypatch):
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    before = own.LIBRARY_FOLDER
+    own.LIBRARY_FOLDER = kept
+    try:
+        got = own.library_folder_hole(frozen=frozen, platform=platform)
+    finally:
+        own.LIBRARY_FOLDER = before
+    assert own.LIBRARY_FOLDER is before
+    if said is None:
+        assert got is None
+    elif said == "no call":
+        assert got == own.LIBRARY_NO_CALL and "was not put back, because this entry made no call" in got
+        assert got.startswith("what the watch starts searches the packed program's folder first") and got.isascii()
+    else:
+        assert got == own.LIBRARY_HOLE % FAILURE and FAILURE in got and "made no call" not in got
+
+
+def test_cj2_its_defaults_are_sys_frozen_and_sys_platform_and_a_call_made_ends_it(fresh, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert own.library_folder_hole() == (own.LIBRARY_NO_CALL if sys.platform == "win32" else None)
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert own.library_folder_hole() == own.LIBRARY_NO_CALL
+    assert own.library_folder(fresh(1)) is True and own.library_folder_hole() is None   # put back: nothing said
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    assert own.library_folder_hole(frozen=True) is None
+
+
+class _NoTruth:
+    def __bool__(self):
+        raise ValueError("no truth")
+
+
+class _NoWords:
+    def __bool__(self):
+        return False
+
+    def __repr__(self):
+        raise ValueError("no words")
+
+
+class _ExcNoWords(Exception):
+    def __str__(self):
+        raise ValueError("no words")
+
+
+@pytest.mark.parametrize("result,words", [
+    (_NoTruth(), "SetDllDirectoryW(NULL) was called, its result could not be read: ValueError: no truth"),
+    (_NoWords(), "SetDllDirectoryW(NULL) was called, its result could not be read: ValueError: no words"),
+    (_ExcNoWords(), "SetDllDirectoryW(NULL) failed: _ExcNoWords: its own words could not be read"),
+])
+def test_cj6_a_result_that_raised_while_it_was_read_is_said_as_it_happened(result, words, fresh):
+    got = own.library_folder(fresh(result), frozen=True, platform="win32")
+    assert got == words and fresh.calls == [None] and "was not called" not in got   # the call was made
+    assert own.library_folder_hole() == own.LIBRARY_HOLE % words
+
+
+def test_cj6_a_frozen_state_that_cannot_be_read_is_not_called_and_said_so(fresh):
+    got = own.library_folder(fresh(1), frozen=_NoTruth(), platform="win32")
+    assert got == "SetDllDirectoryW(NULL) was not called: ValueError: no truth" and fresh.calls == []
+    assert own.library_folder_hole(frozen=_NoTruth(), platform="win32") == own.LIBRARY_HOLE % got
+
+
 def test_e4_own_imports_no_ctypes_the_call_is_given_to_it():
     tree = ast.parse((ROOT / "raqib" / "own.py").read_text(encoding="utf-8"))
     names = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
@@ -317,3 +535,42 @@ def test_e5_the_spec_and_the_threat_model_say_what_the_packed_helper_is_handed()
         assert words in threat, words
     for words in ("`env=own.handed()`", "`_MEIPASS2`", "LD_LIBRARY_PATH_ORIG", "value for value", "CI-2"):
         assert words in spec, words
+
+
+def _flat(*parts):
+    return " ".join((ROOT.joinpath(*parts)).read_text(encoding="utf-8").split())
+
+
+def test_cj6_the_documents_say_what_was_measured_and_no_more():
+    threat, spec = _flat("docs", "THREAT_MODEL.md"), _flat("docs", "specs", "PROC-EVENTS.md")
+    for gone, where in (("not measured beyond that run", spec),                                   # item 17
+                        ("none of the interpreter's PYTHON* variables", threat),                  # item 18
+                        ("none of the interpreter's PYTHON* variables", spec),
+                        ("does not have the packed program's folder first", threat),              # item 19
+                        ("so wevtutil, PowerShell and whatever the watch starts load", threat),   # item 20
+                        ("fails on a start that inherits", spec),                                 # item 21
+                        ("hands its environment on value for value", threat),                    # item 22
+                        ("starts from the environment the watch was handed", spec),
+                        ("put back to the value the watch was handed", threat),                   # item 27
+                        ("as a hole of its own", threat)):                                        # CJ-1
+        assert gone not in where, gone
+    for words in ("none of the ten interpreter's variables tried", "PYTHONWARNINGS", "`cli.main`", "blind spot",
+                  "is not handed the packed program's folder first", "puts its folder first again",
+                  "to the helper alone", "where that name is the packer's", "only it", "CJ-3", "CJ-2"):
+        assert words in threat, words
+    for words in ("none of the ten interpreter's variables tried", "`cli.main` alone", "not on every start that"
+                  " inherits", "`getoutput`", "`os.environ.copy()`", "the set of starts", "is dropped too",
+                  "is not handed them", "CJ-1", "CJ-2", "CJ-3", "CJ-4"):
+        assert words in spec, words
+    # CJ-6's three things not measured, said so in both
+    for doc in (threat, spec):
+        assert "LD_LIBRARY_PATH_ORIG itself" in doc and "handed empty" in doc and "not measured on a real machine" in doc
+
+
+def test_cj5_cj6_the_modules_say_what_they_do():
+    procevents, own_words = _flat("raqib", "procevents.py"), _flat("raqib", "own.py")
+    assert "The standard library only." not in procevents
+    assert "The served program (SERVE_PROGRAM, serve, main) is the standard library only; the client's start" \
+           " (Helper.start) takes the helper's environment from raqib.own" in procevents
+    assert "no process started or touched" not in own_words                                      # item 29
+    assert "changes this process's own library search" in own_words and "cli.main alone" in own_words

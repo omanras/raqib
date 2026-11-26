@@ -630,29 +630,57 @@ def test_e7_ascii_outside_docs():
         assert (ROOT / path).read_text(encoding="utf-8").isascii(), path
 
 
-# --- M17.2b E4 (ADR-0007 CI-3): the entry's put-back that failed, said once by the watch as a hole of its own ------
+# --- M17.2b REDO E1, E2 (ADR-0007 CI-3, CJ-1, CJ-2): the entry's put-back that failed, or was not made, is a blind
+# spot of the watch's own, said once at its start; the rounds and the exit code are those of a watch without it -----
 LIBRARY_WORDS = "what the watch starts searches the packed program's folder first for its libraries"
+FAILED = "SetDllDirectoryW(NULL) returned 0"
+
+
+def _library_run(tmp_path, monkeypatch, name, result, frozen, platform, kind, n=3):
+    """A watch of n rounds with own.LIBRARY_FOLDER = result and a made-up frozen state: (watch, text, code, its
+    blind spots of the kind own-library-folder)."""
+    monkeypatch.setattr(own, "LIBRARY_FOLDER", result)
+    if frozen:
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+    else:
+        monkeypatch.delattr(sys, "frozen", raising=False)
+    w, clock = watch(tmp_path / name, feed([kind] * n), platform=platform)
+    text, code = run(w, clock, n)
+    return w, text, code, [b for b in w.blind if b["kind"] == "own-library-folder"]
 
 
 @pytest.mark.parametrize("platform,kind", [("win32", "windows"), ("linux", "linux")])
-def test_ci3_a_failed_put_back_is_said_once_as_a_hole_of_the_watchs_own_never_fatal(platform, kind, tmp_path,
+def test_cj1_a_failed_put_back_is_a_blind_spot_said_once_the_rounds_and_the_code_unchanged(platform, kind, tmp_path,
+                                                                                          monkeypatch):
+    w0, text0, code0, blind0 = _library_run(tmp_path, monkeypatch, "put-back", True, False, platform, kind)
+    w, text, code, blind = _library_run(tmp_path, monkeypatch, "failed", FAILED, False, platform, kind)
+    assert w.rounds == w0.rounds == 3 and code == code0        # the same rounds ran, the same exit code
+    assert blind0 == [] and LIBRARY_WORDS not in text0         # never in the watch without the failure
+    (b,) = blind                                               # once in the watch with it
+    assert b["class"] == host.BLIND and b["detail"] == own.library_folder_hole() + host.BLIND_TAIL
+    assert b["at"] == w.at(w.t0) and b["round"] is None and b["rounds"] == []   # at its start, of no round
+    assert FAILED in b["detail"] and " ".join(text.split()).count(LIBRARY_WORDS) == 1
+    assert [h["kind"] for h in w.holes] == [h["kind"] for h in w0.holes]   # no hole of the result is added
+    assert "own-library-folder" not in [h["kind"] for h in w.holes]
+
+
+@pytest.mark.parametrize("platform,kind", [("win32", "windows"), ("linux", "linux")])
+def test_cj2_packed_on_windows_and_no_call_made_the_blind_spot_in_words_of_its_own(platform, kind, tmp_path,
                                                                                     monkeypatch):
-    monkeypatch.setattr(own, "LIBRARY_FOLDER", "SetDllDirectoryW(NULL) returned 0")
-    w, clock = watch(tmp_path, feed([kind] * 3), platform=platform)
-    text, code = run(w, clock, 3)
-    holes = [h for h in w.holes if h["kind"] == "own-library-folder"]
-    assert len(holes) == 1 and holes[0]["detail"] == own.library_folder_hole() and holes[0]["round"] is None
-    assert holes[0]["detail"].startswith(LIBRARY_WORDS) and "SetDllDirectoryW(NULL) returned 0" in holes[0]["detail"]
-    assert " ".join(text.split()).count(LIBRARY_WORDS) == 1 and code is not None   # the watch ran its rounds
+    w0, text0, code0, blind0 = _library_run(tmp_path, monkeypatch, "plain", None, False, platform, kind)
+    w, text, code, blind = _library_run(tmp_path, monkeypatch, "packed", None, True, platform, kind)
+    assert w.rounds == w0.rounds == 3 and code == code0 and blind0 == [] and LIBRARY_WORDS not in text0
+    if platform == "win32":   # packed, Windows, no call made by this entry: said, once, at the start
+        (b,) = blind
+        assert b["detail"] == own.LIBRARY_NO_CALL + host.BLIND_TAIL and "made no call" in b["detail"]
+        assert b["at"] == w.at(w.t0) and b["round"] is None and " ".join(text.split()).count(LIBRARY_WORDS) == 1
+    else:                     # packed, not Windows: nothing to put back, nothing said
+        assert blind == [] and LIBRARY_WORDS not in text
 
 
-@pytest.mark.parametrize("result", [None, True])
-def test_ci3_not_called_or_put_back_the_watch_says_nothing_of_it(result, tmp_path, monkeypatch):
-    monkeypatch.setattr(own, "LIBRARY_FOLDER", None)
-    w0, clock0 = watch(tmp_path / "before", feed(["windows"] * 2), platform="win32")
-    text0, code0 = run(w0, clock0, 2)
-    monkeypatch.setattr(own, "LIBRARY_FOLDER", result)
-    w, clock = watch(tmp_path / "now", feed(["windows"] * 2), platform="win32")
-    text, code = run(w, clock, 2)
-    assert LIBRARY_WORDS not in text and [h["kind"] for h in w.holes] == [h["kind"] for h in w0.holes]
-    assert code == code0
+@pytest.mark.parametrize("frozen", [False, True])
+@pytest.mark.parametrize("platform,kind", [("win32", "windows"), ("linux", "linux")])
+def test_cj1_put_back_the_watch_says_nothing_of_it(frozen, platform, kind, tmp_path, monkeypatch):
+    w0, text0, code0, blind0 = _library_run(tmp_path, monkeypatch, "plain", None, False, platform, kind, n=2)
+    w, text, code, blind = _library_run(tmp_path, monkeypatch, "now", True, frozen, platform, kind, n=2)
+    assert blind == [] and LIBRARY_WORDS not in text and w.rounds == 2 and code == code0

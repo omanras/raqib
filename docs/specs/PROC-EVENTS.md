@@ -300,29 +300,66 @@ own. Its cost (measured once, this task's machine): the packed helper held
 loads: measured on this task's machine (PyInstaller 6.11.1, Python 3.13),
 the packed program run from a folder holding a `raqib.py`, a `raqib`
 package and a `json` package, with PYTHONPATH naming that folder, loaded
-none of them; that a packer's runtime reads nothing of the environment is
-the packer's, and not measured beyond that run. What the packed helper is
-handed (M17.2b, ADR-0007 Amendment CI). Measured on GitHub's Windows, Linux
-and macOS machines (PyInstaller 6.11.1, one folder): a packed start reads
-none of the interpreter's PYTHON* variables, and adds its own names to its
-environment, which reach every program started with it - `_PYI_ARCHIVE_FILE`
-and `_PYI_PARENT_PROCESS_LEVEL` on the three systems, and on Linux its own
-folder put first in LD_LIBRARY_PATH (what was handed stays behind it) and
-LD_LIBRARY_PATH_ORIG holding the value it was handed; the packer's three
-names set together make a start take itself for one started again by itself
-and skip its own first steps. So the helper is started with
-`env=own.handed()` (raqib/own.py, CI-1): where Raqib is packed, the watch's
-environment without every name that begins `_PYI_` (on Windows whatever its
-case) and without `_MEIPASS2`, and on Linux with LD_LIBRARY_PATH put back to
+none of them; what else a packed start reads of its environment is the
+packer's, and Amendment CI measured what is said below. What the packed
+helper is handed (M17.2b, ADR-0007 Amendments CI and CJ). Measured on
+GitHub's Windows, Linux and macOS machines (PyInstaller 6.11.1, one folder;
+CI): a packed start read none of the ten interpreter's variables tried
+(PYTHONPATH, PYTHONHOME, PYTHONSTARTUP, PYTHONVERBOSE, PYTHONINSPECT,
+PYTHONOPTIMIZE, PYTHONHASHSEED, PYTHONUTF8, PYTHONDEVMODE, PYTHONWARNINGS),
+and it adds its own names to its environment, which reach every program
+started with it - `_PYI_ARCHIVE_FILE` and `_PYI_PARENT_PROCESS_LEVEL` on the
+three systems, and on Linux its own folder put first in LD_LIBRARY_PATH
+(what was handed stays behind it) and LD_LIBRARY_PATH_ORIG holding the value
+it was handed; the packer's three names set together make a start take
+itself for one started again by itself and skip its own first steps. So the
+helper is started with `env=own.handed()` (raqib/own.py, CI-1): where Raqib
+is packed, the watch's environment without every name that begins `_PYI_`
+and without `_MEIPASS2` (on Windows whatever their case: the system takes a
+name in any case; CJ-7), and on Linux with LD_LIBRARY_PATH put back to
 LD_LIBRARY_PATH_ORIG's value and LD_LIBRARY_PATH_ORIG removed
-(LD_LIBRARY_PATH removed where there is no LD_LIBRARY_PATH_ORIG) - the
-packed helper starts from the environment the watch was handed, as any
-packed start does; every other name, the DYLD_ names of macOS among them,
-stays as handed. Where Raqib is not packed, the helper is given a copy of
-the watch's environment, value for value, and its command is the one above,
-byte for byte. Every start of a program in raqib/ names the environment it
-gives (CI-2; tests/test_own_env.py reads the package's source and fails on a
-start that inherits). The loader's own variables (LD_PRELOAD,
+(LD_LIBRARY_PATH removed where there is no LD_LIBRARY_PATH_ORIG); Linux
+alone has its loader's path put back. Every other name, the DYLD_ names of
+macOS among them, stays as handed. So the packed helper is handed the
+environment the watch was handed, with two exceptions: a `_PYI_` name or a
+`_MEIPASS2` that the watch's starter handed is dropped too; and where the
+starter hands LD_LIBRARY_PATH_ORIG itself, the helper is given it as its
+LD_LIBRARY_PATH (not measured: whether the packer keeps, overwrites or
+clears a handed LD_LIBRARY_PATH_ORIG; CI-4's ground - the environment is
+the starter's). Measured on 03e97e8 (CJ, the three systems): `own.handed()`
+was the environment handed to the packed program, name for name and value
+for value, and a handed `_MEIPASS2` was left out; on Linux the helper's own
+record of its environment held `_PYI_PARENT_PROCESS_LEVEL=0`, a start of its
+own, and LD_LIBRARY_PATH_ORIG equal to the value handed to the watch. The
+packed helper's own start puts its folder first in LD_LIBRARY_PATH again and
+adds the packer's names again, as any packed start does: it is not handed
+them. Not measured: an LD_LIBRARY_PATH handed empty (tests/test_own_env.py's
+fixture for it is made up). Where Raqib is not packed, the helper is given a
+copy of the watch's environment, value for value - the one program a plain
+Raqib hands its whole environment to; every other program it starts is
+given a list of named variables or a fixed environment - and its command is
+the one above, byte for byte. A test reads the package's source (CI-2,
+CJ-4; tests/test_own_env.py): every start of the kinds tests/test_own_tree.py
+lists (subprocess's, os's and asyncio's) fails where its `env` is absent,
+None, `os.environ` or a plain copy of it (`dict(os.environ)`,
+`os.environ.copy()`), as a keyword or as the value of a dict given with
+`**`, and a start that can take no environment (`getoutput`,
+`getstatusoutput`, `os.system`, `os.popen`, the fork, spawn and exec
+families, `startfile`) fails outright: the only whole environment handed on
+is `own.handed(...)`. The test holds the set of starts it finds in raqib/,
+by file and function, so a scan gone blind fails. It fails on a start of
+the kinds it lists, not on every start that inherits: it does not see a
+start reached by `getattr`, a module bound again by assignment,
+`functools.partial`, a subclass of Popen, or a start handed to a function
+by position. Packed and on Windows, `cli.main` alone calls
+SetDllDirectoryW(NULL) at its start (CI-3; measured, CJ: the folder the
+system searches first for a library was the packed program's before the
+entry ran, none after it, and none for a program started after it); a call
+that fails (not measured on a real machine) is said by the entry at once,
+one line on its error stream, whatever the command (CJ-3), and by the host
+watch once at its start as a blind spot that does not change the result
+(CJ-1); a packed entry that made no call is said by the host watch as a
+blind spot too (CJ-2). The loader's own variables (LD_PRELOAD,
 LD_LIBRARY_PATH as handed, LD_AUDIT) are read by the system's loader before
 the first line of Raqib, packed or plain, and are handed on as they were
 given (CI-4, not held). Not built here: the package

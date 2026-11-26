@@ -1673,7 +1673,12 @@ def main(argv=None, out=None):
         if fn(folder):
             return 1
         raise ctypes.WinError(ctypes.get_last_error())
-    own.library_folder(set_dll_directory_w)
+    if isinstance(own.library_folder(set_dll_directory_w), str):   # CJ-3: a failure, said at once; no code changes
+        try:
+            sys.stderr.write("raqib: %s\n" % own.library_folder_hole())
+            sys.stderr.flush()
+        except Exception:   # an error stream that cannot be written: the host watch still says it (CJ-1)
+            pass
     if out is None:
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(errors="backslashreplace")

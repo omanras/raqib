@@ -69,7 +69,9 @@ exit. Only one Reader runs in a process (the bind is on its pid).
 Everything of the system goes through arguments a test replaces: the
 socket's maker, the reads of /proc, the clocks, the random mark, the ticks
 of a second, the thread class, the exit registry, the platform. The
-standard library only. It imports `socket` for AF_NETLINK alone; it writes
+served program (SERVE_PROGRAM, serve, main) is the standard library only;
+the client's start (Helper.start) takes the helper's environment from
+raqib.own (ADR-0007 CI-1, CJ-5). It imports `socket` for AF_NETLINK alone; it writes
 no file. The Reader and serve() start no program; Helper starts one, the
 helper, through the callable the watch gives it (BU-1). It imports on every
 system.
