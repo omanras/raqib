@@ -132,6 +132,29 @@ python $script --close $r2
 As-User2 "closed"
 "the administrator still reads it: $([bool](Get-Content "$r2\before.txt" -ErrorAction SilentlyContinue))"
 
+"=== a folder a plain user made first, where the service's would be"
+$r3 = "C:\ProgramData\RaqibProbe3"
+function As-User3($tag, $lines) {
+  $cmd = "$pub\try3-$tag.cmd"
+  $o = "$pub\out3-$tag.txt"
+  ("@echo off`r`n" + ($lines -replace "OUT", $o)) | Set-Content -Encoding ascii $cmd
+  try {
+    Start-Process cmd.exe -ArgumentList "/c", $cmd -Credential $cred -WorkingDirectory $pub -WindowStyle Hidden -Wait -ErrorAction Stop
+    "as the plain user ($tag):"
+    Get-Content $o -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | ForEach-Object { "    " + ($_ -replace "\s+", " ") }
+  } catch { "as the plain user ($tag): NOT MEASURED: $($_.Exception.Message)" }
+}
+$again = "icacls $r3 /grant *S-1-5-32-545:(OI)(CI)F > nul 2>&1 && (echo give the users the folder again: DONE > OUT) || (echo give the users the folder again: REFUSED > OUT)`r`necho x > $r3\by-user.txt 2>nul && (echo write into it: DONE >> OUT) || (echo write into it: REFUSED >> OUT)"
+As-User3 "make" "mkdir $r3 2>nul && (echo make the folder under ProgramData: DONE > OUT) || (echo make the folder under ProgramData: REFUSED > OUT)"
+python $script --owner $r3
+python $script --close $r3 | Select-String "set:|as asked"
+As-User3 "its-maker-after-closing" $again
+python $script --owner $r3
+python $script --close $r3 | Select-String "set:|as asked"
+python $script --give $r3
+As-User3 "after-the-owner-changed" $again
+python $script --owner $r3
+
 "=== removed"
 Stop-Service RaqibProbe -ErrorAction SilentlyContinue
 sc.exe delete RaqibProbe | Select-Object -First 1

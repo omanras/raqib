@@ -95,8 +95,9 @@ DACL_INFO, PROTECTED_DACL = 0x4, 0x80000000
 SE_FILE_OBJECT = 1
 
 
-def sddl_of(path):
+def sddl_of(path, what=None):
     """The folder's access list as the system writes it (SDDL), or why it could not be read."""
+    DACL_INFO = what or globals()["DACL_INFO"]
     adv = ctypes.WinDLL("advapi32", use_last_error=True)
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.LocalFree.argtypes = [wintypes.LPVOID]
@@ -146,9 +147,31 @@ def close(path):
     return 0 if rc == 0 else 1
 
 
+def owner(path, give=False):
+    """The folder's owner and access list as text; with give, first make the administrators its owner."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    print("owner and list: %s" % sddl_of(path, 0x1 | 0x4))
+    if give:
+        sd, size = wintypes.LPVOID(), wintypes.ULONG()
+        adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.ULONG)]
+        adv.ConvertStringSecurityDescriptorToSecurityDescriptorW("O:BA", 1, ctypes.byref(sd), ctypes.byref(size))
+        sid, defaulted = wintypes.LPVOID(), wintypes.BOOL()
+        adv.GetSecurityDescriptorOwner.argtypes = [wintypes.LPVOID, ctypes.POINTER(wintypes.LPVOID),
+                                                   ctypes.POINTER(wintypes.BOOL)]
+        adv.GetSecurityDescriptorOwner(sd, ctypes.byref(sid), ctypes.byref(defaulted))
+        adv.SetNamedSecurityInfoW.argtypes = [wintypes.LPWSTR, ctypes.c_int, wintypes.DWORD] + [wintypes.LPVOID] * 4
+        rc = adv.SetNamedSecurityInfoW(path, SE_FILE_OBJECT, 0x1, sid, None, None, None)
+        print("the administrators made its owner: %s" % ("ok" if rc == 0 else "error %d" % rc))
+        print("owner and list: %s" % sddl_of(path, 0x1 | 0x4))
+    return 0
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "--close":
         return close(argv[2])
+    if len(argv) == 3 and argv[1] in ("--owner", "--give"):
+        return owner(argv[2], argv[1] == "--give")
     if len(argv) < 4 or argv[1] != "--service":
         print(__doc__)
         return 2
