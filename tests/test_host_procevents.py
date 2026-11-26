@@ -628,3 +628,31 @@ def test_e6_the_documents_say_what_the_helper_reads_loads_and_bounds_and_what_is
 def test_e7_ascii_outside_docs():
     for path in ("raqib/host.py", "raqib/procevents.py", "tests/test_host_procevents.py"):
         assert (ROOT / path).read_text(encoding="utf-8").isascii(), path
+
+
+# --- M17.2b E4 (ADR-0007 CI-3): the entry's put-back that failed, said once by the watch as a hole of its own ------
+LIBRARY_WORDS = "what the watch starts searches the packed program's folder first for its libraries"
+
+
+@pytest.mark.parametrize("platform,kind", [("win32", "windows"), ("linux", "linux")])
+def test_ci3_a_failed_put_back_is_said_once_as_a_hole_of_the_watchs_own_never_fatal(platform, kind, tmp_path,
+                                                                                    monkeypatch):
+    monkeypatch.setattr(own, "LIBRARY_FOLDER", "SetDllDirectoryW(NULL) returned 0")
+    w, clock = watch(tmp_path, feed([kind] * 3), platform=platform)
+    text, code = run(w, clock, 3)
+    holes = [h for h in w.holes if h["kind"] == "own-library-folder"]
+    assert len(holes) == 1 and holes[0]["detail"] == own.library_folder_hole() and holes[0]["round"] is None
+    assert holes[0]["detail"].startswith(LIBRARY_WORDS) and "SetDllDirectoryW(NULL) returned 0" in holes[0]["detail"]
+    assert " ".join(text.split()).count(LIBRARY_WORDS) == 1 and code is not None   # the watch ran its rounds
+
+
+@pytest.mark.parametrize("result", [None, True])
+def test_ci3_not_called_or_put_back_the_watch_says_nothing_of_it(result, tmp_path, monkeypatch):
+    monkeypatch.setattr(own, "LIBRARY_FOLDER", None)
+    w0, clock0 = watch(tmp_path / "before", feed(["windows"] * 2), platform="win32")
+    text0, code0 = run(w0, clock0, 2)
+    monkeypatch.setattr(own, "LIBRARY_FOLDER", result)
+    w, clock = watch(tmp_path / "now", feed(["windows"] * 2), platform="win32")
+    text, code = run(w, clock, 2)
+    assert LIBRARY_WORDS not in text and [h["kind"] for h in w.holes] == [h["kind"] for h in w0.holes]
+    assert code == code0

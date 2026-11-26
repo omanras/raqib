@@ -572,11 +572,36 @@ Rulings: ADR-0003 Amendments C and D.
     helper is the packed program itself with one fixed word as its only
     argument: no `-I` and no import path are given; it loads Raqib, and
     every module Raqib's entry imports, from the packed program's own
-    folder; its directory is `/` and its environment is the watch's. That
-    the packer's runtime reads nothing of that environment was measured
-    once (PyInstaller 6.11.1: PYTHONPATH and a working folder's modules not
-    loaded), not proven; what the packer's own start reads of it (its own
-    variables, the library search path) was not measured (CH-3). Every
+    folder; its directory is `/`, and its environment is the watch's without
+    what the packer added to it (ADR-0007 CI-1, built): no name that begins
+    `_PYI_` and no `_MEIPASS2`, and on Linux LD_LIBRARY_PATH put back to the
+    value the watch was handed (removed where it was handed none), so what
+    the watch starts does not have the packed program's folder first on the
+    loader's search path; every start in Raqib names the environment it
+    gives (CI-2), and a plain Raqib hands its environment on value for
+    value, as before. Packed and on Windows, Raqib's entry puts the folder
+    the system searches first for a library back to the system's own at its
+    start (SetDllDirectoryW(NULL); CI-3, built), so wevtutil, PowerShell and
+    whatever the watch starts load the system's libraries and not the packed
+    copies; where that call fails, the host watch says once, as a hole of
+    its own, that what it starts searches the packed program's folder first
+    for its libraries. Measured on GitHub's Windows, Linux and macOS
+    machines (PyInstaller 6.11.1, one folder): a packed start reads none of
+    the interpreter's PYTHON* variables, as `-I` does for the plain helper.
+    Not held (CI-4): the loader's own variables (LD_PRELOAD,
+    LD_LIBRARY_PATH, LD_AUDIT, the DYLD_ names, on Windows the PATH for a
+    library not found elsewhere) are read by the system's loader before the
+    first line of Raqib, packed or plain: nothing in Raqib undoes them, and
+    `-I` never did. The packer's three variables
+    (`_PYI_APPLICATION_HOME_DIR`, `_PYI_ARCHIVE_FILE`,
+    `_PYI_PARENT_PROCESS_LEVEL`) set together by whoever starts a packed
+    Raqib make it take itself for one started again by itself and skip its
+    own first steps (on Linux its folder is then not put first on the
+    loader's search path). The environment a watch is started with is its
+    starter's: the defence is who starts it - the system's service manager
+    with the unit's environment, not a shell an agent holds. That the watch
+    says at its start that a loader's variable was in its environment is not
+    built (a later task, CI-4). Every
     `raqib` and `python -m raqib`, packed or not, on every system, given
     that word as its first and only argument serves the reader on its
     standard input and output, as `python -m raqib.procevents --serve`

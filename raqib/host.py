@@ -2312,6 +2312,10 @@ class HostWatch:
         elif self.platform == "win32" and not self.sysmon[0]:
             self.between_said = True
             self.notes.append(BETWEEN_HOLE % (BETWEEN_NO_SYSMON % ("%s: %s" % (OWN_CHECK, self.sysmon[1]))))
+        from raqib import own   # ADR-0007 CI-3 (M17.2b): the entry's call that failed, said once as a hole of its own
+        library_hole = own.library_folder_hole()
+        if library_hole is not None:
+            self._hole(self.t0, "own-library-folder", library_hole)
         if self.missing_rules:
             self._hole(self.t0, "host-rule", "rule(s) %s not in the catalog: what they judge is not judged"
                        % ", ".join(self.missing_rules))

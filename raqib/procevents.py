@@ -1078,14 +1078,15 @@ class Helper:
         if self.proc is not None:
             return None
         try:
+            from raqib import own   # CI-1 (M17.2b): the watch's environment, without what a packer added to it
             popen = self._popen
             if popen is None:
                 import subprocess
                 popen = subprocess.Popen
                 kw = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL,
-                      "close_fds": True, "cwd": "/"}
+                      "close_fds": True, "cwd": "/", "env": own.handed()}
             else:
-                kw = {"cwd": "/"}
+                kw = {"cwd": "/", "env": own.handed()}
             self.began = self._clock()
             self.proc = self._started(popen(self.argv, **kw))
         except Exception as exc:

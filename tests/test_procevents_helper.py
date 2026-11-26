@@ -17,7 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from raqib import procevents  # noqa: E402
+from raqib import own, procevents  # noqa: E402
 
 LINUX = sys.platform.startswith("linux")
 REFUSAL = procevents.PREFIX + "the socket was refused (EPERM: a fake)"
@@ -265,7 +265,8 @@ def test_cg1_a_packed_helper_is_the_watchs_own_in_a_sample_and_in_the_reader_nev
     monkeypatch.setattr(sys, "executable", exe)
     h = procevents.Helper(started=host.helper_started, popen=FakePopen, thread=lambda **k: threading.Thread(
         target=lambda: None))
-    assert h.start() is None and h.proc.args == [exe, procevents.WORD] and h.proc.kw == {"cwd": "/"}
+    assert h.start() is None and h.proc.args == [exe, procevents.WORD]
+    assert h.proc.kw == {"cwd": "/", "env": own.handed()}   # M17.2b (CI-1): the environment it is given
     mine = own_record.RECORD.kept()
     pid = h.proc.pid
     assert mine[pid][1] == "raqib"   # the real file's name: what the exe link of the sample reads
@@ -399,7 +400,7 @@ def fake_helper(drains=True, **kw):
 
 def test_e2_start_goes_through_started_in_the_directory_root_and_does_not_wait():
     h, p, started = fake_helper()
-    assert started == [p] and p.args == procevents.command() and p.kw == {"cwd": "/"}
+    assert started == [p] and p.args == procevents.command() and p.kw == {"cwd": "/", "env": dict(os.environ)}
     assert p.asked == []                                       # nothing asked before the ready line came
     p.say(READY)
     p.say(answer(1, processes=[proc(3)]))
@@ -712,3 +713,51 @@ def test_e9_the_helper_and_the_client_are_the_standard_librarys_and_ascii():
     assert (ROOT / "tests" / "test_procevents_helper.py").read_text(encoding="utf-8").isascii()
     for gone in ("requests", "urllib", "http.client", "socket.create_connection"):
         assert gone not in text
+
+
+# --- M17.2b E2 (ADR-0007 CI-1): the environment the helper is given, packed and plain -------------------------------
+PACKED_ADDED = {"_PYI_ARCHIVE_FILE": "/opt/raqib.example/raqib", "_PYI_PARENT_PROCESS_LEVEL": "1",
+                "_MEIPASS2": "/stale.example", "LD_LIBRARY_PATH": "/opt/raqib.example/_internal:/usr/lib/handed.example",
+                "LD_LIBRARY_PATH_ORIG": "/usr/lib/handed.example", "RAQIB_M17_2B_KEPT": "kept"}
+
+
+@pytest.mark.parametrize("real_popen", [False, True])
+def test_ci1_packed_the_helper_is_given_the_watchs_environment_without_the_packers_names(real_popen, monkeypatch):
+    for name, value in PACKED_ADDED.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)   # a made-up frozen state
+    monkeypatch.setattr(sys, "executable", "/opt/raqib.example/raqib")
+    if real_popen:   # the client's own branch: subprocess.Popen with its pipes, given the same environment
+        import subprocess
+        monkeypatch.setattr(subprocess, "Popen", FakePopen)
+        h = procevents.Helper(thread=lambda **k: threading.Thread(target=lambda: None))
+    else:
+        h = procevents.Helper(popen=FakePopen, thread=lambda **k: threading.Thread(target=lambda: None))
+    assert h.start() is None and h.proc.args == ["/opt/raqib.example/raqib", procevents.WORD]
+    env = h.proc.kw["env"]
+    assert env == own.handed(os.environ, frozen=True, platform=sys.platform) and env is not os.environ
+    assert not [k for k in env if k.upper().startswith("_PYI_") or k.upper() == "_MEIPASS2"]
+    assert env["RAQIB_M17_2B_KEPT"] == "kept" and env["PATH"] == os.environ["PATH"]
+    if sys.platform.startswith("linux"):   # the loader's path put back to what was handed to the packed start
+        assert env["LD_LIBRARY_PATH"] == "/usr/lib/handed.example" and "LD_LIBRARY_PATH_ORIG" not in env
+    assert os.environ["_PYI_ARCHIVE_FILE"] == "/opt/raqib.example/raqib"   # the watch's own is not changed
+    if real_popen:
+        assert h.proc.kw["cwd"] == "/" and h.proc.kw["close_fds"] is True
+
+
+@pytest.mark.parametrize("real_popen", [False, True])
+def test_ci1_plain_the_helper_is_given_the_watchs_environment_value_for_value_and_todays_command(
+        real_popen, monkeypatch):
+    for name, value in PACKED_ADDED.items():   # a plain Raqib hands on what it has, every packer's name too
+        monkeypatch.setenv(name, value)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    if real_popen:
+        import subprocess
+        monkeypatch.setattr(subprocess, "Popen", FakePopen)
+        h = procevents.Helper(thread=lambda **k: threading.Thread(target=lambda: None))
+    else:
+        h = procevents.Helper(popen=FakePopen, thread=lambda **k: threading.Thread(target=lambda: None))
+    assert h.start() is None and h.proc.args == procevents.command()
+    assert h.proc.args[1:4] == ["-I", "-c", TODAYS_PROGRAM]
+    env = h.proc.kw["env"]
+    assert env == dict(os.environ) and env is not os.environ and env["LD_LIBRARY_PATH_ORIG"]

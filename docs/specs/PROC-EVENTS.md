@@ -301,7 +301,31 @@ loads: measured on this task's machine (PyInstaller 6.11.1, Python 3.13),
 the packed program run from a folder holding a `raqib.py`, a `raqib`
 package and a `json` package, with PYTHONPATH naming that folder, loaded
 none of them; that a packer's runtime reads nothing of the environment is
-the packer's, and not measured beyond that run. Not built here: the package
+the packer's, and not measured beyond that run. What the packed helper is
+handed (M17.2b, ADR-0007 Amendment CI). Measured on GitHub's Windows, Linux
+and macOS machines (PyInstaller 6.11.1, one folder): a packed start reads
+none of the interpreter's PYTHON* variables, and adds its own names to its
+environment, which reach every program started with it - `_PYI_ARCHIVE_FILE`
+and `_PYI_PARENT_PROCESS_LEVEL` on the three systems, and on Linux its own
+folder put first in LD_LIBRARY_PATH (what was handed stays behind it) and
+LD_LIBRARY_PATH_ORIG holding the value it was handed; the packer's three
+names set together make a start take itself for one started again by itself
+and skip its own first steps. So the helper is started with
+`env=own.handed()` (raqib/own.py, CI-1): where Raqib is packed, the watch's
+environment without every name that begins `_PYI_` (on Windows whatever its
+case) and without `_MEIPASS2`, and on Linux with LD_LIBRARY_PATH put back to
+LD_LIBRARY_PATH_ORIG's value and LD_LIBRARY_PATH_ORIG removed
+(LD_LIBRARY_PATH removed where there is no LD_LIBRARY_PATH_ORIG) - the
+packed helper starts from the environment the watch was handed, as any
+packed start does; every other name, the DYLD_ names of macOS among them,
+stays as handed. Where Raqib is not packed, the helper is given a copy of
+the watch's environment, value for value, and its command is the one above,
+byte for byte. Every start of a program in raqib/ names the environment it
+gives (CI-2; tests/test_own_env.py reads the package's source and fails on a
+start that inherits). The loader's own variables (LD_PRELOAD,
+LD_LIBRARY_PATH as handed, LD_AUDIT) are read by the system's loader before
+the first line of Raqib, packed or plain, and are handed on as they were
+given (CI-4, not held). Not built here: the package
 and its installer, signing, a service on Windows, a reader for macOS
 (Amendment CG's last item).
 

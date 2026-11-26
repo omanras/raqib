@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from raqib import cli, procevents  # noqa: E402
+from raqib import cli, own, procevents  # noqa: E402
 
 WORD = procevents.WORD
 
@@ -88,3 +88,71 @@ def test_cg2_procevents_spec_says_the_packed_road_the_word_and_that_by_hand_it_s
 
 def test_cg1_the_test_is_ascii():
     assert (ROOT / "tests" / "test_cli_word.py").read_text(encoding="utf-8").isascii()
+
+
+# --- M17.2b E4 (ADR-0007 CI-3): packed and on Windows, the entry puts the folder searched first back ---------------
+class Log(list):
+    pass
+
+
+def _entry_with(monkeypatch, result, frozen, platform):
+    """cli.main's call of own.library_folder, run for real with a stand-in of SetDllDirectoryW and a made-up
+    frozen state and system; [what was called, in order]."""
+    monkeypatch.setattr(own, "LIBRARY_FOLDER", None)
+    log = Log()
+    real = own.library_folder
+
+    def call(folder):
+        log.append(("SetDllDirectoryW", folder))
+        if isinstance(result, BaseException):
+            raise result
+        return result
+    def entry_call(given):   # main gives the system's call; a stand-in takes its place here
+        log.append("library_folder")
+        entry_call.given = given
+        return real(call, frozen=frozen, platform=platform)
+    monkeypatch.setattr(own, "library_folder", entry_call)
+    log.entry, log.real = entry_call, real
+    parser = cli._parser
+    monkeypatch.setattr(cli, "_parser", lambda: log.append("parser") or parser())
+    return log
+
+
+@pytest.mark.parametrize("result", [1, 0, OSError(5, "Access is denied"), RuntimeError("a stand-in that raises")])
+def test_ci3_packed_on_windows_main_calls_it_once_after_the_word_before_anything_else(result, monkeypatch):
+    log = _entry_with(monkeypatch, result, True, "win32")
+    out = io.StringIO()
+    assert cli.main(["--version"], out=out) == 0 and out.getvalue() == cli.version_line() + "\n"
+    assert log == ["library_folder", ("SetDllDirectoryW", None), "parser"]   # before the parser and the output
+    assert callable(log.entry.given)
+    if result == 1:
+        assert own.LIBRARY_FOLDER is True and own.library_folder_hole() is None
+    else:   # 0 or what it raised: a result, kept for the watch to say, never an exception out of main
+        assert isinstance(own.LIBRARY_FOLDER, str) and own.library_folder_hole().startswith(
+            "what the watch starts searches the packed program's folder first for its libraries")
+
+
+@pytest.mark.parametrize("frozen,platform", [(False, "win32"), (True, "linux"), (True, "darwin"), (False, "linux")])
+def test_ci3_not_called_where_plain_where_linux_where_macos(frozen, platform, monkeypatch):
+    log = _entry_with(monkeypatch, 1, frozen, platform)
+    assert cli.main(["--version"], out=io.StringIO()) == 0
+    assert log == ["library_folder", "parser"] and own.LIBRARY_FOLDER is None
+
+
+def test_ci3_the_helpers_word_is_taken_first_and_the_call_is_not_made_for_it(monkeypatch):
+    log = _entry_with(monkeypatch, 1, True, "win32")
+    monkeypatch.setattr(procevents, "serve", lambda *a, **k: 0)
+    before = signal.getsignal(signal.SIGINT)
+    try:
+        assert cli.main([WORD]) == 0
+    finally:
+        signal.signal(signal.SIGINT, before)
+    assert log == [] and own.LIBRARY_FOLDER is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="off Windows the system's call cannot be reached: a result")
+def test_ci3_the_call_main_gives_reached_off_windows_is_a_result_never_an_exception(monkeypatch):
+    log = _entry_with(monkeypatch, 1, False, "win32")
+    assert cli.main(["--version"], out=io.StringIO()) == 0 and own.LIBRARY_FOLDER is None
+    said = log.real(log.entry.given, frozen=True, platform="win32")   # main's own call, given for real
+    assert isinstance(said, str) and said.startswith("SetDllDirectoryW(NULL) failed: ") and said.isascii()
