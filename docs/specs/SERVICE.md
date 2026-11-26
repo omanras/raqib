@@ -260,3 +260,101 @@ unit that could not be stopped is not removed.
 - An agent in a network namespace of its own holds sockets the watch, in the host's namespace, may not see: not
   measured.
 - The service's watch and a person's own watch do not know each other. Each writes its own record.
+
+## Windows: the runner (`raqib service run`)
+
+ADR-0013 Amendment E, AE-1 to AE-4. This is the first part of S4: on Windows the host watch runs as a real service
+of the system's, by the standard library alone (ctypes; no new dependency), in raqib/winservice.py. Installing,
+removing and asking the state of the service are not here yet, and neither is what a watch started again after a
+killed one does (AE-6); until they are, the line above that there is nothing for Windows is true of
+`install`, `remove` and `status` only.
+
+**The shape.** `raqib service run` is the command the system's service manager runs; nobody else. Its process
+hands the system its service table (StartServiceCtrlDispatcherW) in a second thread, and runs the watch in the
+main thread as it runs from a console, by Raqib's own entry with the Linux unit's arguments:
+`cli.main(["watch", "--host", "--no-page", "--no-notify"], out)`. When the system calls the service's main, the
+runner registers its handler and reports RUNNING; only then is the place made ready and the watch started, so
+RUNNING is always reported before the watch begins. A Stop or a Shutdown from the system is reported as
+STOP_PENDING (with a hint of 30 s), and then turned into the interrupt a person's Ctrl+C is
+(`signal.raise_signal(SIGINT)` from the handler); the watch ends with its own final report, and then STOPPED is
+reported. The interrupt is raised only while the watch runs: a Stop that comes before the watch begins means it
+is not begun. A second Stop, and every other control, changes nothing.
+
+Run by anything but the service manager, the dispatcher fails at once with error 1063: the runner says so on its
+error stream (`not started by the service manager (error 1063)`), starts no watch and exits 2; so it does where
+the dispatcher fails otherwise, or does not answer in 25 s. Off Windows, `raqib service run` says in one line that
+it is Windows', and exits 2; nothing else of `raqib service` changes on Linux or macOS. Every call of the system
+goes through one object (winservice.System) that a test replaces; ctypes is imported inside it, at its first call
+of Windows, never when the module is imported, and no program is started.
+
+**The place.** `Raqib` under the folder the environment of the service names `ProgramData`; where that name is
+absent, or is not a whole path of a drive (a letter, a colon and a separator; no `..`; not a share), the runner
+refuses. The access list it gives the place is one constant, `D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`: the system
+and the administrators, whole, for the folder and everything in it, and nothing inherited from above. Refuse rather
+than repair:
+
+| The place is | The runner |
+|---|---|
+| absent | makes it, gives it the closed list, and reads it back |
+| a link (any reparse point: a link, a junction) | refuses; it is not followed |
+| there and not a folder | refuses |
+| a folder whose owner is neither the system (SY) nor the administrators (BA) | refuses (its maker could open it again) |
+| a folder with another list, not empty | refuses (what a stranger left is not adopted) |
+| a folder with another list, empty | gives it the closed list and reads it back |
+| a folder with the closed list, owned by SY or BA | takes it as it is; what is in it is not touched |
+
+A folder the runner made or closed that is not empty after it was closed is refused too (something was put in it
+in between). After every road the owner and the list are read back as text: the list must be the closed one and
+the owner SY or BA, or no watch starts. Only then are the process's `HOME` and `USERPROFILE` the place, as the
+Linux unit's HOME is its state directory, so the watch's whole record is written under it. The list is set, and
+the owner read, of the place alone; no owner is ever changed.
+
+**The text file.** A service has no standard streams (each is None). The runner gives the watch a text file in the
+place, `service.txt`, for its report and its errors. It is begun anew at each start; the one before is kept once,
+as `service.before.txt`. It holds at most 8388608 bytes (8 MiB, its last line included): past that bound nothing
+more is written to it and its last line says so, once; the watch's record goes on. A standard stream that is None
+is replaced by the text file for the whole process, so nothing fails because a stream is missing. The runner's own
+lines in it begin `raqib service run:`: the place, the road it took and its owner and list first; how the watch
+ended and what the system is told last.
+
+**The exits.** A watch's result after a Stop (0 clean, 1 an alarm, 3 incomplete) is no failure of the service: the
+system is told exit 0, and the result is in the text file. Each refusal, and a watch that ended without being
+asked, is STOPPED with the system's service-specific exit (ERROR_SERVICE_SPECIFIC_ERROR, 1066) and a number of
+its own, so that the system's own log tells them apart:
+
+| Number | Words |
+|---|---|
+| 10 | ProgramData is not in the environment, or is not a whole path of a drive |
+| 11 | the place is a link (a reparse point) |
+| 12 | the place is there and is not a folder |
+| 13 | the place's owner is neither the system (SY) nor the administrators (BA) |
+| 14 | the place is open (its list is not the closed one) and not empty |
+| 15 | the place could not be read, made or closed, or after it was its list read back is not the closed one, or a place made or closed here was not empty after it was closed |
+| 16 | the text file could not be begun in the place |
+| 20 | the watch refused to start (its result 2) |
+| 21 | the watch ended without being asked (no Stop or Shutdown came), or with no result of its own |
+| 22 | an exception came out of the watch |
+
+The process itself exits 0 where the system was told exit 0, and 2 otherwise. A refusal before the text file is
+begun is said on the error stream, where there is one.
+
+**What was measured.** The figures are the measured candidate's (a program of 150 lines in the same shape, on
+GitHub's Windows machines, x64 and ARM64, Python 3.12, Raqib plain and packed by PyInstaller 6.11.1; ADR-0013
+Amendment E), not this runner's: the system started it in 0.56 to 0.71 s plain and 0.08 to 0.09 s packed;
+RUNNING was reported 0.14 to 0.16 s after the start; a Stop took 0.25 to 0.27 s, the watch ending 0.01 to 0.03 s
+after the control with its final report and code 0, and the state read Stopped with exit code 0. As a service the
+process was the system's own account in session 0, its folder System32, its three standard streams None; with
+no service manager the dispatcher failed at once with error 1063. With HOME and USERPROFILE a folder under
+ProgramData, the watch's whole record was written there. A folder ProgramData makes is open to every user (a
+plain user wrote into it, read the service's log and listed its record); given the closed list by the system's
+own calls, read back equal to it, every such attempt was refused, for what was in it before too, and an
+administrator still read it. A folder a plain user made first is his: closed, he opened it again; owned by the
+administrators and closed again, he was refused. A plain user's Stop of the service, and his ending its process,
+were refused. The runner itself is measured by the Table on the same machines before it is merged (AE-5).
+
+**What was not measured.** The service-specific exit (1066 and the numbers above) as the system's log shows it;
+a shutdown of the machine (the control was not sent); a service's start at boot; the manager's limit of 30 s
+under a slow start; another account than the system's; a place on another volume, or one with a file held open
+by another process; Windows before the runners' versions. A watch started while the one before left its state
+unfinished, and how long the service waits then, are M12.4b's; the install, its start at boot, the system told to
+start it again, and the event log are M12.4c's.

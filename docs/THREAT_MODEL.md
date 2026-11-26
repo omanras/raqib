@@ -2146,6 +2146,28 @@ collector that is slow, down or refusing never delays or loses a capture
   file outside ~/.raqib, the unit in /etc/systemd/system, because an
   administrator ran them (ADR-0013 A-4). They ask for no elevation, and the
   watch never runs them on its own.
+- **The service on Windows (`raqib service run`; ADR-0013 Amendment E).**
+  On Windows the host watch runs as a service of the system's, as the
+  system's own account, its record under `Raqib` in ProgramData
+  (docs/specs/SERVICE.md). Who may touch it, as measured with the same shape
+  on GitHub's Windows machines, by a plain user made for the run: his Stop
+  of the service was refused (access denied), and so was his ending its
+  process. A folder ProgramData makes is open to every user: he wrote into
+  it, read the service's log and listed its record. So the runner closes
+  its place before anything is written in it: the system and the
+  administrators, whole, nothing inherited
+  (`D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`), read back as text; closed so,
+  each of his attempts was refused, for what was in the folder before too,
+  and an administrator still read it. A folder he made first where the
+  place would be is his, and its owner can open it again after it is
+  closed; so the runner refuses a place whose owner is neither the system
+  nor the administrators, a link, and an open place that is not empty, and
+  repairs none of them: no watch starts, and the system's log holds the
+  refusal's own number. An administrator, and the system's account, can
+  still stop it, read and change its record, and change Raqib's code; and
+  the service's own code runs with the system's rights, so a defect in it
+  is the system's. Not measured: a shutdown of the machine, a start at
+  boot, another account than the system's, and a place on another volume.
 
 ## 7. Platform
 
