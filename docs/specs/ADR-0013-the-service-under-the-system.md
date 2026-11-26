@@ -272,3 +272,69 @@ started again; M12.4c `raqib service install | remove | status` on Windows.
   a shutdown of the machine (the control was not sent); a service's start at boot; the manager's limit of 30 s
   under a slow start; another account than the system's; a place on another volume, or one with a file held open
   by another process; Windows before the runners' versions.
+
+## Amendment F (the Table, 2026-11-27) - the review of M12.4a (docs/review/2026-11-27-M12.4a.md) and the field's word: REDO
+The field's word on c125f62 (AE-5; the probe branch 27d5477; GitHub's Windows machines, x64 and ARM64): the
+runner's 42 tests passed on real Windows, the real object's among them. As a real service, plain and packed: run
+by hand it refused with its line, exit 2, and made nothing; the place absent, it was made with the
+administrators its owner and the closed list, the watch ran, a Stop took 0.26 s with the final report and the
+run's chain whole, the state Stopped with exit 0; a plain user's write, read, listing, Stop and ending of its
+process were each refused; started again, the text before was kept once; the place made first by a plain user
+was refused with 13 and left untouched; open with a file in it, refused with 14, the file left; open and empty,
+closed and taken; a junction, refused with 11, nothing written where it points. Two flaws: the system's log gave
+each refusal's number the system's own words for that number (13 "The data is invalid", 14 "Not enough memory
+resources", 11 "incorrect format"); and the start command said it succeeded for a service that then refused,
+because RUNNING is reported before the place is read.
+The reviewer's verdict is REDO with two blockers, both in what Amendment E ruled. Measured before this ruling
+(the probe branch 66dec1a, the same machines):
+- A folder made by the one call that makes it with the closed list (CreateDirectoryW with a security
+  descriptor), as an administrator and as the system's own account in a service: made; read back, its owner the
+  administrators and its list `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)` - the closed list, written without the mark
+  of inheriting that a list set on an existing folder carries (`D:PAI`); made again where it is, error 183. A
+  plain user's write, listing, renaming and removal of it: each refused, with no handle held.
+- Read through one handle on the name itself (CreateFileW with the flag that does not follow a link;
+  GetFileInformationByHandle; GetSecurityInfo): a folder; a junction and a link to a folder, each a folder that
+  is a reparse point; a file; an absent name, error 2; the owner and the list from the same handle.
+- A handle with the right to read the list alone does not hold a name: while it was held, the plain user who
+  made the folder gave it another name.
+- A refusal reported from START_PENDING: the start command fails at once. From RUNNING: it says ok, and the
+  state reads Stopped a moment later. A number of the service's own of 14 is written in the system's log with
+  the system's words for 14; 20014 and 536870926 (0x20000000 + 14) are written as themselves ("%%20014",
+  "%%536870926").
+- AF-1 (the place, ruled again; it replaces AE-2's closing of a folder that exists). The runner never sets an
+  owner or a list on anything that exists. Absent, the place is made by the one call that gives it the closed
+  list. Then, made or found, it is read through one handle on the name itself, and taken only where that one
+  read says: a folder and no reparse point; its owner the system or the administrators; its list the closed one,
+  in one of the two forms the system writes it (`D:P...` as made, `D:PAI...` as set). Anything else is refused
+  and left exactly as it is - open, whatever it holds or does not hold: an administrator removes it. FOR: there
+  is no moment when the place is open; what was checked is one object; a refusal holds at every start, and
+  nothing a stranger left is ever inside a place that is taken (the review's items 7 and 8). MUST NOT TOUCH: no
+  call that sets security on an existing object stays in the runner. Not relied on, and said: holding a handle
+  (measured: it holds nothing); what keeps a taken place's name is its own list and owner (measured: a plain
+  user can neither rename nor remove it).
+- AF-2 (START_PENDING until the place and the text file are ready). The runner reports START_PENDING, prepares
+  the place and begins its text file, and only then reports RUNNING and starts the watch; a refusal before that
+  is STOPPED from START_PENDING. FOR: an administrator who starts it sees at once that it did not start. The
+  manager's limit is 30 s; the measured preparing is milliseconds.
+- AF-3 (numbers the system has no words for). Each exit number of the service's own is 0x20000000 + n, the range
+  the system leaves to applications; the spec lists each in decimal and in hexadecimal with its words. FOR: the
+  system's log says the number itself and never a sentence about memory.
+- AF-4 (the review's other items). A Stop that comes before the watch gave any result (its item 4): the system
+  is told 0, a Stop asked was obeyed, and the text file says in one line that the watch was stopped before it
+  gave a report; the unfinished state such a watch may leave is M12.4b's. A Stop after the watch returned raises
+  no interrupt, and one that still surfaces in the runner is caught (5). The platform is said before any other
+  refusal of the command's arguments (6). A write to the text file that fails ends it with one last line where
+  that can still be written, and the runner keeps that it happened (13). An exception of the runner's own has a
+  number of its own and its trace in the text file where one is begun (15); STOP_PENDING is never reported after
+  STOPPED (16). Tests: the text file's refusal, a handler that is not registered, the dispatcher that does not
+  connect, a stand-in watch ended by a real interrupt (17, 18). The documents say what the field read on c125f62
+  and what this amendment measured, each named so, and nothing more (21, 22). Kept: `service --help` naming
+  `run` on every system (2); ProgramData as the system gives it to its services, its drive and its parents the
+  administrators' and said so (11, Q8); the name RaqibWatch, the 8 MiB bound, the three waits (Q4 to Q6); 20 for
+  a watch that refuses to start (Q9).
+- AF-5 (the field's word again). Before the merge the Table runs the REDO's commit as AE-5 did, with: the place
+  a plain user made (13), an administrator's open place with and without a file (refused both, left as they
+  are), a junction, a link and a file at the place's name, a closed place holding the record of a run before
+  (taken), the start command failing at once on a refusal, and the system's log's own words for it. Not measured
+  still: AE-6's list; a place whose list is closed in meaning but written otherwise (refused, by the letter); a
+  place on a volume that keeps no owners.
