@@ -208,7 +208,48 @@ def raqib_itself(exe, temp):
             print("    " + line[:220])
 
 
+def own_itself(exe, temp):
+    """The branch's raqib.own and Raqib's entry, packed (packed_env_entry2.py): what they did on this machine."""
+    empty = os.path.join(temp, "empty")
+    os.makedirs(empty, exist_ok=True)
+    lib = {"linux": {"LD_LIBRARY_PATH": empty}, "darwin": {"DYLD_LIBRARY_PATH": empty}}.get(sys.platform, {})
+    for label, extra in (("plain", {}), ("a loader's path handed, and the packer's older name",
+                                         dict(lib, _MEIPASS2=empty))):
+        env = dict(os.environ)
+        env.update(extra)
+        code, got, err, took = run([exe, sys.executable], env)
+        print("OWN, packed, %s: exit %s" % (label, code))
+        if got is None:
+            print("    it said nothing. stderr: %s" % " | ".join(err.splitlines()[-4:])[:600])
+            continue
+        print("    the entry: exit %s, said %r; own.LIBRARY_FOLDER %s; the hole's words: %s"
+              % (got["entry_exit"], got["entry_said"], got["library_folder"], got["hole"]))
+        if "dll_directory" in got["before"]:
+            print("    the folder Windows searches first: before the entry %r; after it %r; for what it starts %r"
+                  % (got["before"]["dll_directory"], got["after"]["dll_directory"],
+                     got["child"].get("dll_directory", got["child"])))
+        bad = dict((k, v) for k, v in got["late"].items() if v != "ok" and "No module named" not in v)
+        print("    modules with a library of their own, loaded after the entry: %d ok, failed: %s"
+              % (sum(1 for v in got["late"].values() if v == "ok"), bad or "none"))
+        print("    its own environment beside the one handed to it: %s" % (env_diff(env, got["after"]["env"]) or "the same"))
+        print("    own.handed() beside the one handed to it: %s" % (env_diff(env, got["handed"]) or "the same"))
+        if "env" in got["child"]:
+            print("    what it starts with own.handed() sees, beside the one handed to it: %s"
+                  % (env_diff(env, got["child"]["env"]) or "the same"))
+        else:
+            print("    what it starts did not run: %s" % got["child"])
+
+
 def main(argv):
+    if argv[1] == "--own":
+        temp = os.path.join(os.environ.get("RUNNER_TEMP") or os.getcwd(), "packed-env")
+        os.makedirs(temp, exist_ok=True)
+        print("PLATFORM %s; python %s" % (sys.platform, sys.version.split()[0]))
+        own_itself(os.path.abspath(argv[2]), temp)
+        if "--raqib" in argv and sys.platform == "linux":
+            os.makedirs(os.path.join(temp, "plant"), exist_ok=True)
+            raqib_itself(os.path.abspath(argv[argv.index("--raqib") + 1]), temp)
+        return 0
     packed = os.path.abspath(argv[1])
     temp = os.path.join(os.environ.get("RUNNER_TEMP") or os.getcwd(), "packed-env")
     os.makedirs(temp, exist_ok=True)
