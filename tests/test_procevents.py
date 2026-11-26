@@ -909,8 +909,13 @@ def test_e9_only_the_watch_imports_the_reader():
     users = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "raqib").rglob("*.py")
                    if p.name != "procevents.py" and "procevents" in p.read_text(encoding="utf-8"))
     # M14.1c (ADR-0007 BY-1): discover names the round's source of that kind and parses its text; it never imports
-    # the reader (only the watch does)
-    assert users == ["raqib/discover.py", "raqib/host.py"]
+    # the reader (only the watch does). M17.2a (ADR-0007 CG-1): the entry (raqib/cli.py main) takes the helper's
+    # word before anything else, and uses nothing of the module but word()
+    assert users == ["raqib/cli.py", "raqib/discover.py", "raqib/host.py"]
+    cli_tree = ast.parse((ROOT / "raqib" / "cli.py").read_text(encoding="utf-8"))
+    used = {n.attr for n in ast.walk(cli_tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+            and n.value.id == "procevents"}
+    assert used == {"word"}
     tree = ast.parse((ROOT / "raqib" / "discover.py").read_text(encoding="utf-8"))
     names = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
     names |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}

@@ -16,6 +16,9 @@
 # undone; X32 to X34 say whether each was a finding of its tree.
 # The chain (ADR-0016 H-4, M13.1): after the watch, `raqib events` runs over its events file and its answer is kept;
 # X38 says whether the line of this watch's run says its chain is whole and no line names a break.
+# The packed watch (ADR-0007 CG-3, M17.2a): on Linux the job installs PyInstaller 6.11.1 (the job's tool, never a
+# dependency of Raqib), packs the installed Raqib into one folder (tools/rig/pack.sh), runs its host watch of four
+# rounds with a home of its own, and X47 says whether its every ask was answered and no helper ended.
 name: rig
 
 on:
@@ -152,9 +155,20 @@ jobs:
       - name: the autostart places are Windows' (X37 said as n/a)
         if: always()
         run: python tools/rig/autostart_run.py --out "$RUNNER_TEMP/autostart.json" || true
+      - name: a Raqib packed with its own runtime, its host watch (X47; the packer is this job's, never Raqib's)
+        if: always()
+        run: |
+          python -m pip install --disable-pip-version-check -q pyinstaller==6.11.1 || echo "the packer could not be installed"
+          exe=$(PYTHON=python tools/rig/pack.sh "$RUNNER_TEMP/pack") || echo "the packing failed: no packed watch"
+          if [ -n "$exe" ] && [ -x "$exe" ]; then
+            mkdir -p "$RUNNER_TEMP/packed-home"
+            HOME="$RUNNER_TEMP/packed-home" "$exe" watch --host --rounds 4 --every 3 --no-open --no-page > "$RUNNER_TEMP/packed.out" 2>&1 || echo "the packed watch's exit: $?"
+          fi
+          touch "$RUNNER_TEMP/packed.out"
+          echo "=== the packed watch's report"; cat "$RUNNER_TEMP/packed.out"
       - name: read the report against what the stand-in did
         if: always()
-        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --autostart "$RUNNER_TEMP/autostart.json" --events-check "$RUNNER_TEMP/events-check.out" --summary "$GITHUB_STEP_SUMMARY"
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --autostart "$RUNNER_TEMP/autostart.json" --events-check "$RUNNER_TEMP/events-check.out" --packed "$RUNNER_TEMP/packed.out" --summary "$GITHUB_STEP_SUMMARY"
       - name: gather what the watch wrote
         if: always()
         run: |
@@ -163,7 +177,7 @@ jobs:
           cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
           cp "$HOME/.raqib/host/events.jsonl" rig-out/ 2>/dev/null || true
           cp "$RUNNER_TEMP/forward.json" "$RUNNER_TEMP/service.json" "$RUNNER_TEMP/procevents.json" "$RUNNER_TEMP/autostart.json" rig-out/ 2>/dev/null || true
-          cp "$RUNNER_TEMP/events-check.out" rig-out/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/events-check.out" "$RUNNER_TEMP/packed.out" rig-out/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -159,6 +159,155 @@ def test_e5_the_command_is_this_interpreter_always_minus_i_and_a_constant_progra
     assert json.loads(got[4]) == [p for p in sys.path if os.path.isabs(p)]
 
 
+# --- M17.2a (ADR-0007 CG-1): a Raqib packed with its own runtime ---------------------------------------------------
+TODAYS_PROGRAM = ("import json, sys; sys.path[:] = json.loads(sys.argv[1]); from raqib import procevents;"
+                  " sys.exit(procevents.main(['--serve']))")   # BW-5, BY-6: the command before M17.2a, by hand
+
+
+@pytest.mark.parametrize("frozen", ["absent", False, None, 0, ""])
+def test_cg1_not_packed_the_command_is_todays_byte_for_byte(frozen, monkeypatch):
+    if frozen == "absent":
+        monkeypatch.delattr(sys, "frozen", raising=False)
+    else:
+        monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    path = ["", "/a b", "rel/x", "/c\"';$(x)", 7]
+    assert procevents.command("/x/py", path=path) == [
+        "/x/py", "-I", "-c", TODAYS_PROGRAM, '["/a b", "/c\\"\';$(x)"]']
+    assert procevents.command() == [sys.executable, "-I", "-c", TODAYS_PROGRAM,
+                                    json.dumps([p for p in sys.path if isinstance(p, str) and os.path.isabs(p)])]
+    assert procevents.Helper(popen=lambda a, **k: None).argv == procevents.command()
+    assert procevents.command("/x/py", path=["/a"], frozen=False) == ["/x/py", "-I", "-c", TODAYS_PROGRAM, '["/a"]']
+
+
+@pytest.mark.parametrize("frozen", [True, 1, "console_exe"])
+def test_cg1_packed_the_helper_is_the_same_program_and_the_one_word_alone(frozen, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    monkeypatch.setattr(sys, "executable", "/opt/raqib.example/raqib")
+    assert procevents.WORD == "__raqib_procevents_helper__"
+    assert procevents.command() == ["/opt/raqib.example/raqib", procevents.WORD]
+    assert procevents.command("/x/raqib", path=["/a", "/b"]) == ["/x/raqib", procevents.WORD]   # no path given
+    assert procevents.Helper(popen=lambda a, **k: None).argv == ["/opt/raqib.example/raqib", procevents.WORD]
+    assert procevents.command("/x/py", path=["/a"], frozen=False)[1:3] == ["-I", "-c"]   # the argument decides
+
+
+def test_cg1_the_word_alone_serves_as_serve_does_and_with_more_is_a_usage_error_that_does_not_name_it(monkeypatch):
+    served = []
+    monkeypatch.setattr(procevents, "serve", lambda *a, **k: served.append((a, k)) or 0)
+    before = signal.getsignal(signal.SIGINT)
+    try:
+        assert procevents.word([procevents.WORD]) == 0 and served == [((), {})]
+        assert signal.getsignal(signal.SIGINT) == signal.SIG_IGN   # as main(['--serve']): Ctrl-C does not end it
+    finally:
+        signal.signal(signal.SIGINT, before)
+    for other in ([], None, ["watch"], ["--serve"], ["x", procevents.WORD], [procevents.WORD.upper()]):
+        assert procevents.word(other) is None
+    for more in ([procevents.WORD, "x"], [procevents.WORD, procevents.WORD], [procevents.WORD, "--serve"],
+                 [procevents.WORD, ""]):
+        err = io.StringIO()
+        assert procevents.word(more, stderr=err) == 2
+        assert err.getvalue() == "raqib: %s\n" % procevents.WORD_USAGE and procevents.WORD not in err.getvalue()
+    assert served == [((), {})]
+
+
+@pytest.fixture
+def own_record():
+    """The process's own record (raqib/own.py) put back after a test that adds to it."""
+    from raqib import own
+    kept = dict(own.RECORD._kept)
+    yield own
+    with own.RECORD._lock:
+        own.RECORD._kept.clear()
+        own.RECORD._kept.update(kept)
+
+
+class NoFd:
+    """An input with no descriptor (written as it is) for a made-up helper."""
+
+    def write(self, data):
+        return len(data)
+
+    def flush(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class FakePopen:
+    def __init__(self, argv, **kw):
+        self.args, self.kw, self.pid = argv, kw, 4194001
+        self.stdin, self.stdout = NoFd(), io.BytesIO(b"")
+
+    def wait(self, timeout=None):
+        return 0
+
+    def kill(self):
+        pass
+
+
+@pytest.mark.parametrize("link", [None, "raqib", "raqib-agent"])
+def test_cg1_a_packed_helper_is_the_watchs_own_in_a_sample_and_in_the_reader_never_a_tree_or_an_act(
+        link, tmp_path, monkeypatch, own_record):
+    """E2: the watch's record holds the packed helper by the image a /proc sample reads for it (the packed program,
+    the watch's own image too); another process of that image, not started by the watch, is no helper of its."""
+    from raqib import host
+    real = tmp_path / "opt" / "raqib"
+    real.parent.mkdir()
+    real.write_bytes(b"")
+    exe = str(real)
+    if link is not None and os.name == "nt":
+        pytest.skip("a link needs a right Windows does not give every user")
+    if link is not None:   # a link to the packed program, as a person's PATH may hold it
+        (tmp_path / "bin").mkdir()
+        exe = str(tmp_path / "bin" / link)
+        os.symlink(str(real), exe)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", exe)
+    h = procevents.Helper(started=host.helper_started, popen=FakePopen, thread=lambda **k: threading.Thread(
+        target=lambda: None))
+    assert h.start() is None and h.proc.args == [exe, procevents.WORD] and h.proc.kw == {"cwd": "/"}
+    mine = own_record.RECORD.kept()
+    pid = h.proc.pid
+    assert mine[pid][1] == "raqib"   # the real file's name: what the exe link of the sample reads
+    now = time.time()
+    seen = str(real)   # /proc/PID/exe of the helper: the packed program's real file
+    assert own_record.RECORD.alive({pid: now, 4194002: now}, {pid: seen, 4194002: seen}) == [pid]
+    began = datetime_text(now)
+    helper = {"pid": pid, "ppid": os.getpid(), "programs": [{"exe": seen, "name": "raqib"}], "dropped": 0,
+              "ticks": 9, "began": began, "ended": None, "code": None}
+    stranger = dict(helper, pid=4194002)
+    assert host.reader_text([helper], own_record.RECORD.kept()) == ""   # the watch's own: not given to the round
+    text = host.reader_text([helper, stranger], own_record.RECORD.kept())
+    assert [json.loads(x)["pid"] for x in text.splitlines()] == [4194002]   # the same image, not started by it
+    assert '"pid": %d' % pid in host.reader_text([helper], own_record.RECORD.kept(), self_pid=os.getpid() + 1)
+    h.stop(0)
+
+
+def datetime_text(seconds):
+    import datetime
+    return datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+@pytest.mark.skipif(not LINUX, reason="the helper's reader is Linux's")
+def test_cg1_the_real_entry_given_the_word_is_the_helper_answers_ignores_sigint_and_ends_with_its_input(
+        monkeypatch):
+    """CG-2: a Raqib that is not packed takes the word too: `python -m raqib WORD` (raqib/cli.py main) is the
+    helper the client asks, as a packed program given the word is."""
+    monkeypatch.setenv("PYTHONPATH", str(ROOT))
+    h = procevents.Helper(argv=[sys.executable, "-m", "raqib", procevents.WORD])
+    assert h.start() is None
+    try:
+        got = _answered(h)
+        assert got["v"] == 1 and set(got) == set(procevents.ANSWER_KEYS)
+        h.proc.send_signal(signal.SIGINT)
+        time.sleep(0.3)
+        got, why = h.ask(5.0)
+        assert why is None and h.proc.poll() is None
+    finally:
+        assert h.stop() == []
+    assert h.proc.returncode == 0
+
+
 @pytest.mark.parametrize("flag", ["-I", "-P"])
 def test_e5_the_program_sets_the_path_given_and_adds_no_entry(flag, tmp_path):
     paths = [str(ROOT), str(tmp_path)] + [p for p in sys.path if os.path.isabs(p) and "site-packages" not in p][:3]

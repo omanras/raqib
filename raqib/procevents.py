@@ -2,7 +2,9 @@
 (the netlink connector: fork, exec, exit) by a listener of the reader's own
 (ADR-0007 Amendments BQ, BR, BS, BT, BU and BW). A live watch on Linux runs it
 in a helper process of its own (serve(), started by its client Helper with
-the fixed program SERVE_PROGRAM, or `python -m raqib.procevents --serve`),
+the fixed program SERVE_PROGRAM, or `python -m raqib.procevents --serve`;
+where Raqib is packed with its own runtime, the packed program with the one
+word WORD, which Raqib's entry takes before anything else: Amendment CG),
 and counts what it gives; nothing is judged from it yet. The helper reads its
 input, the kernel's socket and, at each exec, /proc/PID/exe and
 /proc/PID/stat; it writes only its output. docs/specs/PROC-EVENTS.md says all
@@ -860,6 +862,10 @@ TOO_LONG_EXE = "its program's path is not given: the record alone would pass the
 # the helper's program (BW-5): a constant; its one argument is the watch's own import path as JSON
 PATH_PROGRAM = "import json, sys; sys.path[:] = json.loads(sys.argv[1])"
 SERVE_PROGRAM = PATH_PROGRAM + "; from raqib import procevents; sys.exit(procevents.main(['--serve']))"
+# CG-1 (M17.2a): where Raqib is packed with its own runtime (sys.frozen), the helper is the packed program and this
+# word, its only argument; Raqib's entry (raqib/cli.py main, so every `raqib`) takes it before anything else (word())
+WORD = "__raqib_procevents_helper__"
+WORD_USAGE = "the helper of the process events takes no argument (ADR-0007 CG-1)"   # never names the word (CG-2)
 
 
 def _line(value):
@@ -964,7 +970,8 @@ def serve(stdin=None, stdout=None, reader=None, bound=SERVE_MAX, line_max=LINE_M
 
 
 def main(argv=None):
-    """`python -m raqib.procevents --serve`, and the helper's own program (SERVE_PROGRAM): the helper (BU-1). A
+    """`python -m raqib.procevents --serve`, the helper's own program (SERVE_PROGRAM) and a packed Raqib given WORD
+    (word(), CG-1): the helper (BU-1). A
     Ctrl-C at the terminal does not end it: the end of its input does, so a watch that dies leaves none behind."""
     argv = sys.argv[1:] if argv is None else argv
     if argv != ["--serve"]:
@@ -975,12 +982,32 @@ def main(argv=None):
     return serve()
 
 
-def command(executable=None, path=None):
+def word(argv, stderr=None):
+    """CG-1, CG-2 (M17.2a): the entry's first look at its arguments (raqib/cli.py main, before anything else).
+    None where the first argument is not WORD: the entry goes on as it always did. Exactly [WORD]: the helper, as
+    `python -m raqib.procevents --serve` is (main(['--serve']): SIGINT ignored, it ends with its input), and nothing
+    else of the arguments is read. WORD with anything after it: a usage error, 2, said in words that do not name
+    the word. Packed or not, one entry, one behaviour; a watch that is not packed never starts it this way."""
+    argv = list(argv or ())
+    if argv[:1] != [WORD]:
+        return None
+    if len(argv) != 1:
+        (sys.stderr if stderr is None else stderr).write("raqib: %s\n" % WORD_USAGE)
+        return 2
+    return main(["--serve"])
+
+
+def command(executable=None, path=None, frozen=None):
     """BW-5, BY-6: the helper's command: this interpreter, always -I (isolated: no user site folder, no PYTHON*
     variable of the environment, no directory of its own before the path), -c SERVE_PROGRAM, a constant; its one
     argument this process's import path, its absolute entries in order, as JSON. The helper loads Raqib from where
-    this process did, and from nowhere else: it needs nothing of the user's environment or site folder."""
+    this process did, and from nowhere else: it needs nothing of the user's environment or site folder.
+    CG-1 (M17.2a): where this process is a packed program (`frozen`: sys.frozen, which a packer such as PyInstaller
+    sets), its sys.executable is that program and no interpreter: the helper is the same program with WORD as its
+    only argument, and the import path is not given (a packed program loads Raqib from what it carries)."""
     executable = sys.executable if executable is None else executable
+    if bool(getattr(sys, "frozen", False)) if frozen is None else frozen:
+        return [executable, WORD]
     path = [p for p in (sys.path if path is None else path) if isinstance(p, str) and os.path.isabs(p)]
     return [executable, "-I", "-c", SERVE_PROGRAM, json.dumps(path)]
 

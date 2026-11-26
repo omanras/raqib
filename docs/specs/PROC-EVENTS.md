@@ -266,6 +266,40 @@ as an end), and its environment is the watch's, which `-I` does not read. So
 it loads Raqib from where the watch loaded it and from nowhere else, and
 needs nothing of the user's environment or site folder.
 
+The packed road (M17.2a, ADR-0007 Amendment CG). A Raqib packed into a
+program with its own runtime (PyInstaller, for one) has no interpreter to
+give `-I` and `-c`: its `sys.executable` is the packed program itself, and
+`sys.frozen` is true. Measured before this road (GitHub's Linux machine, and
+this task's own run, PyInstaller 6.11.1): such a watch said "rounds asked: 2,
+answered: 0", the helper ended twice, and the process events were not read
+for the rest of the watch. So where `sys.frozen` is true, the helper is that
+same program with one fixed word as its only argument,
+`__raqib_procevents_helper__` (`procevents.WORD`), and no import path is
+given: a packed program loads Raqib from what it carries. Raqib's entry
+(`raqib/cli.py` `main`, so every `raqib` and `python -m raqib`) looks at its
+first argument before it reads anything else: the word alone is the helper,
+as `python -m raqib.procevents --serve` is (a Ctrl-C does not end it, the
+end of its input does), and nothing else of the arguments is read; the word
+with anything after it is a usage error, exit 2, said in words that do not
+name the word. Where Raqib is not packed, the helper's command is the one
+above, byte for byte, and the watch never uses the word; the word is taken
+there too (one entry, one behaviour). The word is no command of a person's:
+it is in no help text, no usage line and not in the guide's table of
+commands. Run by hand it serves until its input ends, as the helper does: it
+answers `read` and `stop` on its standard input and writes its lines on its
+standard output, and a Ctrl-C does not end it. The watch's record of its own
+holds the packed helper as it holds the interpreter (raqib/own.py, by the
+image a sample reads: the packed program's file, which is the watch's own
+image too), so it is never a tree and never an act; another process of that
+image that the watch did not start is not its own. What a packed helper
+loads: measured on this task's machine (PyInstaller 6.11.1, Python 3.13),
+the packed program run from a folder holding a `raqib.py`, a `raqib`
+package and a `json` package, with PYTHONPATH naming that folder, loaded
+none of them; that a packer's runtime reads nothing of the environment is
+the packer's, and not measured beyond that run. Not built here: the package
+and its installer, signing, a service on Windows, a reader for macOS
+(Amendment CG's last item).
+
 The client. `procevents.Helper` starts it and hands the process at once to
 the `started` callable it is given, so the watch records it as its own
 (raqib/own.py), and does not wait for it. `ask(timeout)` gives the answer,

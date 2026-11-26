@@ -748,3 +748,115 @@ def test_x43_to_x46_n_a_off_linux_without_the_tool_where_not_run_or_the_helper_w
         "sudo-fetch pid 9930", "sudo-fetch not run: sudo -n is not allowed here")
     assert {v[0] for v in later(workload=missing).values()} == {check.SKIP}
     assert {v[0] for v in later(workload=LINUX_WORKLOAD).values()} == {check.SKIP}   # an older stand-in
+
+
+# --- X47 (ADR-0007 CG-3, M17.2a): a Raqib packed with its own runtime keeps its process events -------------------
+PACKED = """raqib watch --host: sources: the host's own record of every tree (the watch's own check at its start)
+Raqib watch --host (ADR-0007): the host, not a name; raqib 9.8.7
+ROUNDS: 4 started, 4 with an inventory, 0 late, 0 failed
+PROCESS EVENTS (Linux): the kernel's process events, read by a helper process of the watch's own; judged: a process
+  rounds asked: 4, answered: 4
+  processes that began: 48; of them began and ended between two asks: 47
+  programs not read: 0 (reads at an exec that failed)
+  given to the rounds: 48; joined to a tree as its child: 48; of them with no program read (no line): 2
+  past the reader's bounds: 0
+  lost: none
+TREES SEEN: 2 (2 now, 0 quiet)
+  [candidate] pid 4105 agent-example (named: image agent-example is the catalog's agent-example): now; first round 1 (history, not knocked); last round 4; 2 act(s)
+      source: host (host: the host's own record of the tree: /home/user/.raqib/host/sources/a.jsonl); findings none
+  [candidate] [brief] pid 4111 raqib-notes (unknown): now; first round 1 (history, not knocked); last round 4; 1 act(s)
+      source: host (host: the host's own record of the tree: /home/user/.raqib/host/sources/b.jsonl); findings none
+FINDINGS: 0
+RESULT: CLEAN (exit 0: trees listed, nothing new)
+"""
+FIELD_ENDED = (  # the field's words (Amendment CG, GitHub's Linux machine) and this task's own run before its change
+    "  rounds asked: 2, answered: 0",
+    "  started again, round 1: ended: the helper of the process events ended (its output ended); it is started again,"
+    " once; nothing was heard between the end of the helper before and this start\n"
+    "  hole, round 1: ended: the helper of the process events ended (its output ended); it is started again, once\n"
+    "  hole, round 2: ended for good: the helper of the process events ended again (its output ended): the process"
+    " events are not read for the rest of the watch")
+
+
+def x47(report, platform="linux"):
+    ((ident, state, words),) = check.read_packed(report, platform)
+    assert ident.startswith("X47 ") and ident == check.PACKED_EVENTS_NAME
+    return state, words
+
+
+def test_x47_met_where_every_ask_of_at_least_3_was_answered_no_helper_ended_and_no_tree_is_the_packed_program():
+    state, words = x47(PACKED)
+    assert state == check.MET, words
+    assert "rounds asked: 4, answered: 4" in words and "2 tree line(s) read" in words
+    assert x47(PACKED.replace("asked: 4, answered: 4", "asked: 3, answered: 3"))[0] == check.MET
+    assert x47(PACKED.replace("\n", "\r\n"))[0] == check.MET   # a report of Windows' line ends is read the same
+
+
+@pytest.mark.parametrize("change, said", [
+    (lambda r: r.replace("  rounds asked: 4, answered: 4\n", FIELD_ENDED[0] + "\n" + FIELD_ENDED[1] + "\n").replace(
+        "  lost: none", "  lost: not known (no answer)"), "rounds asked: 2, answered: 0 (at least 3"),
+    (lambda r: r.replace("  rounds asked: 4, answered: 4\n", FIELD_ENDED[0] + "\n" + FIELD_ENDED[1] + "\n"),
+     "3 line(s) say the helper ended or was started again"),
+    (lambda r: r.replace("asked: 4, answered: 4", "asked: 4, answered: 3"), "rounds asked: 4, answered: 3"),
+    (lambda r: r.replace("asked: 4, answered: 4", "asked: 2, answered: 2"), "rounds asked: 2, answered: 2 (at least"),
+    (lambda r: r.replace("asked: 4, answered: 4", "asked: 0, answered: 0"), "rounds asked: 0, answered: 0"),
+    (lambda r: r.replace("  rounds asked: 4, answered: 4\n", ""), "no count of the rounds asked and answered"),
+    (lambda r: r.replace("  lost: none\n", "  lost: none\n  hole, round 2: ended: the helper of the process events ended"
+                         " (its output ended); it is started again, once\n"), "1 line(s) say the helper ended"),
+    (lambda r: r.replace("  lost: none\n", "  lost: none\n  started again, round 3: late 3 rounds running (0.75 s each):"
+                         " ended by the watch; nothing was heard between the end of the helper before and this start\n"),
+     "1 line(s) say the helper ended or was started again: started again, round 3"),
+    (lambda r: r.replace("FINDINGS: 0", "FINDINGS: 0\n[19:15:31Z] BLIND SPOT round 1: the process events: ended: the"
+                         " helper of the process events ended (its output ended)"), "1 line(s) say the helper ended"),
+    (lambda r: r.replace("  lost: none\n", "  lost: none\n  refused: the process events are not read: the socket was"
+                         " refused (EPERM: a fake)\n"), "the helper's reader was refused: the process events are not"),
+    (lambda r: r.replace("pid 4105 agent-example (named: image agent-example is the catalog's agent-example)",
+                         "pid 4120 raqib (unknown)"), "a tree of the report is the packed program itself (raqib): pid 4120"),
+    (lambda r: r.replace("[brief] pid 4111 raqib-notes", "[brief] pid 4111 raqib"), "(raqib): pid 4111"),
+    (lambda r: r.replace("pid 4111 raqib-notes", "pid 4111 RAQIB"), "(raqib): pid 4111"),
+    (lambda r: r.split("TREES SEEN")[0], "the report holds no TREES SEEN section"),
+    (lambda r: r.replace("PROCESS EVENTS (Linux):", "PROCESSES (Linux):"), "holds no PROCESS EVENTS (Linux): section"),
+    (lambda r: "", "the packed watch's report is empty (silence is a finding)"),
+    (lambda r: "\n  \n", "the packed watch's report is empty"),
+])
+def test_x47_missed_for_each_way_the_packed_watch_lost_its_process_events(change, said):
+    state, words = x47(change(PACKED))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x47_n_a_off_linux_and_where_no_report_was_given():
+    for platform in ("win32", "darwin", None):
+        state, words = x47(PACKED, platform)
+        assert state == check.SKIP and words.startswith("not run: not Linux")
+    assert x47(None) == (check.SKIP, "no packed watch's report was given (--packed)")
+    assert x47("", "win32")[0] == check.SKIP
+
+
+def test_x47_main_reads_packed_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(PACKED, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "linux"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X47 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--packed", str(tmp_path / "w.out")]) == check.MET
+    assert row(["--packed", str(tmp_path / "none.out")]) == check.MISSED   # given and missing: its silence
+    assert row([]) == check.SKIP
+
+
+def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency_of_raqib():
+    pack = (ROOT / "tools" / "rig" / "pack.sh").read_text(encoding="utf-8")
+    assert pack.isascii() and "PINNED=6.11.1" in pack and "NAME=%s " % check.PACKED_NAME in pack
+    for flag in ("--onedir", "--collect-all raqib", "--exclude-module tkinter", "--noconfirm"):
+        assert flag in pack
+    assert "--onefile" not in pack and "pip install" not in pack   # the job installs the packer, not the tool
+    assert "pyinstaller" not in (ROOT / "pyproject.toml").read_text(encoding="utf-8").lower()
+    rig = (ROOT / ".github" / "workflows" / "rig.yml").read_text(encoding="utf-8")
+    linux = rig[rig.index("\n  linux:"):rig.index("\n  siem:")]
+    assert "pyinstaller==6.11.1" in linux and "tools/rig/pack.sh" in linux
+    assert "watch --host --rounds 4 --every 3 --no-open --no-page" in linux
+    assert '--packed "$RUNNER_TEMP/packed.out"' in linux
+    windows = rig[rig.index("\n  windows:"):rig.index("\n  linux:")]
+    assert "pyinstaller" not in windows.lower() and "--packed" not in windows

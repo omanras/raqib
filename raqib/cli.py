@@ -312,6 +312,7 @@ from raqib import doctor
 from raqib import eventlog
 from raqib import host
 from raqib import overlay
+from raqib import procevents
 from raqib import eval as evaluation
 from raqib import report
 from raqib import ruleform
@@ -1659,6 +1660,9 @@ def cmd_os_sysmon(args, out):
 def main(argv=None, out=None):
     """The `raqib` console script and python -m raqib (out None: stdout,
     where a path the console cannot encode is escaped, not a crash)."""
+    helper = procevents.word(sys.argv[1:] if argv is None else argv)   # ADR-0007 CG-1: before anything else
+    if helper is not None:
+        return helper
     if out is None:
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(errors="backslashreplace")

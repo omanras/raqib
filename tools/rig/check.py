@@ -5,7 +5,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
                               [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
-                              [--events-check FILE]
+                              [--events-check FILE] [--packed FILE]
                               [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
@@ -44,6 +44,10 @@ did not run it, or where the helper was refused.
 H-4, M13.1 and its REDO): X38 the line of this watch's run (the report's `run:`) says its chain is whole, and no
 line says a chain not whole or taken out, nor a break, a line beside a chain or a run begun before the file;
 MISSED otherwise, an answer given and missing or empty included (n/a where the rig ran none).
+--packed: what a host watch of a Raqib packed with its own runtime (tools/rig/pack.sh) printed on the Linux machine
+(ADR-0007 CG-3, M17.2a): X47 its PROCESS EVENTS section says rounds asked N (at least 3) and answered N, no line says
+the helper ended or was started again, and no tree of its report is the packed program itself; MISSED otherwise, a
+report given and missing or empty included; n/a off Linux, or where no report was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1078,6 +1082,70 @@ def read_watch_events(report, workload, platform):
         return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
 
 
+PACKED_EVENTS_NAME = ("X47 a Raqib packed with its own runtime keeps its process events: every ask of its watch answered"
+                      " (at least 3), no helper ended, and no tree of its report is the packed program")
+PACKED_NAME = "raqib"      # tools/rig/pack.sh's NAME: the packed program's name, so its image in a tree's line
+PACKED_ROUNDS_MIN = 3      # CG-3: the asks a packed watch of 4 rounds must have made, at least
+HELPER_ENDED = "the helper of the process events ended"   # raqib/host.py PE_ENDED and PE_FINAL, both
+TREE_LINE = re.compile(r"^  \[[^\]]+\](?: \[[^\]]+\])* pid (\d+) (.+?) \((?:named|unknown)")
+
+
+def read_packed(report, platform):
+    """X47 (ADR-0007 CG-3, M17.2a): the report of a host watch run by a Raqib packed on the rig's Linux machine
+    (tools/rig/pack.sh). MET where its PROCESS EVENTS section says rounds asked N, N at least PACKED_ROUNDS_MIN,
+    and answered N; no line of the report says the helper ended or was started again; and no tree of its TREES
+    SEEN is the packed program itself (its image PACKED_NAME). MISSED with words otherwise: no section, no count,
+    a refusal of the reader (whatever its reason: the plain watch hears on this machine), an empty report. n/a off
+    Linux, or where no report was given (report None). It never raises."""
+    name = PACKED_EVENTS_NAME
+    try:
+        if not str(platform or "").startswith("linux"):
+            return [(name, SKIP, "not run: not Linux (%s)" % (platform or "no platform said"))]
+        if report is None:
+            return [(name, SKIP, "no packed watch's report was given (--packed)")]
+        lines = str(report).replace("\r\n", "\n").splitlines()
+        if not "".join(lines).strip():
+            return [(name, MISSED, "the packed watch's report is empty (silence is a finding)")]
+        pe = section(lines, WATCH_EVENTS_HEAD)
+        if not pe:
+            return [(name, MISSED, "the packed watch's report holds no %s section (silence is a finding)"
+                     % WATCH_EVENTS_HEAD)]
+        body = "\n".join(pe)
+        asked = number(r"rounds asked: (\d+)", body)
+        answered = number(r"rounds asked: \d+, answered: (\d+)", body)
+        missing = []
+        if asked is None or answered is None:
+            missing.append("no count of the rounds asked and answered")
+        elif asked < PACKED_ROUNDS_MIN:
+            missing.append("rounds asked: %d, answered: %d (at least %d asked are wanted)" % (asked, answered,
+                                                                                          PACKED_ROUNDS_MIN))
+        elif answered != asked:
+            missing.append("rounds asked: %d, answered: %d" % (asked, answered))
+        refused = next((x.strip() for x in pe if x.strip().startswith("refused: ")), None)
+        if refused is not None:
+            missing.append("the helper's reader was %s" % refused[:200])
+        ended = [x.strip() for x in lines if HELPER_ENDED in x]
+        ended += [x.strip() for x in pe if x.strip().startswith(("started again", "and started again"))
+                  and HELPER_ENDED not in x]
+        if ended:
+            missing.append("%d line(s) say the helper ended or was started again: %s" % (len(ended), ended[0][:200]))
+        trees = section(lines, "TREES SEEN")
+        packed = [m.group(1) for m in (TREE_LINE.match(x) for x in trees)
+                  if m and m.group(2).strip().lower() == PACKED_NAME]
+        if packed:
+            missing.append("a tree of the report is the packed program itself (%s): pid %s" % (PACKED_NAME,
+                                                                                            ", ".join(packed)))
+        if not trees:
+            missing.append("the report holds no TREES SEEN section")
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "rounds asked: %d, answered: %d; no line says the helper ended; no tree of the report"
+                 " is the packed program (%s); %d tree line(s) read" % (asked, answered, PACKED_NAME,
+                                                                        sum(1 for x in trees if TREE_LINE.match(x))))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the packed watch's report cannot be read (%s)" % type(exc).__name__)]
+
+
 SHORT_TOOL_NAME = ("X36 the stand-in's wget, a child that lives under a second, is a NET-TOOL finding of its tree that"
                    " names wget")
 
@@ -1291,6 +1359,7 @@ def main(argv=None):
     p.add_argument("--procevents")
     p.add_argument("--autostart")
     p.add_argument("--events-check")
+    p.add_argument("--packed")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1315,6 +1384,10 @@ def main(argv=None):
         rows += read_chain(text(a.events_check) if os.path.isfile(a.events_check) else "", text(a.report))
     else:
         rows += read_chain(None, text(a.report))
+    if a.packed:   # X47 (ADR-0007 CG-3): given and missing is the packed watch's silence, MISSED
+        rows += read_packed(text(a.packed) if os.path.isfile(a.packed) else "", a.platform)
+    else:
+        rows += read_packed(None, a.platform)
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))
