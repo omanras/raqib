@@ -1,0 +1,106 @@
+name: platform-probe
+# Probe only (never merged): what Raqib costs packed with its own runtime on the three systems; the host watch
+# with the system's rights on Windows; what macOS gives a plain program. Main's Raqib, as a person installs it.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/packed_probe.py, tools/rig/mac_probe.py, .github/workflows/platform-probe.yml]
+permissions:
+  contents: read
+jobs:
+  packed:
+    name: packed with its own runtime (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib, and the packer
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1
+          raqib --version
+      - name: pack it (one folder, no window toolkit)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack" && cd "$RUNNER_TEMP/pack"
+          printf 'import sys\nfrom raqib.cli import main\nsys.exit(main())\n' > entry.py
+          start=$(date +%s)
+          pyinstaller --noconfirm --onedir --name raqib-agent --collect-all raqib --exclude-module tkinter --log-level WARN entry.py 2>&1 | tail -5
+          echo "packing took $(( $(date +%s) - start )) s"
+          ls dist/raqib-agent | head -8
+      - name: its cost beside the machine's own Python
+        shell: bash
+        run: |
+          exe="$RUNNER_TEMP/pack/dist/raqib-agent/raqib-agent"
+          if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
+          python tools/rig/packed_probe.py "$exe"
+
+  system-task:
+    name: the host watch with the system's rights (windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib
+        shell: pwsh
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -m pip install --disable-pip-version-check -q .
+          raqib --version
+      - name: the same watch as the system and as this user
+        shell: pwsh
+        run: |
+          $dir = "C:\raqib-probe"; New-Item -ItemType Directory -Force $dir | Out-Null
+          $exe = (Get-Command raqib).Source
+          Set-Content -Encoding ascii "$dir\run.cmd" "@echo off`r`nwhoami > $dir\who.out 2>&1`r`n`"$exe`" watch --host --rounds 4 --every 5 --no-open --no-page > $dir\system.out 2>&1`r`necho exit %ERRORLEVEL% > $dir\exit.out"
+          schtasks /create /tn RaqibProbe /ru SYSTEM /sc once /st 23:59 /tr "$dir\run.cmd" /f | Out-Null
+          schtasks /run /tn RaqibProbe | Out-Null
+          $t0 = Get-Date
+          while (-not (Test-Path "$dir\exit.out") -and ((Get-Date) - $t0).TotalSeconds -lt 150) { Start-Sleep 3 }
+          "=== as the system: who $(Get-Content "$dir\who.out" -ErrorAction SilentlyContinue); $(Get-Content "$dir\exit.out" -ErrorAction SilentlyContinue); $([int]((Get-Date) - $t0).TotalSeconds) s"
+          raqib watch --host --rounds 4 --every 5 --no-open --no-page > "$dir\user.out" 2>&1
+          "=== as this user: exit $LASTEXITCODE"
+          foreach ($who in "system", "user") {
+            "=== $who : lines $((Get-Content "$dir\$who.out" -ErrorAction SilentlyContinue).Count)"
+            Get-Content "$dir\$who.out" -ErrorAction SilentlyContinue | Select-String -Pattern "^raqib |RESULT|HOLES|TREES|AGENTS|CHANNEL|could not|not read|refused|denied|hole:|Traceback|Error" | Select-Object -First 30 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(220, $_.Line.Length)) }
+          }
+          schtasks /delete /tn RaqibProbe /f | Out-Null
+
+  mac:
+    name: what macOS gives a plain program
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: as this user
+        run: python tools/rig/mac_probe.py
+      - name: as root
+        run: sudo "$(which python)" tools/rig/mac_probe.py
+      - name: what main's host watch says on macOS today
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -m pip install --disable-pip-version-check -q .
+          raqib watch --host --rounds 2 --every 3 --no-open --no-page 2>&1 | head -40 || true
