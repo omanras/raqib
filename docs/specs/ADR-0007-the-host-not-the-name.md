@@ -3668,3 +3668,37 @@ Raqib's entry, packed by the rig's packer's options, GitHub's Windows, Linux and
   process's own library search.
 - CJ-7 (kept as built). Q3's names; Q4 - Linux alone gets its loader's path put back, and on Windows `_MEIPASS2`
   is left out in any case of its letters, said in the spec; Q6's two assertions; Q8.
+
+## Amendment CK (the Table, 2026-11-27) - the review of M17.2b REDO (docs/review/2026-11-27-M17.2b-redo.md): lands
+The second reviewer's verdict is REDO with no blocker: five things to fix, each a sentence or a test. The Table
+did them by hand, and M17.2b lands. The field's word on aca2eb0: the gate green on six jobs; the rig green with
+no claim missed, X47 MET; and the branch's code packed on the three systems read again (the probe branch
+f8df71e) - on Windows the folder searched first was the packed program's before the entry, none after it and
+none for what it starts, the packed watch exited 0 with no blind spot of this kind; on Linux `own.handed()` was
+the environment handed, the helper's record a start of its own, five asks and five answers; on macOS as before.
+- CK-1 (a packed entry that made no call says what is known; items 6, 17, R2). The one such entry is the packed
+  window, whose start CI-5 lists as not measured. Its blind spot's words say that the folder was not put back
+  because this entry made no call, that what the watch starts MAY search the packed program's folder first, and
+  that what such a start sets was not measured. The threat model says "is taken to leave that folder set".
+- CK-2 (what is not said is named; items 3, 10, 11, 12, 13, 15, 18, 19, 21, R3, R4, R7). An error stream that
+  cannot be written loses CJ-3's line, and a command that is not a host watch then says nothing: kept (never
+  fatal), and said in both documents. The scan reads the shape of an `env` written at the start, not what a name
+  holds - `env=env` passes unread, as four of Raqib's seven starts give their named lists; said in its docstring
+  and the spec, with the other shapes of a whole copy it does not see. Its negative test now takes one name out
+  of the list and holds that fewer of Raqib's starts are found; an annotated assignment, a keyword argument and
+  one-of-two each have a positive and a negative fixture; the fault's words for the fork, spawn and exec
+  families no longer say they take no environment. CJ-1's test holds the rounds that gave an inventory, the
+  result itself and the count of blind spots beside the watch without the failure. The spec names the probe's
+  commits, and a starter that hands the packer's three names as a case not measured.
+- CK-3 (a state that cannot be read is said; R6). Where no call is kept and whether this process is a packed
+  program on Windows cannot be read, `own.library_folder_hole` gives words of its own, never none.
+- CK-4 (kept, or recorded). R1: the blind spot is said after the list it is kept in exists, at the watch's
+  start, of no round, one kind for a failure and for no call; the watch's platform is the system's in every real
+  run (`host.start`). The report's "0 round(s)" for a blind spot that holds the whole run is the form every
+  blind spot of no round has: kept. R5: the two tests named "standard library alone" are renamed by the next
+  task whose Scope holds their files. Recorded, not built: M17.2c, the watch saying at its start that a loader's
+  variable was in its environment; the packed window's own entry making CI-3's call when the window is packed.
+- Not measured: a packed window's start; SetDllDirectoryW failing on a real machine, and its line on a real
+  packed program's error stream; a starter that hands LD_LIBRARY_PATH_ORIG, an empty LD_LIBRARY_PATH, or the
+  packer's three names together; a loader's variable naming a folder with a library in it; another packer,
+  another version of this one, `--onefile`.

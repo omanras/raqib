@@ -5,6 +5,43 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.8.2 - 2026-11-27
+
+What is new:
+- A Raqib packed with its own runtime hands nothing of its packer to the programs it starts (ADR-0007 Amendments
+  CI to CK). Measured first on GitHub's Windows, Linux and macOS machines: a packed start reads none of the ten
+  interpreter's variables tried, but it adds the packer's own names to its environment - on Linux its own folder
+  first on the loader's search path - and on Windows it sets the folder the system searches first for a library
+  to its own; both reached what it started. Now the helper is started with the watch's environment as the watch
+  was handed it, and on Windows Raqib's entry puts that folder back to none at its start.
+- Where that call fails on Windows, the `raqib` command says so at once on its error stream, and the host watch
+  says it once at its start as a blind spot that does not change the result. Never silent, never fatal.
+- A test reads Raqib's own source and fails on a start of a program that hands on a whole environment by any
+  road but that one; it holds the seven starts it finds.
+- The threat model says what is not held: the loader's own variables are read by the system before the first
+  line of Raqib, packed or plain. The defence is who starts the watch - the system's service manager, not a
+  shell an agent holds.
+- A Raqib that is not packed does exactly what it did: nothing changes for an install by pip or pipx.
+- Measured with this number's code, packed, on the three systems: on Windows the folder searched first was the
+  packed program's before the entry ran, none after it, and none for a program started after it; a program
+  started with the cleaned environment saw exactly the environment the packed program was handed; on Linux the
+  packed helper started as a start of its own and the watch's five asks were answered.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- No package and no installer exists yet.
+- The packed window (`raqib-app`): its own entry makes no such call on Windows; a host watch run from it says so.
+- The call failing on a real Windows machine; a starter that hands the packer's own names together, an empty
+  loader's path, or a loader's variable that names a folder with a library in it.
+- Another packer, another version of this one (PyInstaller 6.11.1 was read), or one file instead of one folder.
+- On macOS the watch, packed or not, still reads the homes only: it has no reader there yet.
+
 ## 0.8.1 - 2026-11-26
 
 What is new:

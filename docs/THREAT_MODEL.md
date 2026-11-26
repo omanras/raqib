@@ -595,14 +595,17 @@ Rulings: ADR-0003 Amendments C and D.
     wevtutil, PowerShell and the rest then load was not measured. Where that
     call fails (not measured on a real machine) the entry writes one line at
     once on its error stream, whatever the command, and changes no exit code
-    (CJ-3); the host watch says once at its start, as a blind spot that does
-    not change the result (CJ-1), that what it starts searches the packed
-    program's folder first for its libraries. A packed entry that makes no
-    call (one that is not `cli.main`) leaves that folder set: the host watch
-    says the same blind spot, in words of its own (CJ-2); no other command of
-    such an entry says it. Measured on GitHub's Windows, Linux and macOS
-    machines (PyInstaller 6.11.1, one folder; CI): a packed start read none of
-    the ten interpreter's variables tried (PYTHONPATH, PYTHONHOME,
+    (CJ-3) - where that stream cannot be written the line is lost, and a
+    command that is not a host watch then says nothing (CK-2); the host
+    watch says once at its start, as a blind spot that does not change the
+    result (CJ-1), that what it starts searches the packed program's folder
+    first for its libraries. A packed entry that makes no call (one that is
+    not `cli.main`: the packed window, whose start was not measured, CI-5)
+    is taken to leave that folder set: the host watch says so as a blind
+    spot, in words of its own (CJ-2, CK-1); no other command of such an
+    entry says it. Measured on GitHub's Windows, Linux and macOS machines
+    (PyInstaller 6.11.1, one folder; CI): a packed start read none of the
+    ten interpreter's variables tried (PYTHONPATH, PYTHONHOME,
     PYTHONSTARTUP, PYTHONVERBOSE, PYTHONINSPECT, PYTHONOPTIMIZE,
     PYTHONHASHSEED, PYTHONUTF8, PYTHONDEVMODE, PYTHONWARNINGS), as `-I` does
     for the plain helper; others were not tried.

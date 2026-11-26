@@ -147,13 +147,18 @@ def _scan_all(source, filename, modules=MODULES):
     a start in the list that can take no environment by name; env= absent, None, os.environ, dict(os.environ) or
     os.environ.copy() (a copy with more in it too: dict(os.environ, ...), {**os.environ, ...}), as a keyword or as
     the "env" value of a dict given with ** (every plain assignment of that name in its function is read).
-    own.handed(...) passes, as does any other value (a named list).
+    own.handed(...) passes. Any other value passes UNREAD: the scan reads the shape of what is written at the
+    start, not what a name holds - `env=env`, or `dict(env)` of a parameter, passes whatever the name was given
+    (four of raqib's seven starts give a list of named variables built so; CK-2).
 
     What it does not see, and so does not fail on (CJ-4): a start reached by getattr(subprocess, "Popen"); a module
     bound again by assignment (sp = subprocess); functools.partial; a subclass of Popen; a start handed to a
     function by position (only defaults and keyword arguments bind); a tuple target; a ** dict changed after it is
     assigned (kw.update, kw["env"] = ..., del, pop, +=); an environment name reached otherwise than by os.environ or
-    a name imported from os. It fails on a start of the kinds it lists, not on every start that inherits."""
+    a name imported from os; an env value held in a name or handed in as a parameter (above); a copy of the whole
+    environment written another way (dict(**os.environ), os.environ | {...}, a comprehension over it,
+    copy.copy(os.environ), os.environb); the event loop's subprocess_exec and subprocess_shell, pty and
+    multiprocessing. It fails on a start of the kinds it lists, not on every start that inherits."""
     tree = ast.parse(source, filename)
     bound_to = {m: set() for m in modules}   # the names each module is bound to in this file
     bound = {}                               # a name bound to a start -> (module, its name)
@@ -269,7 +274,7 @@ def _scan_all(source, filename, modules=MODULES):
                             child.func.value.id in names for names in bound_to.values())):
                     found = bound[child.func.attr]   # self.runner = subprocess.run ... self.runner(...)
                 if found:
-                    fault = ("%s takes no environment by name: it inherits" % found[1]) if (
+                    fault = ("%s: not a start that names its environment as env= (CJ-4: it fails outright)" % found[1]) if (
                         found[1] not in TAKES_ENV) else env_fault(child, function)
                     out.append((filename, child.lineno, function.name if function is not None else "<module>",
                                 "%s.%s" % found, fault))
@@ -303,8 +308,12 @@ def test_cj4_one_list_of_starts_the_trees_and_a_blind_scan_fails():
     assert {"getoutput", "getstatusoutput"} <= STARTS - TAKES_ENV   # CJ-4's starts that take no environment
     assert {"system", "popen", "startfile", "fork", "forkpty", "execv", "execve", "spawnv", "spawnve",
             "posix_spawn"} <= OTHER_STARTS - TAKES_ENV
-    blind = _raqib({"subprocess": set(), "os": set(), "asyncio": set()})   # the negative: a scan with no list
-    assert blind == [] and {(f, fn) for f, _, fn, _, _ in blind} != RAQIB_STARTS   # ... finds nothing: it fails
+    blind = _raqib({"subprocess": set(), "os": set(), "asyncio": set()})   # a scan with no list finds nothing
+    assert blind == []
+    # CK-2: a scan that lost one name of the list finds fewer of raqib's starts, and the held set tells it
+    less = {(f, fn) for f, _, fn, _, _ in _raqib(dict(MODULES, subprocess=STARTS - {"Popen"}))}
+    assert less < RAQIB_STARTS and ("raqib/notify.py", "run_program") in RAQIB_STARTS - less
+    assert {(f, fn) for f, _, fn, _, _ in _raqib()} == RAQIB_STARTS
 
 
 H = "import os, subprocess\nfrom raqib import own\n"   # the head of each fixture below
@@ -372,6 +381,13 @@ H = "import os, subprocess\nfrom raqib import own\n"   # the head of each fixtur
     ("from subprocess import getoutput\ngetoutput('x')\n", [2]),
     ("from subprocess import *\ngetstatusoutput('x')\nrun(['x'])\n", [2, 3]),
     (H + "os.getpid()\nos.getcwd()\nsubprocess.list2cmdline(['x'])\n", []),                 # negative: no start
+    # CK-2: the three roads a name is bound to a start by, each with a positive and a negative
+    ("import subprocess\np: object = subprocess.Popen\np(['x'])\n", [3]),                   # an annotated assignment
+    (H + "p: object = subprocess.Popen\np(['x'], env=own.handed())\n", []),
+    ("import subprocess\ndef g(runner):\n    runner(['x'])\ng(runner=subprocess.run)\n", [3]),   # a keyword argument
+    (H + "def g(runner):\n    runner(['x'], env=own.handed())\ng(runner=subprocess.run)\n", []),
+    ("import subprocess\np = subprocess.Popen if 1 else subprocess.run\np(['x'])\n", [3]),   # one of two
+    (H + "p = subprocess.Popen if 1 else subprocess.run\np(['x'], env=own.handed())\n", []),
     # asyncio's starts take an environment as subprocess's do
     ("import asyncio\nasync def f():\n    await asyncio.create_subprocess_exec('x')\n", [3]),
     ("import asyncio\nfrom raqib import own\nasync def f():\n"
@@ -465,7 +481,8 @@ def test_cj2_the_hole_in_each_state_and_own_library_folder_reset_around_it(kept,
         assert got is None
     elif said == "no call":
         assert got == own.LIBRARY_NO_CALL and "was not put back, because this entry made no call" in got
-        assert got.startswith("what the watch starts searches the packed program's folder first") and got.isascii()
+        assert got.startswith("the folder Windows searches first for a library was not put back") and got.isascii()
+        assert "was not measured" in got and "may search the packed program's folder first" in got   # CK-1
     else:
         assert got == own.LIBRARY_HOLE % FAILURE and FAILURE in got and "made no call" not in got
 
@@ -513,6 +530,12 @@ def test_cj6_a_frozen_state_that_cannot_be_read_is_not_called_and_said_so(fresh)
     got = own.library_folder(fresh(1), frozen=_NoTruth(), platform="win32")
     assert got == "SetDllDirectoryW(NULL) was not called: ValueError: no truth" and fresh.calls == []
     assert own.library_folder_hole(frozen=_NoTruth(), platform="win32") == own.LIBRARY_HOLE % got
+
+
+def test_ck3_a_state_that_cannot_be_read_with_no_call_kept_is_said_not_taken_for_none(fresh):
+    got = own.library_folder_hole(frozen=_NoTruth(), platform="win32")   # no call was made, and frozen has no truth
+    assert got == own.LIBRARY_UNREAD % "ValueError: no truth" and got.isascii() and "could not be told" in got
+    assert own.library_folder_hole(frozen=False, platform="win32") is None and own.LIBRARY_FOLDER is None
 
 
 def test_e4_own_imports_no_ctypes_the_call_is_given_to_it():

@@ -180,8 +180,12 @@ LIBRARY_WHY_MAX = 200   # characters of a failure's own words kept (ASCII, one l
 LIBRARY_HOLE = ("what the watch starts searches the packed program's folder first for its libraries: that folder"
                 " could not be put back at the start (%s; ADR-0007 CI-3)")
 # CJ-2: packed, on Windows, and no call made in this process (an entry that is not cli.main): words of its own
-LIBRARY_NO_CALL = ("what the watch starts searches the packed program's folder first for its libraries: that folder"
-                   " was not put back, because this entry made no call (ADR-0007 CI-3, CJ-2)")
+LIBRARY_NO_CALL = ("the folder Windows searches first for a library was not put back, because this entry made no call:"
+                   " what the watch starts may search the packed program's folder first for its libraries (what a"
+                   " packed start of this entry sets was not measured; ADR-0007 CI-3, CJ-2, CK-1)")
+# CK-3: whether this process is a packed program on Windows could not be read: said, never taken for "none"
+LIBRARY_UNREAD = ("whether the folder Windows searches first for a library was put back could not be told (%s;"
+                  " ADR-0007 CI-3, CK-3)")
 
 
 def _words(text):
@@ -239,7 +243,7 @@ def library_folder_hole(frozen=None, platform=None):
     handed() takes them (default sys.frozen, sys.platform). Where library_folder() failed in this process:
     LIBRARY_HOLE with why. Packed, on Windows, and no call made in this process (an entry that is not cli.main):
     LIBRARY_NO_CALL. None where the folder was put back, or where no call was made and this process is not packed
-    or not on Windows. Never raises: a frozen or platform value that cannot be read is taken for none."""
+    or not on Windows. Never raises: a frozen or platform value that cannot be read is said (LIBRARY_UNREAD), not taken for none."""
     result = LIBRARY_FOLDER
     if result is True:
         return None
@@ -248,6 +252,6 @@ def library_folder_hole(frozen=None, platform=None):
     try:
         if _frozen(frozen) and _windows(platform):
             return LIBRARY_NO_CALL
-    except Exception:
-        pass
+    except Exception as exc:   # CK-3: a state that cannot be read is said, as library_folder says it
+        return LIBRARY_UNREAD % _said(exc)
     return None

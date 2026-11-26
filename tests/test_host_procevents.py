@@ -655,6 +655,8 @@ def test_cj1_a_failed_put_back_is_a_blind_spot_said_once_the_rounds_and_the_code
     w0, text0, code0, blind0 = _library_run(tmp_path, monkeypatch, "put-back", True, False, platform, kind)
     w, text, code, blind = _library_run(tmp_path, monkeypatch, "failed", FAILED, False, platform, kind)
     assert w.rounds == w0.rounds == 3 and code == code0        # the same rounds ran, the same exit code
+    assert w.applied == w0.applied == 3 and w.result() == w0.result()   # CK-2: each gave an inventory; one result
+    assert len(w.blind) == len(w0.blind) + 1                   # counted apart: one blind spot more, no other
     assert blind0 == [] and LIBRARY_WORDS not in text0         # never in the watch without the failure
     (b,) = blind                                               # once in the watch with it
     assert b["class"] == host.BLIND and b["detail"] == own.library_folder_hole() + host.BLIND_TAIL
@@ -673,7 +675,9 @@ def test_cj2_packed_on_windows_and_no_call_made_the_blind_spot_in_words_of_its_o
     if platform == "win32":   # packed, Windows, no call made by this entry: said, once, at the start
         (b,) = blind
         assert b["detail"] == own.LIBRARY_NO_CALL + host.BLIND_TAIL and "made no call" in b["detail"]
-        assert b["at"] == w.at(w.t0) and b["round"] is None and " ".join(text.split()).count(LIBRARY_WORDS) == 1
+        assert b["at"] == w.at(w.t0) and b["round"] is None
+        assert " ".join(text.split()).count("was not put back, because this entry made no call") == 1
+        assert w.applied == w0.applied and w.result() == w0.result() and len(w.blind) == len(w0.blind) + 1
     else:                     # packed, not Windows: nothing to put back, nothing said
         assert blind == [] and LIBRARY_WORDS not in text
 
