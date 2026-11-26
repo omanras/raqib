@@ -1,0 +1,29 @@
+name: service-probe5
+# Probe only (never merged): measured before ADR-0013's next ruling - a folder made closed in one call, a folder
+# read and held by one handle on its name, and what the system says of a service that refuses.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_probe5.ps1, .github/workflows/service-probe5.yml]
+permissions:
+  contents: read
+jobs:
+  service:
+    name: made closed, held, refused (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: measured
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_probe5.ps1"

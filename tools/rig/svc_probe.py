@@ -50,14 +50,16 @@ class Service:
         self.handle = None
         self.running, self.stop_asked, self.work_done, self.ended = (threading.Event() for _ in range(4))
         self.failed = None      # the dispatcher's error where it could not connect
+        self.refuse, self.pending = 0, False   # the fifth probe: a refusal's number, said from START_PENDING or not
         self.exit_code = 0
         self._handler = HANDLER_EX(self.handler)        # kept: the system calls them later
         self._main = SERVICE_MAIN(self.service_main)
 
     def status(self, state, hint=0):
+        own = self.refuse if state == STOPPED and self.refuse else 0
         s = SERVICE_STATUS(SERVICE_WIN32_OWN_PROCESS, state,
                            (ACCEPT_STOP | ACCEPT_SHUTDOWN) if state == RUNNING else 0,
-                           self.exit_code if state == STOPPED else 0, 0, 0, hint)
+                           1066 if own else (self.exit_code if state == STOPPED else 0), own, 0, hint)
         ok = self.advapi.SetServiceStatus(self.handle, ctypes.byref(s))
         self.log("status %d set: %s" % (state, "ok" if ok else "FAILED %d" % ctypes.get_last_error()))
 
@@ -77,6 +79,12 @@ class Service:
     def service_main(self, argc, argv):
         self.handle = self.advapi.RegisterServiceCtrlHandlerExW(self.name, self._handler, None)
         self.log("the handler registered: %s (thread %s)" % (bool(self.handle), threading.current_thread().name))
+        if self.refuse:
+            self.status(START_PENDING if self.pending else RUNNING, 5000 if self.pending else 0)
+            time.sleep(0.5)
+            self.status(STOPPED)
+            self.running.set()
+            return
         self.status(RUNNING)
         self.running.set()
         self.work_done.wait()
@@ -167,7 +175,84 @@ def owner(path, give=False):
     return 0
 
 
+class SECURITY_ATTRIBUTES(ctypes.Structure):
+    _fields_ = [("nLength", wintypes.DWORD), ("lpSecurityDescriptor", wintypes.LPVOID),
+                ("bInheritHandle", wintypes.BOOL)]
+
+
+def make_closed(path):
+    """Make the folder with CLOSED as its list in the one call that makes it. Says what the system answered."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    sd, size = wintypes.LPVOID(), wintypes.ULONG()
+    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.ULONG)]
+    if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(CLOSED, 1, ctypes.byref(sd), ctypes.byref(size)):
+        return "the text was not taken: error %d" % ctypes.get_last_error()
+    sa = SECURITY_ATTRIBUTES(ctypes.sizeof(SECURITY_ATTRIBUTES), sd, False)
+    k32.CreateDirectoryW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(SECURITY_ATTRIBUTES)]
+    ok = k32.CreateDirectoryW(path, ctypes.byref(sa))
+    return "made" if ok else "not made: error %d" % ctypes.get_last_error()
+
+
+def open_folder(path):
+    """A handle on the name itself (a link is not followed), that lets nobody take the name away while it is
+    held: (handle, None) or (None, why)."""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                                wintypes.DWORD, wintypes.HANDLE]
+    # READ_CONTROL | FILE_READ_ATTRIBUTES; shared for reading and writing, not for deleting; an existing one;
+    # FILE_FLAG_BACKUP_SEMANTICS (a folder) | FILE_FLAG_OPEN_REPARSE_POINT (the link itself)
+    h = k32.CreateFileW(path, 0x20000 | 0x80, 0x1 | 0x2, None, 3, 0x02000000 | 0x00200000, None)
+    if h is None or h == wintypes.HANDLE(-1).value:
+        return None, "not opened: error %d" % ctypes.get_last_error()
+    return h, None
+
+
+def read_handle(path):
+    """What the name is, and its owner and list, read through one handle on the name itself."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    h, why = open_folder(path)
+    if h is None:
+        return why
+    info = (wintypes.DWORD * 13)()
+    k32.GetFileInformationByHandle.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
+    got = k32.GetFileInformationByHandle(h, ctypes.byref(info))
+    attrs = info[0] if got else None
+    kind = "attributes not read" if attrs is None else "%s%s (attributes 0x%x)" % (
+        "a folder" if attrs & 0x10 else "a file", ", a reparse point" if attrs & 0x400 else "", attrs)
+    sd, text, size = wintypes.LPVOID(), wintypes.LPWSTR(), wintypes.ULONG()
+    adv.GetSecurityInfo.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.DWORD] + [wintypes.LPVOID] * 5
+    rc = adv.GetSecurityInfo(h, SE_FILE_OBJECT, 0x1 | 0x4, None, None, None, None, ctypes.byref(sd))
+    if rc:
+        out = "owner and list not read: error %d" % rc
+    else:
+        adv.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
+            wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.LPWSTR),
+            ctypes.POINTER(wintypes.ULONG)]
+        ok = adv.ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, 1, 0x1 | 0x4, ctypes.byref(text),
+                                                                    ctypes.byref(size))
+        out = text.value if ok else "not written as text: error %d" % ctypes.get_last_error()
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle(h)
+    return "%s; %s" % (kind, out)
+
+
 def main(argv):
+    if len(argv) == 3 and argv[1] == "--make":
+        print("made closed in one call: %s" % make_closed(argv[2]))
+        print("by its handle: %s" % read_handle(argv[2]))
+        return 0
+    if len(argv) == 3 and argv[1] == "--read":
+        print("by its handle: %s" % read_handle(argv[2]))
+        return 0
+    if len(argv) == 4 and argv[1] == "--hold":
+        h, why = open_folder(argv[2])
+        print("held: %s" % (why or "yes"), flush=True)
+        time.sleep(float(argv[3]))
+        return 0
     if len(argv) == 3 and argv[1] == "--close":
         return close(argv[2])
     if len(argv) == 3 and argv[1] in ("--owner", "--give"):
@@ -176,7 +261,7 @@ def main(argv):
         print(__doc__)
         return 2
     name, label = argv[2], argv[3]
-    rounds = argv[4] if len(argv) > 4 else "400"
+    rounds = argv[4] if len(argv) > 4 and label != "refuse" else "400"
     root = os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "RaqibProbe")
     place = os.path.join(root, label)
     made = not os.path.isdir(root)
@@ -198,6 +283,8 @@ def main(argv):
     log("USERPROFILE %s; TEMP %s; names in the environment %d" % (os.environ.get("USERPROFILE"),
                                                                os.environ.get("TEMP"), len(os.environ)))
     svc = Service(name, log)
+    if label == "refuse":
+        svc.refuse, svc.pending = int(argv[4]), argv[5:6] == ["pending"]
     threading.Thread(target=svc.dispatch, name="dispatcher", daemon=True).start()
     while not (svc.running.wait(0.1) or svc.ended.is_set()):
         if time.monotonic() - T0 > 25:
@@ -206,7 +293,19 @@ def main(argv):
         log("NOT A SERVICE: the dispatcher %s" % ("failed with %s%s" % (svc.failed, " (not started by the service "
             "manager)" if svc.failed == NOT_BY_THE_MANAGER else "") if svc.ended.is_set() else "did not connect in 25 s"))
         return 1
+    if label == "refuse":
+        svc.ended.wait(15)
+        log("refused with %d from %s; the dispatcher %s" % (svc.refuse, "START_PENDING" if svc.pending else "RUNNING",
+                                                          "returned" if svc.ended.is_set() else "did not return"))
+        return 0
     log("RUNNING reported %.2f s after the process began" % (time.monotonic() - T0))
+    if label == "make":
+        target = os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "RaqibProbe5s")
+        log("as the system: made closed in one call: %s" % make_closed(target))
+        log("as the system: by its handle: %s" % read_handle(target))
+        svc.work_done.set()
+        svc.ended.wait(15)
+        return 0
     home = os.path.join(place, "home")
     os.makedirs(home, exist_ok=True)
     os.environ["USERPROFILE"] = home   # the record's place: the service's own, as the Linux unit's HOME is
