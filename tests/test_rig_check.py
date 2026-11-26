@@ -788,6 +788,15 @@ def test_x47_met_where_every_ask_of_at_least_3_was_answered_no_helper_ended_and_
     state, words = x47(PACKED)
     assert state == check.MET, words
     assert "rounds asked: 4, answered: 4" in words and "2 tree line(s) read" in words
+    assert "processes heard to begin: 48" in words
+    # CH-2 (the review's S5): a packed helper that answers and hears nothing is not MET
+    for said, why in (("processes that began: 0;", "processes that began: 0 (the job starts six"),
+                      ("processes that began: 2;", "processes that began: 2 (the job starts six")):
+        state, words = x47(PACKED.replace("processes that began: 48;", said))
+        assert state == check.MISSED and why in words, words
+    state, words = x47(PACKED.replace("  processes that began: 48; of them began and ended between two asks: 47\n", ""))
+    assert state == check.MISSED and "no count of the processes that began" in words
+    assert x47(PACKED.replace("processes that began: 48;", "processes that began: 3;"))[0] == check.MET
     assert x47(PACKED.replace("asked: 4, answered: 4", "asked: 3, answered: 3"))[0] == check.MET
     assert x47(PACKED.replace("\n", "\r\n"))[0] == check.MET   # a report of Windows' line ends is read the same
 
@@ -857,6 +866,8 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     linux = rig[rig.index("\n  linux:"):rig.index("\n  siem:")]
     assert "pyinstaller==6.11.1" in linux and "tools/rig/pack.sh" in linux
     assert "watch --host --rounds 4 --every 3 --no-open --no-page" in linux
+    assert '2> "$RUNNER_TEMP/packed.err" &' in linux and "do /bin/true; sleep 1; done" in linux   # CH-2
+    assert 'cp -r "$RUNNER_TEMP/packed-home/.raqib/host" rig-out/packed-host' in linux           # the review's S3
     assert '--packed "$RUNNER_TEMP/packed.out"' in linux
     windows = rig[rig.index("\n  windows:"):rig.index("\n  linux:")]
     assert "pyinstaller" not in windows.lower() and "--packed" not in windows

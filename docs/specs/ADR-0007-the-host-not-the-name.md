@@ -3524,3 +3524,31 @@ with no window toolkit, beside the same commands run by the machine's own Python
   and its helper is not a tree of the watch's. n/a off Linux.
 - Not ruled here: the package and its installer, signing, a service on Windows, a reader for macOS (the packed
   watch there reads "the homes only", as the plain one does) - M17.2's later tasks.
+
+## Amendment CH (the Table, 2026-11-26) - the review of M17.2a (docs/review/2026-11-26-M17.2a.md): lands
+The reviewer's verdict is NEXT. The field's word on c131e86: the gate green on six jobs; X47 MET on GitHub's Linux
+machine as a user that is not root (four asks, four answers, no helper ended); every earlier claim as it was.
+- CH-1 (the threat model says the packed road). The four sentences the review names are the Table's and are
+  written: the packed helper is the program itself with one word, given no `-I` and no import path; what it
+  loads and from where; that the word adds no reach, and what would make it one (a packed program given a
+  right of its own); that the packed program's folder is read again at each start.
+- CH-2 (X47 holds what was heard, not only that the helper answers). The rig's job starts six short processes
+  beside the packed watch, and X47 is MET only where at least three were heard to begin. The packed watch's
+  error stream is kept apart from its report, and its own record is kept with the run's files.
+- CH-3 (the packed helper's environment: not ruled). The plain helper is isolated from the environment by
+  `-I`; the packed one has the watch's environment, and what a packer's start reads of it is the packer's.
+  BH-1 holds "with what environment": a helper's environment of its own is ruled only after it is measured -
+  which variables a packed start reads, and what a packed watch hands to the outside programs it starts (the
+  library search path among them). Recorded for M17.2b, and said in the threat model as not held.
+- CH-4 (the cost is accepted, and said right). A packed helper is the whole program: 34.4 MB of memory beside
+  the plain helper's 14.9 MB (measured once). Amendment CG's peak of 34 to 39 MiB for a packed watch was read
+  while its helper died at once: it is the watch alone, not the watch with a living helper. A lighter entry
+  for the helper is not ruled; the figure is in the spec.
+- CH-5 (kept, or recorded for M17.2's next tasks). Kept as built: the builder's Q1 (the test of who names the
+  reader, made stricter), Q2 (the word), Q3 (`sys.frozen` alone; another packer's helper would end, and that
+  is said), Q5 (a refusal of the reader is MISSED), Q9. Recorded: X47 cannot tell a packed watch's report from
+  a plain one's but by the job's wiring; its tree clause cannot fail by the helper - the sign would be a hole
+  of the watch's own tree in the sources, which the run now keeps; the packer's dependencies are not pinned;
+  `raqib-app` packed with its own entry would start a helper that ends (said, not silent); other code that
+  takes `sys.executable` for an interpreter (the hook's command, the service's unit, doctor); on Windows the
+  word given to `raqib` prints the reader's refusal and exits 0.

@@ -916,6 +916,13 @@ def test_e9_only_the_watch_imports_the_reader():
     used = {n.attr for n in ast.walk(cli_tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
             and n.value.id == "procevents"}
     assert used == {"word"}
+    # the review's S1: and it reaches the module by one import alone, `from raqib import ... procevents ...`
+    imports = [n for n in ast.walk(cli_tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
+    assert not [n for n in imports if isinstance(n, ast.ImportFrom) and (n.module or "").endswith("procevents")]
+    assert not [a for n in imports if isinstance(n, ast.Import) for a in n.names if "procevents" in a.name]
+    named = [(n.module, a.name, a.asname) for n in imports if isinstance(n, ast.ImportFrom) for a in n.names
+             if a.name == "procevents"]
+    assert named == [("raqib", "procevents", None)]
     tree = ast.parse((ROOT / "raqib" / "discover.py").read_text(encoding="utf-8"))
     names = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
     names |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}

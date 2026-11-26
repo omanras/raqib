@@ -567,7 +567,22 @@ Rulings: ADR-0003 Amendments C and D.
     and no PYTHON* variable of the environment; BY-6), its directory `/`,
     and the watch's own import path given
     entry for entry, so it loads Raqib from where the watch did and from
-    nowhere else; it is in the watch's record of what it started. It reads
+    nowhere else; it is in the watch's record of what it started. Where
+    Raqib is packed with its own runtime (`sys.frozen`; ADR-0007 CG-1), the
+    helper is the packed program itself with one fixed word as its only
+    argument: no `-I` and no import path are given; it loads Raqib, and
+    every module Raqib's entry imports, from the packed program's own
+    folder; its directory is `/` and its environment is the watch's. That
+    the packer's runtime reads nothing of that environment was measured
+    once (PyInstaller 6.11.1: PYTHONPATH and a working folder's modules not
+    loaded), not proven; what the packer's own start reads of it (its own
+    variables, the library search path) was not measured (CH-3). Every
+    `raqib` and `python -m raqib`, packed or not, on every system, given
+    that word as its first and only argument serves the reader on its
+    standard input and output, as `python -m raqib.procevents --serve`
+    does, with the rights of whoever runs it: it adds no reach. A packed
+    program given a right of its own (file capabilities, set-user-id)
+    would serve the machine's process events to whoever runs it so. It reads
     its input, the kernel's socket and, at each exec, that process's
     /proc/PID/exe and /proc/PID/stat; it opens no other file, writes only
     its output and starts no program, and it ends when its input ends, so
@@ -588,6 +603,9 @@ Rulings: ADR-0003 Amendments C and D.
     program sets its import path, the interpreter's own start reads what
     the watch's start read (the system's site folders' own files): the
     places are the watch's, their contents are read again at each start.
+    Packed, the helper's start reads the packed program's folder (its
+    archive and libraries) again at each start: whoever can write that
+    folder changes the next helper as he changes the next watch.
     A helper refused at its first start (a container, a right not given),
     or late or ended before its first answer, is a blind spot of the watch,
     said, and the rounds are the sample's alone; after its first answer, a
@@ -602,7 +620,7 @@ Rulings: ADR-0003 Amendments C and D.
     name, else a hole); a tree's line holds the reader's record itself, its
     path included, made printable and cut as a sampled child's record is
     (BZ-11); the PROCESS EVENTS section says only numbers;
-  - when the interpreter's file is replaced on disk while the watch runs (a
+  - when the interpreter's file, or a packed program's file, is replaced on disk while the watch runs (a
     package upgrade), /proc shows the helper's program with " (deleted)"
     after it; the watch's record takes that image as the image it was
     (BY-6), so the helper is still the watch's own;

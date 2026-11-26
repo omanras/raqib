@@ -162,10 +162,14 @@ jobs:
           exe=$(PYTHON=python tools/rig/pack.sh "$RUNNER_TEMP/pack") || echo "the packing failed: no packed watch"
           if [ -n "$exe" ] && [ -x "$exe" ]; then
             mkdir -p "$RUNNER_TEMP/packed-home"
-            HOME="$RUNNER_TEMP/packed-home" "$exe" watch --host --rounds 4 --every 3 --no-open --no-page > "$RUNNER_TEMP/packed.out" 2>&1 || echo "the packed watch's exit: $?"
+            HOME="$RUNNER_TEMP/packed-home" "$exe" watch --host --rounds 4 --every 3 --no-open --no-page > "$RUNNER_TEMP/packed.out" 2> "$RUNNER_TEMP/packed.err" &
+            w=$!
+            sleep 2; for i in 1 2 3 4 5 6; do /bin/true; sleep 1; done   # CH-2: six short processes for its reader to hear
+            wait $w || echo "the packed watch's exit: $?"
           fi
-          touch "$RUNNER_TEMP/packed.out"
+          touch "$RUNNER_TEMP/packed.out" "$RUNNER_TEMP/packed.err"
           echo "=== the packed watch's report"; cat "$RUNNER_TEMP/packed.out"
+          echo "=== its error stream"; head -20 "$RUNNER_TEMP/packed.err"
       - name: read the report against what the stand-in did
         if: always()
         run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --autostart "$RUNNER_TEMP/autostart.json" --events-check "$RUNNER_TEMP/events-check.out" --packed "$RUNNER_TEMP/packed.out" --summary "$GITHUB_STEP_SUMMARY"
@@ -177,7 +181,8 @@ jobs:
           cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
           cp "$HOME/.raqib/host/events.jsonl" rig-out/ 2>/dev/null || true
           cp "$RUNNER_TEMP/forward.json" "$RUNNER_TEMP/service.json" "$RUNNER_TEMP/procevents.json" "$RUNNER_TEMP/autostart.json" rig-out/ 2>/dev/null || true
-          cp "$RUNNER_TEMP/events-check.out" "$RUNNER_TEMP/packed.out" rig-out/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/events-check.out" "$RUNNER_TEMP/packed.out" "$RUNNER_TEMP/packed.err" rig-out/ 2>/dev/null || true
+          cp -r "$RUNNER_TEMP/packed-home/.raqib/host" rig-out/packed-host 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -5,6 +5,37 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.8.1 - 2026-11-26
+
+What is new:
+- A Raqib packed with its own runtime keeps its process events on Linux (ADR-0007 Amendments CG and CH). Packed
+  into one folder so that a machine needs no Python - the first step toward packages a person installs with
+  one command - the host watch lost the kernel's process events: its helper was started as "this Python, run
+  that program", and a packed program is no Python. The watch said so itself (two asks, no answer, a blind
+  spot each time). A packed Raqib now starts its helper as itself.
+- A Raqib that is not packed starts its helper exactly as before; nothing else changes in this number.
+- Measured on GitHub's machines: packed, Raqib is 24.5 MiB on Windows, 59.2 MiB on Linux and 40.4 MiB on macOS,
+  starts in 0.1 to 0.2 s, and its watch holds 34 to 39 MiB of memory (read while the Linux helper was dead: a
+  living packed helper adds about 34 MB, a plain one about 15). On the rig's Linux machine, as a user that is
+  not root, a Raqib packed there answered four asks of four and heard the processes started beside it (the
+  claim X47).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- A machine with more than one install (a virtual environment and the system's Python, say) is updated one
+  install at a time: `raqib --version` of each says which is which.
+
+Not measured:
+- No package and no installer exists yet: this number is the first thing they need, not they.
+- What a packed program reads of the environment at its start, and what it hands to the outside programs a
+  watch starts: the plain helper is isolated from the environment, the packed one is not.
+- The window and the service packed; a packed watch over hours; Windows on ARM64 packed.
+- On macOS the watch, packed or not, still reads the homes only: it has no reader there yet.
+
 ## 0.8.0 - 2026-11-21
 
 What is new:

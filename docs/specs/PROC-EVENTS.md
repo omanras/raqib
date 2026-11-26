@@ -287,11 +287,16 @@ there too (one entry, one behaviour). The word is no command of a person's:
 it is in no help text, no usage line and not in the guide's table of
 commands. Run by hand it serves until its input ends, as the helper does: it
 answers `read` and `stop` on its standard input and writes its lines on its
-standard output, and a Ctrl-C does not end it. The watch's record of its own
-holds the packed helper as it holds the interpreter (raqib/own.py, by the
-image a sample reads: the packed program's file, which is the watch's own
-image too), so it is never a tree and never an act; another process of that
-image that the watch did not start is not its own. What a packed helper
+standard output, and a Ctrl-C does not end it - once it serves: a packed
+helper first loads every module Raqib's entry imports (the plain helper
+loads the reader alone), and a Ctrl-C in that time is not yet ignored. The
+watch's record of its own holds the packed helper as it holds the
+interpreter (raqib/own.py: a process is the watch's own by its pid, its
+start and the image a sample reads together - the packed program's file,
+which is the watch's own image too), so it is never a tree and never an
+act; another process of that image that the watch did not start is not its
+own. Its cost (measured once, this task's machine): the packed helper held
+34.4 MB of memory, the plain one 14.9 MB. What a packed helper
 loads: measured on this task's machine (PyInstaller 6.11.1, Python 3.13),
 the packed program run from a folder holding a `raqib.py`, a `raqib`
 package and a `json` package, with PYTHONPATH naming that folder, loaded
