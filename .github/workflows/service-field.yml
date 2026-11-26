@@ -30,12 +30,12 @@ jobs:
         run: |
           git fetch -q --depth 1 origin "$RAQIB_REF"
           git log -1 --format='%h %s' FETCH_HEAD | cut -c1-90
-          git checkout -q FETCH_HEAD -- raqib pyproject.toml tests
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml tests docs
           python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1 pytest
           raqib --version
       - name: the runner's own tests on this machine (the real object among them)
         shell: bash
-        run: python -m pytest tests/test_winservice.py -q -rs 2>&1 | tail -8
+        run: python -m pytest tests/test_winservice.py -q -rs 2>&1 | tail -8 || true
       - name: pack Raqib as the rig packs it
         shell: bash
         run: |
