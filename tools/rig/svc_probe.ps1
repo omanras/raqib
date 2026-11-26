@@ -58,6 +58,11 @@ while (((Get-Date) - $t).TotalSeconds -lt 40) {
   Start-Sleep -Milliseconds 500
 }
 "killed pid $p1; state $((Get-Service RaqibProbe).Status) with pid $p2 after {0:n1} s" -f ((Get-Date) - $t).TotalSeconds
+"--- svc.log (plain), the last 22 lines: the killed one and the one started again"
+Get-Content "$root\plain\svc.log" -ErrorAction SilentlyContinue | Select-Object -Last 22 | ForEach-Object { "    " + $_.Substring(0, [Math]::Min(230, $_.Length)) }
+"--- watch.out of the one started again: $((Get-Content "$root\plain\watch.out" -ErrorAction SilentlyContinue).Count) line(s)"
+Get-Content "$root\plain\watch.out" -ErrorAction SilentlyContinue | Select-Object -First 8 | ForEach-Object { "    " + $_.Substring(0, [Math]::Min(230, $_.Length)) }
+Get-Content "$root\plain\watch.err" -ErrorAction SilentlyContinue | Select-Object -First 8 | ForEach-Object { "    err: " + $_.Substring(0, [Math]::Min(230, $_.Length)) }
 Get-WinEvent -FilterHashtable @{LogName = "System"; ProviderName = "Service Control Manager"} -MaxEvents 12 -ErrorAction SilentlyContinue |
   Where-Object { $_.Message -match "RaqibProbe" } | Select-Object -First 5 | ForEach-Object { "    event {0}: {1}" -f $_.Id, ($_.Message -replace "\s+", " ").Substring(0, [Math]::Min(170, ($_.Message -replace "\s+", " ").Length)) }
 
@@ -68,10 +73,12 @@ icacls $root | Select-Object -First 8 | ForEach-Object { "    $_" }
 sc.exe sdshow RaqibProbe | Where-Object { $_ } | ForEach-Object { "    $_" }
 New-Item -ItemType Directory -Force $pub | Out-Null
 icacls $pub /grant "*S-1-1-0:(OI)(CI)F" | Out-Null
-$pw = (-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 22 | ForEach-Object { [char]$_ })) + "aA1!"
-net user raqibprobe $pw /add | Out-Null
-"a plain user made: exit $LASTEXITCODE; in Administrators: $([bool](net localgroup Administrators | Select-String raqibprobe))"
-$cred = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\raqibprobe", (ConvertTo-SecureString $pw -AsPlainText -Force))
+$pw = ConvertTo-SecureString ((-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 22 | ForEach-Object { [char]$_ })) + "aA1!") -AsPlainText -Force
+try { New-LocalUser -Name raqibprobe -Password $pw -ErrorAction Stop | Out-Null; $made = "made" } catch { $made = "NOT made: $($_.Exception.Message)" }
+"a plain user: $made; in Administrators: $([bool](net localgroup Administrators | Select-String raqibprobe)); in Users: $([bool](net localgroup Users | Select-String raqibprobe))"
+net localgroup Users raqibprobe /add 2>$null | Out-Null
+if ((Get-Service RaqibProbe).Status -ne "Running") { Start-Service RaqibProbe; Start-Sleep 3 }
+$cred = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\raqibprobe", $pw)
 function As-User($tag) {
   $svcpid = Svc-Pid "RaqibProbe"
   $cmd = "$pub\try-$tag.cmd"
@@ -102,5 +109,5 @@ As-User "closed"
 Stop-Service RaqibProbe -ErrorAction SilentlyContinue
 sc.exe delete RaqibProbe | Select-Object -First 1
 if ($Packed) { sc.exe delete RaqibProbeP | Select-Object -First 1 }
-net user raqibprobe /delete | Out-Null
-"the user removed: exit $LASTEXITCODE"
+try { Remove-LocalUser -Name raqibprobe -ErrorAction Stop; "the user removed" } catch { "the user NOT removed: $($_.Exception.Message)" }
+exit 0
