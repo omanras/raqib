@@ -1,0 +1,53 @@
+name: packed-env-probe
+# Probe only (never merged): what a program packed with its own runtime reads of its environment when it starts,
+# and what it hands to a program it starts (ADR-0007 Amendment CH-3). The rig's packer's own options.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/packed_env_probe.py, tools/rig/packed_env_entry.py, .github/workflows/packed-env-probe.yml]
+permissions:
+  contents: read
+jobs:
+  packed-env:
+    name: a packed start's environment (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib, and the packer
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml tools/rig/pack.sh
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1
+          raqib --version
+      - name: pack the instrument as the rig packs Raqib
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/pe" && cd "$RUNNER_TEMP/pe"
+          cp "$GITHUB_WORKSPACE/tools/rig/packed_env_entry.py" entry.py
+          python -m PyInstaller --noconfirm --onedir --name envprobe --exclude-module tkinter --log-level WARN entry.py 2>&1 | tail -3
+          ls dist/envprobe | head -5
+      - name: pack Raqib itself (linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: PYTHON=python sh tools/rig/pack.sh "$RUNNER_TEMP/pr" > "$RUNNER_TEMP/raqib-exe"
+      - name: what it reads, and what it hands on
+        shell: bash
+        run: |
+          exe="$RUNNER_TEMP/pe/dist/envprobe/envprobe"
+          if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
+          if [ -s "$RUNNER_TEMP/raqib-exe" ]; then
+            python tools/rig/packed_env_probe.py "$exe" --raqib "$(cat "$RUNNER_TEMP/raqib-exe")"
+          else
+            python tools/rig/packed_env_probe.py "$exe"
+          fi
