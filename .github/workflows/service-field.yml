@@ -1,0 +1,48 @@
+name: service-field
+# Probe only (never merged): the field's word for ADR-0013 AE-5 - a branch's `raqib service run` as a real
+# service of Windows, plain and packed, x64 and ARM64; and the gate's one real-object test of the runner.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_field.ps1, .github/workflows/service-field.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: claude/M12.4a
+jobs:
+  service:
+    name: the branch's runner as a service (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, and the packer
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git log -1 --format='%h %s' FETCH_HEAD | cut -c1-90
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml tests
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1 pytest
+          raqib --version
+      - name: the runner's own tests on this machine (the real object among them)
+        shell: bash
+        run: python -m pytest tests/test_winservice.py -q -rs 2>&1 | tail -8
+      - name: pack Raqib as the rig packs it
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/sf" && cd "$RUNNER_TEMP/sf"
+          printf 'import sys\nfrom raqib.cli import main\nsys.exit(main())\n' > entry.py
+          python -m PyInstaller --noconfirm --onedir --name raqib --collect-all raqib --exclude-module tkinter --log-level WARN entry.py 2>&1 | tail -3
+      - name: started, stopped, refused, touched
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_field.ps1" -Packed "$env:RUNNER_TEMP\sf\dist\raqib\raqib.exe"
