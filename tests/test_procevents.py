@@ -864,8 +864,14 @@ def _imports(source):
 def test_e9_the_standard_library_alone_no_program_and_no_file_written():
     tree, mods = _imports(SOURCE)
     assert mods == {"__future__", "atexit", "datetime", "errno", "json", "os", "queue", "signal", "socket", "struct",
-                    "subprocess", "sys", "threading", "time"}
-    assert mods - {"__future__"} <= set(sys.stdlib_module_names)
+                    "subprocess", "sys", "threading", "time", "raqib"}   # M17.2b (CI-1): raqib.own, in start alone
+    (start,) = [f for c in tree.body if isinstance(c, ast.ClassDef) and c.name == "Helper" for f in c.body
+                if isinstance(f, ast.FunctionDef) and f.name == "start"]
+    ours = [n for n in ast.walk(tree) if (isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "raqib")
+            or (isinstance(n, ast.Import) and any(a.name.split(".")[0] == "raqib" for a in n.names))]
+    assert [(n.module, [a.name for a in n.names]) for n in ours] == [("raqib", ["own"])]
+    assert all(n in list(ast.walk(start)) for n in ours)
+    assert mods - {"__future__", "raqib"} <= set(sys.stdlib_module_names)   # raqib.own: the standard library only
     # M14.1b REDO (BW-8): only the client starts a program (the helper): `subprocess` is named inside class Helper
     # alone, never in serve, main or the Reader
     (helper,) = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Helper"]

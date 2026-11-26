@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from raqib import cli, procevents  # noqa: E402
+from raqib import cli, own, procevents  # noqa: E402
 
 WORD = procevents.WORD
 
@@ -88,3 +88,144 @@ def test_cg2_procevents_spec_says_the_packed_road_the_word_and_that_by_hand_it_s
 
 def test_cg1_the_test_is_ascii():
     assert (ROOT / "tests" / "test_cli_word.py").read_text(encoding="utf-8").isascii()
+
+
+# --- M17.2b E4 (ADR-0007 CI-3): packed and on Windows, the entry puts the folder searched first back ---------------
+class Log(list):
+    pass
+
+
+def _entry_with(monkeypatch, result, frozen, platform):
+    """cli.main's call of own.library_folder, run for real with a stand-in of SetDllDirectoryW and a made-up
+    frozen state and system; [what was called, in order]."""
+    monkeypatch.setattr(own, "LIBRARY_FOLDER", None)
+    log = Log()
+    real = own.library_folder
+
+    def call(folder):
+        log.append(("SetDllDirectoryW", folder))
+        if isinstance(result, BaseException):
+            raise result
+        return result
+    def entry_call(given):   # main gives the system's call; a stand-in takes its place here
+        log.append("library_folder")
+        entry_call.given = given
+        return real(call, frozen=frozen, platform=platform)
+    monkeypatch.setattr(own, "library_folder", entry_call)
+    log.entry, log.real = entry_call, real
+    parser = cli._parser
+    monkeypatch.setattr(cli, "_parser", lambda: log.append("parser") or parser())
+    return log
+
+
+@pytest.mark.parametrize("result", [1, 0, OSError(5, "Access is denied"), RuntimeError("a stand-in that raises")])
+def test_ci3_packed_on_windows_main_calls_it_once_after_the_word_before_anything_else(result, monkeypatch):
+    log = _entry_with(monkeypatch, result, True, "win32")
+    out = io.StringIO()
+    assert cli.main(["--version"], out=out) == 0 and out.getvalue() == cli.version_line() + "\n"
+    assert log == ["library_folder", ("SetDllDirectoryW", None), "parser"]   # before the parser (and before the
+    # output's setup: test_cj3_the_call_and_its_line_come_before_the_outputs_setup holds it, out not given)
+    assert callable(log.entry.given)
+    if result == 1:
+        assert own.LIBRARY_FOLDER is True and own.library_folder_hole() is None
+    else:   # 0 or what it raised: a result, kept for the watch to say, never an exception out of main
+        assert isinstance(own.LIBRARY_FOLDER, str) and own.library_folder_hole().startswith(
+            "what the watch starts searches the packed program's folder first for its libraries")
+
+
+@pytest.mark.parametrize("frozen,platform", [(False, "win32"), (True, "linux"), (True, "darwin"), (False, "linux")])
+def test_ci3_not_called_where_plain_where_linux_where_macos(frozen, platform, monkeypatch):
+    log = _entry_with(monkeypatch, 1, frozen, platform)
+    assert cli.main(["--version"], out=io.StringIO()) == 0
+    assert log == ["library_folder", "parser"] and own.LIBRARY_FOLDER is None
+
+
+def test_ci3_the_helpers_word_is_taken_first_and_the_call_is_not_made_for_it(monkeypatch):
+    log = _entry_with(monkeypatch, 1, True, "win32")
+    monkeypatch.setattr(procevents, "serve", lambda *a, **k: 0)
+    before = signal.getsignal(signal.SIGINT)
+    try:
+        assert cli.main([WORD]) == 0
+    finally:
+        signal.signal(signal.SIGINT, before)
+    assert log == [] and own.LIBRARY_FOLDER is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="off Windows the system's call cannot be reached: a result")
+def test_ci3_the_call_main_gives_reached_off_windows_is_a_result_never_an_exception(monkeypatch):
+    log = _entry_with(monkeypatch, 1, False, "win32")
+    assert cli.main(["--version"], out=io.StringIO()) == 0 and own.LIBRARY_FOLDER is None
+    said = log.real(log.entry.given, frozen=True, platform="win32")   # main's own call, given for real
+    assert isinstance(said, str) and said.startswith("SetDllDirectoryW(NULL) failed: ") and said.isascii()
+
+
+# --- M17.2b REDO E3 (ADR-0007 CJ-3): a failed call is said by the entry at once, one line, whatever the command -------
+LIBRARY_WORDS = "raqib: what the watch starts searches the packed program's folder first for its libraries"
+FAILING = [0, OSError(5, "Access is denied"), RuntimeError("a stand-in that raises")]
+
+
+class Stream(io.StringIO):
+    """A stand-in of sys.stderr or sys.stdout that writes into the entry's log, in order."""
+
+    def __init__(self, log, name):
+        super().__init__()
+        self.log, self.name = log, name
+
+    def write(self, text):
+        self.log.append((self.name, text))
+        return super().write(text)
+
+    def reconfigure(self, **kw):   # the output's setup (main, out not given)
+        self.log.append("output")
+
+
+REAL = own.library_folder, cli._parser   # _entry_with wraps what is there: each run below starts from the real ones
+
+
+def _main_with(monkeypatch, result, argv, frozen=True, platform="win32", out=True):
+    monkeypatch.setattr(own, "library_folder", REAL[0])
+    monkeypatch.setattr(cli, "_parser", REAL[1])
+    log = _entry_with(monkeypatch, result, frozen, platform)
+    err = Stream(log, "stderr")
+    monkeypatch.setattr(sys, "stderr", err)
+    if out:
+        code = cli.main(argv, out=io.StringIO())
+    else:
+        monkeypatch.setattr(sys, "stdout", Stream(log, "stdout"))
+        code = cli.main(argv)
+    return code, err.getvalue(), log
+
+
+@pytest.mark.parametrize("argv", [["--version"], [], ["no-such-command"], ["check-rules", "--no-such-flag"]])
+@pytest.mark.parametrize("result", FAILING)
+def test_cj3_a_failed_call_one_line_on_the_error_stream_at_once_and_no_exit_code_changes(result, argv, monkeypatch):
+    code_ok, err_ok, _ = _main_with(monkeypatch, 1, argv)   # the same command, the call put back
+    code, err, log = _main_with(monkeypatch, result, argv)
+    assert code == code_ok                                      # no exit code changes
+    line = "raqib: %s\n" % own.library_folder_hole()
+    assert line.startswith(LIBRARY_WORDS) and line.isascii() and line.count("\n") == 1
+    assert err == line + err_ok and err.count(LIBRARY_WORDS) == 1 and LIBRARY_WORDS not in err_ok   # once, first
+    assert log[:3] == ["library_folder", ("SetDllDirectoryW", None), ("stderr", line)]   # at once, after the call
+
+
+@pytest.mark.parametrize("result,frozen,platform", [(1, True, "win32"), (0, False, "win32"), (0, True, "linux"),
+                                                    (0, True, "darwin")])
+def test_cj3_put_back_or_no_call_made_nothing_is_written(result, frozen, platform, monkeypatch):
+    code, err, log = _main_with(monkeypatch, result, ["--version"], frozen, platform)
+    assert code == 0 and err == "" and not [e for e in log if isinstance(e, tuple) and e[0] == "stderr"]
+
+
+def test_cj3_a_second_entry_in_the_same_process_makes_no_call_and_writes_nothing(monkeypatch):
+    code, err, log = _main_with(monkeypatch, 0, ["--version"])
+    assert code == 0 and err.count(LIBRARY_WORDS) == 1
+    err2 = Stream(log, "stderr")
+    monkeypatch.setattr(sys, "stderr", err2)
+    assert cli.main(["--version"], out=io.StringIO()) == 0 and err2.getvalue() == ""   # once in this process
+
+
+@pytest.mark.parametrize("result", [1] + FAILING)
+def test_cj3_the_call_and_its_line_come_before_the_outputs_setup(result, monkeypatch):
+    code, err, log = _main_with(monkeypatch, result, ["--version"], out=False)
+    said = [("stderr", "raqib: %s\n" % own.library_folder_hole())] if result != 1 else []
+    assert code == 0 and log == ["library_folder", ("SetDllDirectoryW", None)] + said + [
+        "output", "parser", ("stdout", cli.version_line() + "\n")]

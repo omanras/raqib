@@ -1663,6 +1663,22 @@ def main(argv=None, out=None):
     helper = procevents.word(sys.argv[1:] if argv is None else argv)   # ADR-0007 CG-1: before anything else
     if helper is not None:
         return helper
+    from raqib import own   # ADR-0007 CI-3: packed and on Windows, the folder searched first is put back; never raises
+
+    def set_dll_directory_w(folder):   # the system's own call, reached only packed and on Windows (own decides)
+        import ctypes
+        from ctypes import wintypes
+        fn = ctypes.WinDLL("kernel32", use_last_error=True).SetDllDirectoryW
+        fn.argtypes, fn.restype = [wintypes.LPCWSTR], wintypes.BOOL
+        if fn(folder):
+            return 1
+        raise ctypes.WinError(ctypes.get_last_error())
+    if isinstance(own.library_folder(set_dll_directory_w), str):   # CJ-3: a failure, said at once; no code changes
+        try:
+            sys.stderr.write("raqib: %s\n" % own.library_folder_hole())
+            sys.stderr.flush()
+        except Exception:   # an error stream that cannot be written: the host watch still says it (CJ-1)
+            pass
     if out is None:
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(errors="backslashreplace")

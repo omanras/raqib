@@ -2359,6 +2359,12 @@ class HostWatch:
         self.notes_said = set()      # M7.4 E1: the per-run notes said once
         self.not_judged_at = {}      # AM-3: (tree, file, rule) -> the index in notes of its "could not judge" note
         self.blind = []              # K-8: the blind spots of the run (bytes, start times): counted apart
+        # ADR-0007 CI-3, CJ-1, CJ-2 (M17.2b): the entry's call that failed, or a packed Windows entry that made none,
+        # said once at the start as a blind spot of the watch's own: it makes no read less (the result unchanged)
+        from raqib import own
+        library_hole = own.library_folder_hole(platform=self.platform)
+        if library_hole is not None:
+            self._blind(self.t0, "own-library-folder", library_hole)
         self.conn_state = {}         # K-5: tree key -> {"open": remotes of its last round, "bytes": last read}
         # M7.21b (BO-2): the tracing reader of a live Windows watch, started at its first live round, stopped on
         # every way out (tracing_stop); its state is the reader's thread's under tracing_lock
