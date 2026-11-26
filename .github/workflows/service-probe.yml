@@ -1,0 +1,44 @@
+name: service-probe
+# Probe only (never merged): Raqib's host watch as a real service of Windows by the standard library alone
+# (M12.4): started and stopped by the system, killed and started again, and who may touch it.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_probe.py, tools/rig/svc_probe.ps1, .github/workflows/service-probe.yml]
+permissions:
+  contents: read
+jobs:
+  service:
+    name: the watch as a service (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib, and the packer
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin main
+          git log -1 --format='%h %s' FETCH_HEAD | cut -c1-90
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1
+          raqib --version
+      - name: pack the candidate
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/sp" && cd "$RUNNER_TEMP/sp"
+          cp "$GITHUB_WORKSPACE/tools/rig/svc_probe.py" entry.py
+          python -m PyInstaller --noconfirm --onedir --name raqibsvc --collect-all raqib --exclude-module tkinter --log-level WARN entry.py 2>&1 | tail -3
+          ls dist/raqibsvc | head -4
+      - name: started, stopped, killed, touched
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_probe.ps1" -Packed "$env:RUNNER_TEMP\sp\dist\raqibsvc\raqibsvc.exe"

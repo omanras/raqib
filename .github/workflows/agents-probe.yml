@@ -6,7 +6,7 @@ name: agents-probe
 on:
   push:
     branches: [claude/rig-probe]
-    paths-ignore: [tools/rig/packed_probe.py, tools/rig/mac_probe.py, tools/rig/window_probe.py, "tools/rig/packed_env_*", .github/workflows/platform-probe.yml, .github/workflows/window-probe.yml, .github/workflows/packed-env-probe.yml, .github/workflows/agents-probe.yml]
+    paths-ignore: [tools/rig/packed_probe.py, tools/rig/mac_probe.py, tools/rig/window_probe.py, "tools/rig/packed_env_*", "tools/rig/svc_probe*", .github/workflows/service-probe.yml, .github/workflows/platform-probe.yml, .github/workflows/window-probe.yml, .github/workflows/packed-env-probe.yml, .github/workflows/agents-probe.yml]
 permissions:
   contents: read
 env:
