@@ -3552,3 +3552,67 @@ machine as a user that is not root (four asks, four answers, no helper ended); e
   `raqib-app` packed with its own entry would start a helper that ends (said, not silent); other code that
   takes `sys.executable` for an interpreter (the hook's command, the service's unit, doctor); on Windows the
   word given to `raqib` prints the reader's refusal and exits 0.
+
+## Amendment CI (the Table, 2026-11-27) - M17.2b: what a packed Raqib reads of its environment, and what it hands on
+Amendment CH-3 left a packed start's environment unruled until measured. Measured (the probe branch b4bbde1 and
+9dca356, GitHub's Windows, Linux and macOS machines, PyInstaller 6.11.1, one folder, the rig's packer's own
+options): a small program that says what it was started with, run three ways under the same variables - packed;
+by the machine's Python with `-I`; by the machine's Python with no flag, the control, where every planted module
+ran and every flag moved, so the instrument tells. On Linux main's Raqib itself, packed, was read in a host
+watch by the system's own record of each process's environment.
+- The interpreter's variables (PYTHONPATH with planted modules, PYTHONHOME an empty folder, PYTHONSTARTUP,
+  PYTHONVERBOSE, PYTHONINSPECT, PYTHONOPTIMIZE, PYTHONHASHSEED, PYTHONUTF8, PYTHONDEVMODE, PYTHONWARNINGS): a
+  packed start read none of them on the three systems - no planted module ran, no flag moved, the search path
+  was the packed folder's three entries, no site module was loaded. As `-I` does for the plain helper.
+- The packer's own variables: `_MEIPASS2` is not read and stays; `_PYI_APPLICATION_HOME_DIR` alone is removed
+  unread; `_PYI_ARCHIVE_FILE` naming another file is overwritten; `_PYI_PARENT_PROCESS_LEVEL` alone changes
+  nothing. The three together, as a packed parent of the same program leaves them: the start takes itself for
+  one started again by itself - its folder is still its own (the variable's folder, empty, was not used), but it
+  skips its own first steps, and on Linux its folder is then not put first on the loader's search path.
+- What a packed start adds to its environment, and so hands to every program started with that environment: on
+  the three systems `_PYI_ARCHIVE_FILE` and `_PYI_PARENT_PROCESS_LEVEL`; on Linux also its own folder put first
+  in LD_LIBRARY_PATH (whatever was handed stays behind it) and LD_LIBRARY_PATH_ORIG with the value handed. On
+  Windows it sets the folder the system searches first for a library (SetDllDirectory) to its own folder, and a
+  program it starts has the same folder first - also one started with an environment of its own (the plain
+  Python's child: none).
+- In Raqib today only the helper is started with the watch's environment (the system's record: the helper under
+  the packed watch had all of the above; `ss` had LC_ALL and nothing else). The notifier, `ss`, systemctl and
+  doctor's version query are each given a list of named variables or a fixed environment already.
+- The candidate, tried before it is ruled: the environment without the packer's names, LD_LIBRARY_PATH put back
+  to LD_LIBRARY_PATH_ORIG's value (removed where there is none) - a program started with it had exactly the
+  environment handed to the packed parent, and the packed program started with it by itself came up whole (the
+  same flags, folder and late-loaded modules) on the three systems. On Windows, SetDllDirectoryW(NULL) called
+  once at the start: the folder read back empty, seventeen modules of the runtime with a library beside them
+  (ssl, sqlite3, lzma, bz2, expat, decimal, asyncio's among them) loaded after it, and every program started
+  after it had no such folder.
+- CI-1 (one environment for what the watch starts). `raqib/own.py` gets one function that gives the environment
+  for a program this process starts with its own environment: not packed (`sys.frozen` false), a copy of the
+  environment as it is; packed, a copy without every name that begins `_PYI_` and without `_MEIPASS2`, and on
+  Linux with LD_LIBRARY_PATH put back to LD_LIBRARY_PATH_ORIG's value and LD_LIBRARY_PATH_ORIG removed
+  (LD_LIBRARY_PATH removed where there is no LD_LIBRARY_PATH_ORIG). The helper is started with it. FOR: nothing
+  of the packer's is handed on, and the packed helper starts as any packed start does. MUST NOT TOUCH: the plain
+  helper's command and what it is given (`-I`, the import path, the folder `/`) - its environment is the
+  watch's, value for value, as today; the named lists of the notifier, `ss`, systemctl and doctor.
+- CI-2 (no start without a named environment). Every statement in `raqib/` that starts a program names the
+  environment it gives (`env=`): a test reads the source of the package and fails on a start that inherits. FOR:
+  the next start written cannot hand the packer's variables on by forgetting. MUST NOT TOUCH: tests and tools,
+  which start what they like.
+- CI-3 (Windows: the folder searched first is put back at the start). Where Raqib is packed and the system is
+  Windows, its entry - after the helper's word is taken (CG-1), before anything else - calls
+  SetDllDirectoryW(NULL) once. Where the call fails it is said: a line of the watch's own, once, that what the
+  watch starts searches the packed program's folder first for its libraries (rule 4); never silent, never fatal.
+  FOR: wevtutil, PowerShell and whatever the watch starts load the system's libraries, not the packed copies.
+  MUST NOT TOUCH: a plain install (no call at all); Linux and macOS (no call).
+- CI-4 (not held, and said). The loader's own variables (LD_PRELOAD, LD_LIBRARY_PATH, LD_AUDIT, the DYLD_ names,
+  on Windows the PATH for a library not found elsewhere) are read by the system's loader before the first line
+  of Raqib, packed or plain: nothing in Raqib undoes them, and `-I` never did. The packer's three variables set
+  together by whoever starts a packed Raqib make it skip its own first steps. The environment a watch is started
+  with is its starter's: the defence is who starts it - the system's service manager with the unit's
+  environment, not a shell an agent holds. The threat model says so, in these words' sense. Recorded as a later
+  task (M17.2c), not built here: the watch saying at its start, as a line of its own, that a loader's variable
+  was in its environment.
+- CI-5 (the field's word). X47 stays MET with the helper started by CI-1's environment (the rig's Linux job, as
+  it is). CI-1 and CI-3 on real machines: the Table runs the probe's instrument against the branch's own
+  `raqib.own`, packed, on the three systems, before the merge. Not measured: a packed start under a loader's
+  variable that names a folder with a library in it (the folders were empty); another packer or another version
+  of this one; `--onefile`; a packed window (`raqib-app`); AIX and the BSDs' loader names.
