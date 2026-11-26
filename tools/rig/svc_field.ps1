@@ -104,15 +104,32 @@ Start-Sleep 5
 "the place: $(Sddl $place)"
 Try-Stop
 
-"=== the place a link to another folder"
-Clear-Place
+"=== the place a junction to another folder, then a link to it"
 New-Item -ItemType Directory -Force "C:\ProgramData\RaqibElsewhere" | Out-Null
-cmd /c mklink /J $place "C:\ProgramData\RaqibElsewhere" | Out-Null
-Try-Start "a link"
-Events-Tail
-"files in the folder it points to: $((Get-ChildItem 'C:\ProgramData\RaqibElsewhere' -Recurse -File -ErrorAction SilentlyContinue).Count)"
-cmd /c rmdir $place | Out-Null
+foreach ($how in "/J", "/D") {
+  Clear-Place
+  cmd /c mklink $how $place "C:\ProgramData\RaqibElsewhere" | Out-Null
+  Try-Start "mklink $how"
+  Events-Tail
+  "files in the folder it points to: $((Get-ChildItem 'C:\ProgramData\RaqibElsewhere' -Recurse -File -ErrorAction SilentlyContinue).Count); its list: $(Sddl 'C:\ProgramData\RaqibElsewhere')"
+  cmd /c rmdir $place | Out-Null
+}
 Remove-Item -Recurse -Force "C:\ProgramData\RaqibElsewhere" -ErrorAction SilentlyContinue
+
+"=== a file where the place would be"
+Clear-Place
+"x" | Set-Content $place
+Try-Start "a file at the name"
+Events-Tail
+"the file is as it was: $((Get-Content $place -ErrorAction SilentlyContinue) -eq 'x')"
+Remove-Item -Force $place -ErrorAction SilentlyContinue
+
+"=== refused twice in a row: the place a plain user made, started again"
+Clear-Place
+As-User "make2" "mkdir $place 2>nul && (echo make the place first: DONE > OUT) || (echo make the place first: REFUSED > OUT)"
+Try-Start "a plain user's, the first time"
+Try-Start "a plain user's, the second time"
+"the place after both: $(Sddl $place); files in it: $((Get-ChildItem $place -Recurse -File -ErrorAction SilentlyContinue).Count)"
 sc.exe delete $name | Select-Object -First 1
 
 if ($Packed) {
