@@ -199,3 +199,76 @@ before the merge, in one more round:
   a user (a login's run folder, a mounted medium, a new home) can become that user's; who reads the journal
   reads the findings' lines the unit prints; a link is checked by its owner. No line says a thing was done
   before it was.
+
+## Amendment E (the Table, 2026-11-27) - M12.4: the watch as a service of Windows, measured before it is ruled
+ADR-0013 is the watch under the system on Linux. On Windows the watch had run with the system's rights only from
+a scheduled task (measured 2026-11-26: the same reads, its notice reaches nobody, its record in the system's own
+profile). Measured for a real service (the probe branch 0126f69 to c7e9b55; GitHub's Windows machines, x64 and
+ARM64, Python 3.12; main's Raqib plain and packed by PyInstaller 6.11.1; a candidate of 150 lines with the
+standard library alone):
+- The shape works, plain and packed, on both machines: the system's control dispatcher
+  (StartServiceCtrlDispatcherW, by ctypes) in a second thread, the watch in the main thread as it runs from a
+  console, and a Stop from the system turned into the interrupt a person's Ctrl+C is
+  (`signal.raise_signal(SIGINT)` from the handler). The system started it in 0.56 to 0.71 s plain and 0.08 to
+  0.09 s packed; RUNNING was reported before Raqib was imported (0.14 to 0.16 s); a Stop took 0.25 to 0.27 s,
+  the watch ending 0.01 to 0.03 s after the control with its final report ("stopped (Ctrl-C)") and code 0; the
+  state read Stopped, exit code 0.
+- As a service the process is the system's own account in session 0, its folder System32, and its three standard
+  streams are None. Run with no service manager, the dispatcher fails at once with error 1063.
+- With USERPROFILE and HOME set by the candidate to a folder under ProgramData, the watch's whole record
+  (events, rounds, sources, state) was written there.
+- Killed, with the system told to start it again after 2 s: the system said so (event 7031) and started it, and
+  the new watch refused - "another raqib watch --host is watching this home (... heartbeat 3 s ago)" - and
+  ended; the service read Stopped and was not started again. A killed watch leaves its state unfinished, and a
+  watch takes an unfinished state for a living one until its heartbeat is 30 s old (STALE_SECONDS). The Linux
+  unit meets the same refusal and is started again every 5 s until it passes.
+- Who may touch it, tried as a plain user made for the run and removed after it. The service: a Stop is refused
+  (access denied), and so is ending its process. Its folder as ProgramData makes one: the plain user wrote into
+  it, read the service's log and listed its record. The folder given the access list
+  `D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)` (the system and the administrators, whole; nothing inherited) by the
+  system's own calls from Python (no outside program), read back as text and equal to what was asked: all
+  refused, for a file and a folder that were in it before too (they took the new list); an administrator still
+  read it.
+- A folder a plain user made first, where the service's would be: ProgramData let him make it, and he is its
+  owner. After it was closed as above, its maker gave the users the folder again and wrote into it. After the
+  administrators were made its owner and it was closed again: refused.
+Ruled. M12.4 is three tasks, each small enough for one builder: M12.4a the runner; M12.4b a watch killed and
+started again; M12.4c `raqib service install | remove | status` on Windows.
+- AE-1 (the runner). `raqib service run`, on Windows: the host watch under the system's service manager, in the
+  measured shape, by the standard library alone (ctypes; no new dependency), every call of the system through
+  one object a test replaces, nothing of Windows touched at import. It reports RUNNING before the watch's own
+  start. Started by anything but the service manager it says so on its error stream, starts no watch, exit 2.
+  Elsewhere than Windows it says that this command is Windows', exit 2. FOR: a service the system starts at
+  boot, stops at shutdown and a plain user cannot stop. MUST NOT TOUCH: the watch (it is run by Raqib's own
+  entry, with the Linux unit's arguments, `watch --host --no-page --no-notify`); the Linux unit and its three
+  commands; D-1 of nothing - it observes.
+- AE-2 (a place of its own, closed before anything is written). The place is `Raqib` under the folder the system
+  names ProgramData to its services. Refuse rather than repair: absent, it is made, given the measured access
+  list and read back; present, it is refused where it is a link, where its owner is neither the system nor the
+  administrators (measured: its maker opens it again), or where its list is not the closed one and it is not
+  empty (what a stranger may have left is not adopted); present, empty and open, it is closed and read back.
+  After any of these the list read back must be the closed one and the owner the system or the administrators,
+  or no watch starts. The process's HOME and USERPROFILE are then the place, as the Linux unit's HOME is its
+  state directory. FOR: the watched user can neither read nor rewrite the watch's record (A-1). MUST NOT TOUCH:
+  any folder but the place; an existing closed place's contents.
+- AE-3 (no standard streams). The runner gives the watch a text file in the place for its report and its errors,
+  begun anew at each start with the one before kept once, and bounded: past its bound no more is written and its
+  last line says so (rule 4), the record goes on. Nothing in the process may fail because a standard stream is
+  None.
+- AE-4 (a Stop is the watch's own stop). Stop and Shutdown: STOP_PENDING, then the watch's own interrupt; the
+  watch ends with its final report; then STOPPED. A watch's result (0 clean, 1 an alarm, 3 incomplete) is no
+  failure of the service: exit code 0 to the system, the result in the text file. A refusal (the place; the
+  watch refusing to start; a watch that ended without being asked) is STOPPED with a code of the service's own
+  (the system's "service-specific" exit), one number for each, listed in the spec, so that the system's own log
+  tells them apart.
+- AE-5 (the field's word). Before the merge the Table runs the branch's `raqib service run` on GitHub's Windows
+  machines as the probe ran the candidate: started and stopped by the system, plain and packed; the place's
+  owner and list read back; a plain user's four attempts on the place and two on the service; the place made
+  first by a plain user refused. A claim on the rig comes with M12.4b.
+- AE-6 (recorded for M12.4b and M12.4c, not built in M12.4a). A watch started while the one before left its
+  state unfinished: how long the service waits, and the new watch saying that the one before ended without its
+  end and from when nothing was watched. The install: the service made, its start at boot, the system told to
+  start it again, a refusal where the code it would run is not the system's alone, the event log. Not measured:
+  a shutdown of the machine (the control was not sent); a service's start at boot; the manager's limit of 30 s
+  under a slow start; another account than the system's; a place on another volume, or one with a file held open
+  by another process; Windows before the runners' versions.
