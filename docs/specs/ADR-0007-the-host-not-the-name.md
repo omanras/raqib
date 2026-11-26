@@ -3497,3 +3497,30 @@ the process events alone saw, its file not read, named by the kernel's name. The
   finding a person reads does not yet say that the file was not read (the rules' sentences: no rule reads
   `files_unread`); the section's two new counts are not in the guide's list; X46 where the watch itself runs
   as root; the debts of CE-8; a tree kept alive by its kept children.
+
+## Amendment CG (the Table, 2026-11-26) - M17.2a: a Raqib packed with its own runtime keeps its process events
+M17.2 is packages a person installs with one command, with no Python asked of the machine. Measured before any of
+it is ruled (the probe branch 7b40de8, GitHub's machines, Raqib 0.8.0 packed into one folder by PyInstaller 6.11.1
+with no window toolkit, beside the same commands run by the machine's own Python; a host watch of five rounds):
+- Size on disk: 24.5 MiB on Windows, 59.2 MiB on Linux, 40.4 MiB on macOS. `--version`: 0.11 to 0.22 s. The
+  watch's peak memory with its children: 34 to 39 MiB packed, 32 to 48 MiB plain.
+- On Windows the packed and the plain watch said the same.
+- On Linux the packed watch lost its process events: "rounds asked: 2, answered: 0", the helper ended twice and
+  the watch said each as a blind spot, then that the process events are not read for the rest of the watch.
+  Plain: five asks, five answers. The helper's command is this interpreter with `-I -c` and a program
+  (BW-5, BY-6); a packed Raqib's `sys.executable` is the packed program, which is no interpreter.
+- CG-1 (the helper's command where Raqib is packed). Where this process is a packed program (`sys.frozen`), the
+  helper is that same program started with one fixed word as its only argument, and the program's entry takes
+  that word before it reads anything else and serves the reader. FOR: a packed Raqib hears what a plain one
+  hears. MUST NOT TOUCH: the command of a Raqib that is not packed - it stays byte for byte BW-5's and BY-6's
+  (this interpreter, `-I`, `-c`, the constant program, the import path); what the helper serves and how it
+  ends (BU, BW); the watch's own record of its helper (BU-1, BH-1), which must hold the packed helper as its
+  own and never as a tree.
+- CG-2 (the word is not a command of a person's). It is not in the help, the guide's table of commands or the
+  usage; run by hand it serves until its input ends, as the helper does, and that is said in PROC-EVENTS.md.
+  A Raqib that is not packed takes the word too (one entry, one behaviour), and its own watch never uses it.
+- CG-3 (the claim). X47, on the rig's Linux machine: a Raqib packed there (the packer is a tool of the rig's
+  job, never a dependency of Raqib) runs a host watch whose report says every ask answered, no helper ended,
+  and its helper is not a tree of the watch's. n/a off Linux.
+- Not ruled here: the package and its installer, signing, a service on Windows, a reader for macOS (the packed
+  watch there reads "the homes only", as the plain one does) - M17.2's later tasks.
