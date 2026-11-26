@@ -3616,3 +3616,55 @@ watch by the system's own record of each process's environment.
   `raqib.own`, packed, on the three systems, before the merge. Not measured: a packed start under a loader's
   variable that names a folder with a library in it (the folders were empty); another packer or another version
   of this one; `--onefile`; a packed window (`raqib-app`); AIX and the BSDs' loader names.
+
+## Amendment CJ (the Table, 2026-11-27) - the review of M17.2b (docs/review/2026-11-27-M17.2b.md): REDO
+The reviewer's verdict is REDO, with no blocker: tests that cannot fail, sentences that say more than was
+measured, two silences. The field's word on 03e97e8: the gate green on six jobs; the rig green, X47 MET with the
+helper started by CI-1's environment. CI-5's own run (the probe branch 30a739b: the branch's `raqib.own` and
+Raqib's entry, packed by the rig's packer's options, GitHub's Windows, Linux and macOS machines):
+- Windows: the folder the system searches first was the packed program's before Raqib's entry ran, none after
+  it, and none for a program started after it; `own.LIBRARY_FOLDER` True; nine modules with a library of their
+  own loaded after it; the packed host watch ran its three rounds and exited 0.
+- The three systems: `own.handed()` was the environment handed to the packed program, name for name and value
+  for value, and a program started with it saw the same; a handed `_MEIPASS2` was left out.
+- Linux, read as the first probe read it (the system's record of each process's environment under a packed watch handed
+  an LD_LIBRARY_PATH): the helper's record held `_PYI_PARENT_PROCESS_LEVEL=0`, as the watch's own does - a start
+  of its own - where on 0.8.1 it held 1, a program taken for one started again; LD_LIBRARY_PATH_ORIG was the
+  value handed to the watch; five asks, five answers. The builder's Q7 is right: a packed Linux start runs
+  itself a second time and adds the packer's names again, so their absence is never the sign; this is.
+- macOS: the packed watch reads nothing and exits 3, as before this task (no reader for macOS).
+- CJ-1 (the call's failure is a blind spot, not a hole of the result; Q1, items 10, 16). A folder that could not
+  be put back makes no read of the watch less: it is said once at the watch's start by the blind spot's road
+  (K-8: counted apart, the result unchanged). FOR: the result says what was read. MUST NOT TOUCH: the words; a
+  test holds the rounds that ran and the exit code beside a watch with no failure.
+- CJ-2 (a packed entry that made no call is said too; item 25). Packed, on Windows, and no call made in this
+  process (an entry that is not `cli.main`): the host watch says the same blind spot, in words of its own - the
+  folder was not put back because this entry made no call. None where not packed, or not Windows.
+- CJ-3 (every packed command says a failure; Q2, item 26). Where the call failed, the entry writes one line on
+  its error stream at once, whatever the command; it changes no exit code. The host watch says it in its report
+  as CJ-1 rules. FOR: CI-3's "never silent" for `watch`, `discover --live`, `doctor` and `ui`.
+- CJ-4 (the source scan holds what it says; Q5, items 6 to 9, 21). One list of what starts a program, the one
+  tests/test_own_tree.py holds, used by both tests. An `env` that is None, `os.environ`, a plain copy of it
+  (`dict(os.environ)`, `os.environ.copy()`), or absent - as a keyword or in a dict given with `**` - fails: the
+  only whole environment handed on is `own.handed(...)`. A start that can take no environment (`getoutput`,
+  `getstatusoutput`, `os.system`, `os.popen`, the fork, spawn and exec families, `startfile`) fails outright.
+  The test holds the set of starts it found in `raqib/` by file and function, so a scan gone blind fails. What
+  it does not see (a name reached by `getattr`, a module bound again, `partial`, a subclass, a start handed in
+  by position) is said in its docstring and in the spec; the spec's sentence is that it fails on a start of the
+  kinds it lists, not on every start that inherits.
+- CJ-5 (the client's import stays; Q6b, item 2). `from raqib import own` inside the client's start is kept: the
+  served program (`SERVE_PROGRAM`, `serve`, `main`) never reaches it. raqib/procevents.py's own sentence "The
+  standard library only" is made true: the served program is; the client's start takes its environment from
+  `raqib.own`.
+- CJ-6 (the documents say what was measured, and no more; items 3, 14, 17 to 20, 22, 27 to 29). "None of the ten
+  interpreter's variables tried", not "none". What the watch starts is not HANDED the packed folder first - the
+  packed helper's own start puts its folder first again. On Windows the sentence is what was measured (the
+  folder none after the entry, none for what is started after it), and that only `cli.main` makes the call.
+  PROC-EVENTS.md's "not measured beyond that run" goes. A plain Raqib hands its whole environment to the helper
+  alone. Not measured, and said so: a starter that hands LD_LIBRARY_PATH_ORIG itself (the helper then gets it as
+  LD_LIBRARY_PATH - CI-4's ground, the environment is the starter's); an LD_LIBRARY_PATH handed empty (the
+  test's fixture for it is marked made up); SetDllDirectoryW failing on a real machine. `own.py`: the words of a
+  result that raised while it was read; the module's "no process touched" beside a call that changes this
+  process's own library search.
+- CJ-7 (kept as built). Q3's names; Q4 - Linux alone gets its loader's path put back, and on Windows `_MEIPASS2`
+  is left out in any case of its letters, said in the spec; Q6's two assertions; Q8.
