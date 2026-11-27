@@ -48,13 +48,27 @@ is begun, the system is told 0. A state still fresh after the wait is a living w
 (20). Not held, stale, one that cannot be read, or a heartbeat that cannot be parsed: no wait and no line (the watch
 says the first two as holes and refuses the last itself, D-6).
 
+The check of its own code (ADR-0013 Amendment T, T-1, T-2; M12.4c2b1): after the place is taken and the text file
+begun, and before RUNNING, the runner tells the system START_PENDING again with CHECK_WAIT_HINT, and asks
+raqib/wincode.py's check of the code this process runs - the same function and roads `raqib service check` asks,
+nothing skipped - through System.own_check, as the account and session that will run the watch; the seconds it took
+are read on the system's clock. Taken: one line of the text file with the pass's own sentence, as that command
+prints it (PASS_SAID), and the road goes on. Not taken - a name refused with its role, a drive refused, a plain
+interpreter not started with -I, a packed runtime not walked, not Windows, an answer of a form the runner does not
+know, or an exception out of the check: the whole refusal in the text file (REFUSED_SAID; made printable, each part
+cut at CHECK_SAID_MAX characters and the cut marked), no watch begun, the wait for the watch before not entered, and
+STOPPED straight from START_PENDING with EXIT_NOT_ALONE (15). A Stop during the check is obeyed after it: 0 where
+it passed (no watch is begun), 15 where it refused. The check is a reading at that moment (T-4).
+
 Every call of the system (the platform, the environment, the dispatcher, the handler's registration, the status,
-the interrupt, the place's making and its one read, the text file's beginning, the state of the watch before, the
-clock and the wait, and the watch's own entry) goes through one object, System; a test hands its own, so no test
-needs Windows, a service manager or ProgramData. ctypes is imported inside System, at its first call of Windows,
-never at the module's import. Nothing runs at import. The standard library only; no program is started; no network.
-One folder is made, the place; two names are read: the place's, and the state of the watch before inside it (its
-host folder's rounds.jsonl.watch.json, through holder(), which writes nothing).
+the interrupt, the place's making and its one read, the text file's beginning, the check of its own code, the state
+of the watch before, the clock and the wait, and the watch's own entry) goes through one object, System; a test
+hands its own, so no test needs Windows, a service manager or ProgramData. ctypes is imported inside System, at its
+first call of Windows, and raqib/wincode.py inside System.own_check, at its call (it imports this module), never at
+the module's import. Nothing runs at import. The standard library only; no program is started; no network. One
+folder is made, the place; the runner itself reads two names: the place's, and the state of the watch before inside
+it (its host folder's rounds.jsonl.watch.json, through holder(), which writes nothing); the check reads the names of
+the code this process runs, and writes nothing.
 """
 from __future__ import annotations
 
@@ -92,6 +106,13 @@ CONNECT_WAIT = 25.0             # seconds the dispatcher has to call the service
 END_WAIT = 15.0                 # seconds waited for the dispatcher's return after STOPPED (the candidate's)
 START_WAIT_HINT = 5000          # milliseconds told to the system with START_PENDING (the candidate's)
 STOP_WAIT_HINT = 30000          # milliseconds told to the system with STOP_PENDING (the candidate's)
+# T-2: milliseconds told with the START_PENDING before the check of its own code. Measured (Amendment T, asked as the
+# system): about 150 names in 0.2 to 0.3 s packed, about 10000 in 1.1 to 1.9 s plain. A walk of WALK_MAX (200000)
+# names at the slowest rate measured is about 38 s: not measured, and the hint is above it with room
+CHECK_WAIT_HINT = 60000
+CHECK_SAID_MAX = 4000           # T-1: characters of each part of the check's answer said in the text file
+PASS_SAID = "raqib service check: the code a service would run is the system's alone: %s"   # wincode.cli_check's
+REFUSED_SAID = "raqib service check: NOT the system's alone: %s, %s"                         # two lines (a test ties)
 
 # The system's own numbers (winsvc.h, winerror.h, winbase.h, winnt.h, accctrl.h)
 SERVICE_WIN32_OWN_PROCESS = 0x10
@@ -119,6 +140,7 @@ EXIT_REPARSE = EXIT_BASE + 11
 EXIT_NOT_FOLDER = EXIT_BASE + 12
 EXIT_OWNER = EXIT_BASE + 13
 EXIT_OPEN = EXIT_BASE + 14
+EXIT_NOT_ALONE = EXIT_BASE + 15     # T-1: the check of its own code at this start did not take it
 EXIT_TEXT = EXIT_BASE + 16
 EXIT_UNREAD = EXIT_BASE + 17
 EXIT_TEXT_ENDED = EXIT_BASE + 18
@@ -132,6 +154,8 @@ EXIT_WORDS = {
     EXIT_NOT_FOLDER: "the place is there and is not a folder",
     EXIT_OWNER: "the place's owner is neither the system (SY) nor the administrators (BA)",
     EXIT_OPEN: "the place's list is not the closed one, whatever it holds",
+    EXIT_NOT_ALONE: "the code it runs is not the system's alone: its own check at this start refused it, or gave no"
+                    " answer it reads",
     EXIT_TEXT: "the text file could not be begun in the place",
     EXIT_UNREAD: "the place could not be made, or could not be read through one handle on its name",
     EXIT_TEXT_ENDED: "a write to the text file failed and ended it (the watch's record went on)",
@@ -340,6 +364,20 @@ class System:
             pass
         return open(path, "xb")
 
+    # --- the check of its own code (T-1) ---
+    def own_check(self):
+        """ADR-0013 T-1: (bad, counts, drives, words) of raqib/wincode.py's check of the code this process runs, asked
+        as `raqib service check` asks it, by this process (in a service: its account and session): bad and counts as
+        check gives them, drives the drives it asked, words the pass's words as that command writes them after its
+        PASS_SAID (None where it refused). wincode is imported here, at the call (it imports this module)."""
+        from raqib import wincode
+        drives = []
+        bad, counts = wincode.check(wincode.System(), drives)
+        if bad is not None:
+            return bad, counts, drives, None
+        return bad, counts, drives, (wincode.plain_words(counts, drives) if "entries" in counts
+                                     else wincode.checked_words(counts, drives))
+
     # --- the watch before (AH-2) ---
     def held(self, place):
         """raqib/host.py's holder() of the place's host folder (the watch's own, HOME being the place), at the
@@ -373,6 +411,21 @@ def _say(text):
 def _printable(value):
     """A value read from a state, as one short line of printable text."""
     return "".join(c if c.isprintable() else "?" for c in str(value))[:80]
+
+
+def _cut(text, limit=CHECK_SAID_MAX):
+    """T-1: a text of the check's answer as one line of printable text, cut at `limit` and the cut marked (AJ-3)."""
+    text = "".join(c if c.isprintable() else "?" for c in text)
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+def _form_said(value):
+    """T-1: an answer of a form the runner does not know, said by its form: its type, and its repr cut to 200."""
+    try:
+        said = repr(value)
+    except Exception as exc:   # a repr that fails is said so; nothing comes out of it
+        said = "its repr failed: %s" % type(exc).__name__
+    return "%s: %s" % (type(value).__name__, _cut(said, 200))
 
 
 def _seconds(value):
@@ -618,9 +671,10 @@ class Runner:
         self.done.wait()
         self._status(STOPPED)
 
-    def _status(self, state):
+    def _status(self, state, hint=None):
         accepted = (ACCEPT_STOP | ACCEPT_SHUTDOWN) if state == RUNNING else 0
-        hint = {START_PENDING: START_WAIT_HINT, STOP_PENDING: STOP_WAIT_HINT}.get(state, 0)
+        if hint is None:
+            hint = {START_PENDING: START_WAIT_HINT, STOP_PENDING: STOP_WAIT_HINT}.get(state, 0)
         with self.status_lock:
             if self.stopped:
                 return False
@@ -688,8 +742,9 @@ class Runner:
                 self._caught("in the runner, outside the watch's call")
                 if self.outcome is not None:
                     self._finish()
-                elif self.text is not None and self.stop_asked.is_set():
-                    self.code = EXIT_TEXT_ENDED if self.text.failed else 0   # a Stop asked was obeyed
+                elif self.text is not None and self.stop_asked.is_set() and self.code != EXIT_NOT_ALONE:
+                    self.code = EXIT_TEXT_ENDED if self.text.failed else 0   # a Stop asked was obeyed (T-1: never
+                    # where the check of its own code refused)
                     self._note("the Stop's interrupt came before the watch's end was kept; the Stop was obeyed; the"
                                " system is told %s" % told(self.code))
             except BaseException as exc:
@@ -745,12 +800,53 @@ class Runner:
             self.system.setenv(name, place)
         self._note("the place %s (%s; owner %s, its list %s); HOME and USERPROFILE are the place; the watch:"
                    " raqib %s" % (place, road, owner, dacl, " ".join(WATCH_ARGV)))
+        with self.lock:             # T-2: still starting, with the check's wait (never after a Stop's STOP_PENDING)
+            if not self.stop_asked.is_set():
+                self._status(START_PENDING, CHECK_WAIT_HINT)
+        if not self._own_code():
+            return                  # T-1: no RUNNING, no wait for the watch before, no watch: STOPPED with 15
         with self.lock:
             if not self.stop_asked.is_set():
                 self._status(RUNNING)
         self._wait_for(place)
         self.outcome = self._watch()
         self._finish()
+
+    def _own_code(self):
+        """T-1, T-2: the check of its own code, through System.own_check, its seconds on the system's clock; True
+        where it passed (one line: the pass's sentence), else False with self.code EXIT_NOT_ALONE and one line: the
+        whole refusal, an answer of a form not known, or an exception out of the check (its trace first)."""
+        began = self.system.clock()
+        trace, got = "", None
+        try:
+            got = self.system.own_check()
+        except (Exception, KeyboardInterrupt) as exc:   # T-1: an exception out of the check is a refusal (15)
+            trace = traceback.format_exc()
+            try:
+                words = _cut(str(exc))
+            except Exception:
+                words = "its words could not be read"
+            why = "the check ended by %s: %s" % (type(exc).__name__, words)
+        lasted = self.system.clock() - began
+        head = "its own code, checked at this start by this process (ADR-0013 T-1), in %.2f s" % (
+            lasted if lasted == lasted else 0.0)
+        if not trace:
+            known = type(got) is tuple and len(got) == 4 and type(got[1]) is dict and type(got[2]) is list
+            bad, words = (got[0], got[3]) if known else (None, None)
+            if known and bad is None and type(words) is str:
+                self._note("%s: %s" % (head, PASS_SAID % _cut(words)))
+                return True
+            if known and words is None and type(bad) is tuple and len(bad) == 2 and all(type(x) is str for x in bad):
+                why = REFUSED_SAID % (_cut(bad[0]), _cut(bad[1]))
+            else:
+                why = "the check gave an answer of a form this runner does not know (%s)" % _form_said(got)
+        if trace:
+            self.text.write(trace)
+        if not why.startswith("raqib service check: "):
+            why += "; what was not read is never the system's"
+        self.code = EXIT_NOT_ALONE
+        self._note("%s: %s; no watch is begun; the system is told %s" % (head, why, told(self.code)))
+        return False
 
     def _wait_for(self, place):
         """AH-2, AI-4: where the state of another host watch still holds the place, one line (the age as read,

@@ -25,7 +25,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from raqib import cli, host, winservice  # noqa: E402
+from raqib import cli, host, wincode, winservice  # noqa: E402
 from raqib.winservice import (CLOSED_AS_MADE, CLOSED_AS_SET, CONTROL_INTERROGATE, CONTROL_STOP,  # noqa: E402
                               RUNNING, SERVICE_SPECIFIC, START_PENDING, STOP_PENDING, STOPPED)
 
@@ -35,6 +35,8 @@ STRANGER = "S-1-5-21-1004336348-1177238915-682003330-1001"
 FOLDER, FILE, REPARSE = 0x10, 0x20, 0x400
 NOW = 1793707200.0     # the Machine's clocks at its start (2026-11-03T12:00:00Z)
 SAID = "raqib: raqib service run: Windows only (the system's service manager runs it); this is %s\n"
+COUNTS = {"folders": 40, "files": 107, "above": 2}         # a made-up pass of the packed road (T-1)
+DRIVES = [("C:", "\\Device\\HarddiskVolume3")]
 
 
 def args(**kw):
@@ -78,6 +80,9 @@ class Machine:
         # raqib/host.py's holder()); its waiting clock is `now`, moved by pause() alone; its wall clock is `now` and
         # wall_ahead (M12.4b REDO, AI-4: two values where a test sets it); held_fn/held_error: a stand-in's answer
         self.now, self.on_pause, self.wall_ahead, self.held_fn, self.held_error = NOW, None, 0.0, None, None
+        # M12.4c2b1 (ADR-0013 T-1): the check of its own code - a pass by default; own_fn/own_error: a stand-in's
+        # answer or exception; own_seconds: what it takes on the waiting clock (0: the clocks above stay as they were)
+        self.own_fn, self.own_error, self.own_seconds, self.hints = None, None, 0.0, []
 
     def platform(self):
         return self.os
@@ -112,6 +117,7 @@ class Machine:
     def set_status(self, handle, state, accepted, win32_exit, specific_exit, wait_hint):
         assert handle == "handle"
         self.log.append(("status", state, win32_exit, specific_exit))
+        self.hints.append((state, wait_hint))
         return True
 
     def raise_interrupt(self):
@@ -174,6 +180,16 @@ class Machine:
             return True
         self.now += seconds
         return stop.is_set()
+
+    def own_check(self):
+        """T-1: what System.own_check gives - (bad, counts, drives, words) - made up; nothing is read."""
+        self.log.append("check")
+        self.now += self.own_seconds
+        if self.own_error is not None:
+            raise self.own_error
+        if self.own_fn is not None:
+            return self.own_fn(self)
+        return None, dict(COUNTS), list(DRIVES), wincode.checked_words(COUNTS, DRIVES)
 
     def watch(self, argv, out):
         self.log.append(("watch", tuple(argv)))
@@ -335,12 +351,12 @@ def test_p1_the_drives_two_calls_are_declared_with_the_others_at_the_first_call_
         ROOT / "raqib" / "wincode.py").read_text(encoding="ascii")   # wincode names it in its words only
 
 
-def test_e1_nothing_sets_an_owner_or_a_list_on_anything_that_exists_and_15_is_gone():
+def test_e1_nothing_sets_an_owner_or_a_list_on_anything_that_exists_and_15_is_the_checks():
     source = (ROOT / "raqib" / "winservice.py").read_text(encoding="ascii")
     for name in ("SetNamedSecurityInfo", "SetSecurityInfo", "SetFileSecurity", "SetKernelObjectSecurity",
                  "GetNamedSecurityInfo", "close_folder", "listdir", "lstat", "EXIT_NOT_CLOSED", "PROTECTED_DACL"):
         assert name not in source, name
-    assert winservice.EXIT_BASE + 15 not in winservice.EXIT_WORDS
+    assert winservice.EXIT_NOT_ALONE == winservice.EXIT_BASE + 15 in winservice.EXIT_WORDS   # T-1, no longer gone
     assert not hasattr(winservice.System, "close_folder") and not hasattr(Machine, "close_folder")
 
 
@@ -435,9 +451,10 @@ def test_e2_start_pending_the_place_and_the_text_then_running_then_the_watch(tmp
     m = Machine(tmp_path)
     code, _ = served(m, monkeypatch)
     assert code == 0
-    assert kinds(m, "status", "make", "read", "text", "setenv", "watch", "interrupt", "watch ended") == [
+    assert kinds(m, "status", "make", "read", "text", "setenv", "check", "watch", "interrupt", "watch ended") == [
         ("status", START_PENDING), ("make", PLACE), ("read", PLACE), ("text", winservice.TEXT_NAME),
-        ("setenv", "HOME"), ("setenv", "USERPROFILE"), ("status", RUNNING), ("watch", winservice.WATCH_ARGV),
+        ("setenv", "HOME"), ("setenv", "USERPROFILE"), ("status", START_PENDING), "check", ("status", RUNNING),
+        ("watch", winservice.WATCH_ARGV),
         ("status", STOP_PENDING), "interrupt", "watch ended", ("status", STOPPED)]
     assert m.statuses()[-1] == (STOPPED, 0, 0)
 
@@ -456,8 +473,8 @@ def test_e3_every_exit_is_the_base_plus_its_own_and_the_spec_lists_each_in_both_
     assert winservice.EXIT_BASE == 0x20000000 and winservice.SERVICE_SPECIFIC == 1066
     names = [n for n in dir(winservice) if n.startswith("EXIT_") and n not in ("EXIT_WORDS", "EXIT_BASE")]
     numbers = [getattr(winservice, n) for n in names]
-    assert sorted(numbers) == sorted(winservice.EXIT_WORDS) and len(set(numbers)) == len(numbers) == 12
-    assert sorted(n - winservice.EXIT_BASE for n in numbers) == [10, 11, 12, 13, 14, 16, 17, 18, 20, 21, 22, 23]
+    assert sorted(numbers) == sorted(winservice.EXIT_WORDS) and len(set(numbers)) == len(numbers) == 13
+    assert sorted(n - winservice.EXIT_BASE for n in numbers) == [10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23]
     spec = (ROOT / "docs" / "specs" / "SERVICE.md").read_text(encoding="utf-8")
     for number, words in winservice.EXIT_WORDS.items():
         row = "| %d | %d | 0x%08X | %s |" % (number - winservice.EXIT_BASE, number, number, words)
@@ -637,7 +654,8 @@ def test_e4_a_watch_ended_by_the_real_interrupt_is_interrupted_told_0_and_said_i
         signal.signal(signal.SIGINT, before)
     assert consumed and code == 0 and "interrupt" in m.log and "not interrupted" not in m.log
     assert runner.outcome[0] == "interrupted" and runner.caught == []
-    assert m.statuses() == [(START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0), (STOPPED, 0, 0)]
+    assert m.statuses() == [(START_PENDING, 0, 0), (START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0),
+                            (STOPPED, 0, 0)]
     assert m.text().splitlines()[-1] == ("raqib service run: the watch was stopped before it gave a report (it was"
                                          " interrupted); the Stop was obeyed; the system is told exit 0")
 
@@ -652,7 +670,7 @@ def test_e4_a_stop_after_the_watch_returned_raises_no_interrupt(tmp_path, monkey
     monkeypatch.setattr(winservice, "verdict", stop_then)
     code, runner = served(m, monkeypatch)
     assert "interrupt" not in m.log and runner.caught == []
-    assert m.statuses() == [(START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0),
+    assert m.statuses() == [(START_PENDING, 0, 0), (START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0),
                             (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_WATCH_ENDED)]
 
 
@@ -850,7 +868,8 @@ def test_ah2_not_held_or_stale_or_unparsed_no_wait_and_no_line(given, tmp_path, 
                                                    "no host watch's": {"mode": "project"}}.get(given, {}))
     code, _ = served(m, monkeypatch)
     assert code == 0 and pauses(m) == [] and WAITING not in m.text()
-    assert kinds(m, "status", "held", "watch") == [("status", START_PENDING), ("status", RUNNING),
+    assert kinds(m, "status", "held", "watch") == [("status", START_PENDING), ("status", START_PENDING),
+                                                   ("status", RUNNING),
                                                    ("held", PLACE), ("watch", winservice.WATCH_ARGV),
                                                    ("status", STOP_PENDING), ("status", STOPPED)]
 
@@ -865,8 +884,8 @@ def test_ah2_held_and_fresh_one_line_a_wait_asked_every_second_until_stale_then_
                     " pid 4242, heartbeat 4 s ago, stale after 30 s): it was ended without its end, or it still"
                     " watches; waiting up to 27.0 s for it to go stale, asked again every 1 s, then the watch")
     assert pauses(m) == [1.0] * 27 and m.now == NOW + 27   # asked again each second; stale at 31 s: the watch
-    assert kinds(m, "status", "watch")[:3] == [("status", START_PENDING), ("status", RUNNING),
-                                               ("watch", winservice.WATCH_ARGV)]
+    assert kinds(m, "status", "watch")[:4] == [("status", START_PENDING), ("status", START_PENDING),
+                                               ("status", RUNNING), ("watch", winservice.WATCH_ARGV)]
     first_pause = m.log.index(("pause", 1.0))
     assert m.log.index(("status", RUNNING, 0, 0)) < m.log.index(("held", PLACE)) < first_pause
     assert first_pause < m.log.index(("watch", winservice.WATCH_ARGV))   # AF-2's order kept: RUNNING while it waits
@@ -911,7 +930,8 @@ def test_ah2_a_stop_during_the_wait_ends_it_at_once_no_watch_begun_told_0_and_af
     code, _ = served(m, monkeypatch)
     assert code == 0 and len(pauses(m)) == 3 and m.now == NOW + 2   # the third pause returned at once
     assert "interrupt" not in m.log and not kinds(m, "watch")
-    assert m.statuses() == [(START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0), (STOPPED, 0, 0)]
+    assert m.statuses() == [(START_PENDING, 0, 0), (START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0),
+                            (STOPPED, 0, 0)]
     assert m.text().count(WAITING) == 1
     assert ("raqib service run: the watch was stopped before it gave a report (it was not begun); the Stop was"
             " obeyed; the system is told exit 0") in m.text().splitlines()
@@ -1045,3 +1065,210 @@ def test_ai4_the_wait_is_measured_on_the_waiting_clock_not_the_wall_clock(tmp_pa
     served(m, monkeypatch)
     assert pauses(m) == [1.0] * 27 and m.now == NOW + 27 and "heartbeat 4 s ago" in m.text()
     assert waited(m) == "27.0 s and ended: stale (the watch says the watch before as a hole)"
+
+
+# --- M12.4c2b1 (ADR-0013 Amendment T, T-1, T-2): the service asks the check of its own code at every start ---------
+HEAD = "raqib service run: its own code, checked at this start by this process (ADR-0013 T-1), in %.2f s: "
+TOLD_15 = "; no watch is begun; the system is told the service's own exit 536870927 (0x2000000F: %s)" % (
+    winservice.EXIT_WORDS[winservice.EXIT_BASE + 15])
+NOT_READ = "; what was not read is never the system's"
+RIG = "C:\\Users\\user\\rig"                                # a folder a user may write: the placeholder `user`
+
+
+def answer(bad, words=None, counts=None, drives=()):
+    return lambda machine: (bad, dict(COUNTS) if counts is None else counts, list(drives), words)
+
+
+def runner_lines(machine):
+    return [x for x in machine.text().splitlines() if x.startswith("raqib service run: ")]
+
+
+def refused_kinds():
+    """Each kind of refusal the check has, in its own words (raqib/wincode.py, asked of stand-ins; nothing read)."""
+    plain = SimpleNamespace(platform=lambda: "win32", program=lambda: RIG + "\\python.exe", packed=lambda: False,
+                            isolated=lambda: False, no_site=lambda: False)
+    packed = SimpleNamespace(platform=lambda: "win32", program=lambda: "C:\\Program Files\\Raqib\\raqib.exe",
+                             packed=lambda: True, version=lambda: (3, 14))
+    other = SimpleNamespace(platform=lambda: "linux", program=lambda: "/usr/bin/python3")
+    return [("a name and its role", (RIG, wincode.as_code(FOLDER, "O:%sD:P(A;;FA;;;SY)" % STRANGER))),
+            ("a drive", wincode.drive_refused("R:", (3, "\\??\\" + RIG))),
+            ("a plain interpreter not asked with -I", wincode.check(plain)[0]),
+            ("a packed runtime not walked", wincode.check(packed)[0]),
+            ("not Windows", wincode.check(other)[0])]
+
+
+def test_t1_a_start_that_passes_the_order_of_its_statuses_and_of_its_text_files_lines(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.own_seconds = 0.25                                    # the check's time on the stand-in's clock: no real second
+    code, _ = served(m, monkeypatch)
+    assert code == 0 and m.statuses()[-1] == (STOPPED, 0, 0)
+    assert kinds(m, "status", "make", "read", "text", "setenv", "check", "held", "watch") == [
+        ("status", START_PENDING), ("make", PLACE), ("read", PLACE), ("text", winservice.TEXT_NAME),
+        ("setenv", "HOME"), ("setenv", "USERPROFILE"), ("status", START_PENDING), "check", ("status", RUNNING),
+        ("held", PLACE), ("watch", winservice.WATCH_ARGV), ("status", STOP_PENDING), ("status", STOPPED)]
+    assert m.hints[:3] == [(START_PENDING, 5000), (START_PENDING, winservice.CHECK_WAIT_HINT), (RUNNING, 0)]
+    assert winservice.CHECK_WAIT_HINT == 60000
+    lines = m.text().splitlines()
+    assert lines[1] == HEAD % 0.25 + winservice.PASS_SAID % wincode.checked_words(COUNTS, DRIVES)
+    assert "and the drive asked before any name of it was read" in lines[1]
+    assert lines[:1] + lines[2:] == [   # E4: line for line as before, but for the one new line
+        "raqib service run: the place %s (found; owner SY, its list %s); HOME and USERPROFILE are the place; the"
+        " watch: raqib watch --host --no-page --no-notify" % (PLACE, CLOSED_AS_MADE), "stopped (Ctrl-C)",
+        "raqib service run: the watch returned with 0; a Stop was asked; the system is told exit 0"]
+
+
+@pytest.mark.parametrize("kind", range(5))
+def test_t1_each_kind_of_refusal_is_said_whole_no_watch_no_wait_and_15_from_start_pending(kind, tmp_path,
+                                                                                          monkeypatch):
+    said, bad = refused_kinds()[kind]
+    assert isinstance(bad, tuple) and len(bad) == 2 and all(isinstance(x, str) and x for x in bad), said
+    m = Machine(tmp_path, place=thing())
+    m.own_fn = answer(bad)
+    m.own_seconds = 0.5
+    before(m, 4)                                            # a watch before: its wait is never entered
+    code, runner = served(m, monkeypatch)
+    assert code == 2 and runner.code == winservice.EXIT_BASE + 15 == winservice.EXIT_NOT_ALONE
+    assert m.statuses() == [(START_PENDING, 0, 0), (START_PENDING, 0, 0), (STOPPED, SERVICE_SPECIFIC,
+                                                                           winservice.EXIT_NOT_ALONE)]
+    assert not kinds(m, "watch", "held", "pause") and runner.outcome is None and "interrupt" not in m.log
+    lines = runner_lines(m)
+    assert lines[1] == HEAD % 0.5 + "raqib service check: NOT the system's alone: %s, %s" % bad + TOLD_15, said
+    assert lines[1] == HEAD % 0.5 + winservice.REFUSED_SAID % bad + TOLD_15 and len(lines) == 2
+    assert WAITING not in m.text() and "the watch" not in lines[1].split(TOLD_15)[0][len(HEAD % 0.5):][:9]
+
+
+@pytest.mark.parametrize("got", [
+    "a text", None, (None, {}, []), (None, {}, [], None), (None, {}, [], b"bytes"), (("one",), {}, [], None),
+    ((1, 2), {}, [], None), (("a", "b"), {}, [], "the pass's words too"), (None, [], [], "words"),
+    (None, {}, (), "words"), [None, {}, [], "words"], (("a", "b"), None, [], None),
+])
+def test_t1_an_answer_of_a_form_the_runner_does_not_know_is_refused_with_15(got, tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.own_fn = lambda machine: got
+    code, runner = served(m, monkeypatch)
+    assert code == 2 and m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)
+    assert (RUNNING, 0, 0) not in m.statuses() and not kinds(m, "watch", "held")
+    line = runner_lines(m)[1]
+    assert line.startswith(HEAD % 0 + "the check gave an answer of a form this runner does not know (%s: "
+                           % type(got).__name__) and line.endswith(NOT_READ + TOLD_15)
+
+
+@pytest.mark.parametrize("error", [RuntimeError("a folder could not be listed"), OSError(5, "Access is denied"),
+                                   RecursionError("maximum recursion depth exceeded"), KeyboardInterrupt()])
+def test_t1_an_exception_out_of_the_check_is_refused_with_15_and_its_trace(error, tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.own_error = error
+    code, runner = served(m, monkeypatch)
+    assert code == 2 and m.statuses() == [(START_PENDING, 0, 0), (START_PENDING, 0, 0),
+                                          (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)]
+    assert not kinds(m, "watch", "held") and runner.caught == []
+    text = m.text()
+    assert "Traceback" in text and type(error).__name__ in text
+    assert runner_lines(m)[-1] == HEAD % 0 + "the check ended by %s: %s" % (type(error).__name__, error) + NOT_READ \
+        + TOLD_15
+
+
+def test_t1_the_refusal_is_made_printable_and_each_part_cut_at_its_bound_the_cut_marked(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.own_fn = answer((RIG + "\x1b[2J\n", "w" * 5000))
+    served(m, monkeypatch)
+    line = runner_lines(m)[1]
+    assert (RIG + "?[2J?, " + "w" * winservice.CHECK_SAID_MAX + "...;") in line and "\x1b" not in m.text()
+    assert winservice.CHECK_SAID_MAX == 4000 and len(line) < 4500
+    assert winservice._cut("x" * 4000) == "x" * 4000 and winservice._cut("x" * 4001) == "x" * 4000 + "..."
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_t1_a_stop_during_the_check_is_obeyed_after_it_0_where_it_passed_15_where_it_refused(refused, tmp_path,
+                                                                                             monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    bad = refused_kinds()[0][1]
+
+    def stopped_during(machine):
+        machine.handler(CONTROL_STOP)                        # the system's Stop, while the check walks
+        return (bad, dict(COUNTS), [], None) if refused else (None, dict(COUNTS), list(DRIVES), "the pass's words")
+    m.own_fn = stopped_during
+    code, runner = served(m, monkeypatch)
+    number = winservice.EXIT_NOT_ALONE if refused else 0
+    assert m.statuses() == [(START_PENDING, 0, 0), (START_PENDING, 0, 0), (STOP_PENDING, 0, 0),
+                            (STOPPED, SERVICE_SPECIFIC, number) if refused else (STOPPED, 0, 0)]
+    assert code == (2 if refused else 0) and "interrupt" not in m.log and not kinds(m, "watch")
+    lines = runner_lines(m)
+    begun = [x for x in lines if "stopped before it gave a report" in x]
+    if refused:
+        assert lines[-1].endswith(TOLD_15) and begun == []
+    else:
+        assert lines[1] == HEAD % 0 + winservice.PASS_SAID % "the pass's words"
+        assert begun == ["raqib service run: the watch was stopped before it gave a report (it was not begun); the"
+                         " Stop was obeyed; the system is told exit 0"] and lines[-1] == begun[0]
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_t1_a_stop_before_the_check_still_asks_it_and_no_start_pending_follows_stop_pending(refused, tmp_path,
+                                                                                           monkeypatch):
+    m = Machine(tmp_path, place=thing(), on_text=lambda machine: machine.handler(CONTROL_STOP))
+    if refused:
+        m.own_fn = answer(refused_kinds()[1][1])
+    code, _ = served(m, monkeypatch)
+    assert "check" in m.log and not kinds(m, "watch")
+    assert m.statuses() == [(START_PENDING, 0, 0), (STOP_PENDING, 0, 0),
+                            (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE) if refused else (STOPPED, 0, 0)]
+
+
+def test_t1_an_interrupt_after_a_refusal_never_turns_15_into_0(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.own_fn = lambda machine: machine.handler(CONTROL_STOP) or (refused_kinds()[0][1], {}, [], None)
+    runner = winservice.Runner(m)
+    real = runner._note
+
+    def interrupted_at_the_refusal(text):
+        if text.startswith("its own code"):
+            raise KeyboardInterrupt
+        return real(text)
+    monkeypatch.setattr(runner, "_note", interrupted_at_the_refusal)
+    monkeypatch.setattr(winservice, "CONNECT_WAIT", 10.0)
+    assert runner.run() == 2 and runner.caught == ["in the runner, outside the watch's call"]
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)
+    runner.text.close()
+
+
+def test_t1_the_real_objects_own_check_is_wincodes_check_with_its_own_system_and_the_drives_it_asked(monkeypatch):
+    asked, bad = [], refused_kinds()[0][1]
+
+    def stand_in(system, drives=None):                     # in place of wincode.check: nothing is read
+        asked.append((type(system), drives))
+        drives.append(DRIVES[0])
+        return None, dict(COUNTS)
+    monkeypatch.setattr(wincode, "check", stand_in)
+    got = winservice.System().own_check()
+    assert got == (None, COUNTS, DRIVES, wincode.checked_words(COUNTS, DRIVES))
+    assert asked == [(wincode.System, DRIVES)] and asked[0][1] is got[2]
+    plain = dict(COUNTS, alone=1, entries=3, missing=1, beneath=0, own=6, own_there=0, pth=1, pth_lines=2, base=0,
+                 exec=0)
+    monkeypatch.setattr(wincode, "check", lambda system, drives: (None, dict(plain)))
+    assert winservice.System().own_check() == (None, plain, [], wincode.plain_words(plain, []))
+    monkeypatch.setattr(wincode, "check", lambda system, drives: (bad, dict(COUNTS)))
+    assert winservice.System().own_check() == (bad, COUNTS, [], None)
+    # the pass's and the refusal's sentences are `raqib service check`'s own, word for word
+    asker = SimpleNamespace(platform=lambda: "win32", packed=lambda: True)
+    for result, said in (((None, dict(COUNTS)), winservice.PASS_SAID % wincode.checked_words(COUNTS, DRIVES)),
+                         ((bad, dict(COUNTS)), winservice.REFUSED_SAID % bad)):
+        monkeypatch.setattr(wincode, "check", lambda system, drives, r=result: drives.extend(DRIVES) or r)
+        out = io.StringIO()
+        wincode.cli_check(args(), out, system=asker)
+        assert out.getvalue() == said + "\n"
+
+
+def test_t1_wincode_is_imported_only_inside_own_check_and_the_check_is_never_skipped():
+    tree = ast.parse((ROOT / "raqib" / "winservice.py").read_text(encoding="ascii"))
+    system = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "System")
+    own = next(n for n in system.body if isinstance(n, ast.FunctionDef) and n.name == "own_check")
+    where = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and any(a.name == "wincode" for a in n.names)]
+    assert len(where) == 1 and where[0] in list(ast.walk(own))
+    calls = [ast.unparse(n) for n in ast.walk(own) if isinstance(n, ast.Call)]
+    assert "wincode.check(wincode.System(), drives)" in calls
+    serve = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Runner")
+    serve = next(n for n in serve.body if isinstance(n, ast.FunctionDef) and n.name == "_serve")
+    said = ast.unparse(serve)
+    assert said.index("self._status(START_PENDING, CHECK_WAIT_HINT)") < said.index("self._own_code()") < said.index(
+        "self._status(RUNNING)") < said.index("self._wait_for(place)")

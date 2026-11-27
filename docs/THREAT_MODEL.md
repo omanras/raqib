@@ -2147,7 +2147,7 @@ collector that is slow, down or refusing never delays or loses a capture
   administrator ran them (ADR-0013 A-4). They ask for no elevation, and the
   watch never runs them on its own.
 - **The service on Windows (`raqib service run`; ADR-0013 Amendments E to
-  G).** On Windows the host watch is built to run as a service of the
+  G and T).** On Windows the host watch is built to run as a service of the
   system's, its record under `Raqib` in ProgramData (docs/specs/SERVICE.md).
   The first builder's runner (c125f62) ran so in Amendment F's field run;
   this runner (f8af8f5) ran so in Amendment G's field run, plain and packed,
@@ -2179,10 +2179,25 @@ collector that is slow, down or refusing never delays or loses a capture
   as itself (this runner's own refusals read so in Amendment G's field run,
   and the start command failed at once). An administrator, and the system's
   account, can still stop it, read and change its record, and change Raqib's
-  code, and nothing yet checks that the code the service runs is the
-  system's and the administrators' alone (A-3's Windows counterpart is the
-  install's, AE-6); the service's own code runs with the system's rights, so
-  a defect in it is the system's. Not measured: a place whose list is closed
+  code. At every start, before it says RUNNING, the service asks the check
+  of its own code (`raqib service check`'s, the same function and roads) as
+  the account and session that will run the watch, and where the check does
+  not take it - or gives no answer the runner reads, or ends by an
+  exception - it says the whole refusal in its text file, begins no watch
+  and is told its own number 15 (0x2000000F) from START_PENDING, so the
+  start fails at once (Amendment T). That is a reading at the start: a tree
+  changed while the service runs is not seen until the next start; and the
+  code that asks it has already run as the system by then (the interpreter,
+  its site and the `import` lines of its *.pth files, and Raqib's own
+  modules, or the packed program and its runtime), so a tree a user may
+  change is refused before it watches, not before it runs - keeping it from
+  running as the system at all is the install's, not built yet. A service made
+  by hand from such a tree, which watched until now, stops watching with
+  this version and says why. The service's own code runs with the system's
+  rights, so a defect in it is the system's. Measured (Amendment T): asked by
+  the system's own account, the check said word for word what it said to
+  the user who asked, on x64 and ARM64; this runner's own refusal on a real
+  machine and a tree near the check's bound were not. Not measured: a place whose list is closed
   in meaning but written otherwise (refused, by the letter); a place on a
   volume that keeps no owners; a shutdown of the machine; a start at boot;
   the manager's limit of 30 s under a slow start; another account than the
@@ -2198,7 +2213,8 @@ collector that is slow, down or refusing never delays or loses a capture
   Amendment N, read in its source and not measured), every entry of its path
   and of its *.pth files and the raqib package's folder, each whole, and of
   each folder above them, read at one moment; Raqib installs no service of
-  Windows yet, so nothing asks it before one runs. On the plain road the
+  Windows yet, and a service made to run `raqib service run` asks it at
+  every start of its own (Amendment T). On the plain road the
   check is run by the code it judges: the interpreter that says the pass has
   already run its site and the `import` lines of its *.pth files at its
   start, so the check is a reading of a tree as its own code tells it - a
@@ -2231,8 +2247,8 @@ collector that is slow, down or refusing never delays or loses a capture
   serves: who made its lists is not read, and its names are judged as any
   other's. The letter is read as the session that runs the check names it;
   the system's account may name it otherwise or not at all, which the
-  install is to close by having the service ask the check at its own start,
-  as the system (not built). The system's PATH: a test
+  service closes by asking the check at every start of its own, as the
+  system (Amendment T). The system's PATH: a test
   (tests/test_libraries.py) reads each place in raqib/ where a library is
   loaded, in the forms it knows, and holds that each is a plain name written
   in the code, on one list, with no folder added to the search, no search

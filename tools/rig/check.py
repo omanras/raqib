@@ -7,7 +7,8 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
                               [--events-check FILE] [--packed FILE]
                               [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
-                              [--service-check-plain FILE] [--service-check-drive FILE] [--summary FILE] [--strict]
+                              [--service-check-plain FILE] [--service-check-drive FILE] [--service-refused FILE]
+                              [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
@@ -74,6 +75,15 @@ letter-words). X51 MET only where the exit is 1 and the words name the drive's k
 name that is not, whole, of a disk's volume's form `\\Device\\HarddiskVolumeN` (`names its device "NAME"`; ADR-0013
 Q-1, Q-5), as raqib/wincode.py drive_refused says them; MISSED where the name is of that form (the letter was a
 disk's) and with words for each thing not found, a file given and missing included; n/a where none was given.
+--service-refused: what the rig's Windows job kept of two services made to run `raqib service run`, which asks the
+check of its own code at every start (ADR-0013 T-1, T-3, M12.4c2b1): FILE holds lines `key: value` (refused-exit,
+refused-own, refused-text: the service made from the job's own Python, a tree a user may write - its exit as the
+system gives it, its own number, and its text file's line of the check; taken-state, taken-text: the one made from
+the Python copied under Program Files - its state, and its text file's line of the check). X52 MET only where the
+first did not run (refused-exit 1066, the service's own number; refused-own 15 as the system gives it, 0x2000000F or
+its decimal 536870927; refused-text holding "NOT the system's alone" and a path of a drive) and the second ran
+(taken-state Running; taken-text holding the pass's sentence with its counts); a byte-order mark before the first key
+is read past; MISSED with words for each thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1385,6 +1395,71 @@ def read_service_check_drive(text):
         return [(name, MISSED, "the service check through a letter cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_REFUSED_NAME = ("X52 a service of Windows made from a tree a user may write does not run, its own number 15"
+                        " and its text file naming what was refused, and the one made from the copy under Program"
+                        " Files runs with the pass in its text file")
+REFUSED_KEYS = ("refused-exit", "refused-own", "refused-text", "taken-state", "taken-text")
+REFUSED_WIN32 = 1066            # raqib/winservice.py SERVICE_SPECIFIC: the exit is the service's own number
+REFUSED_OWN = 0x2000000F        # raqib/winservice.py EXIT_NOT_ALONE (ADR-0013 T-1): 15, as the system gives it
+REFUSED_SAID = "NOT the system's alone"                           # raqib/wincode.py cli_check's refusal, its words
+TAKEN_SAID = "the code a service would run is the system's alone"  # and its pass's (winservice PASS_SAID)
+
+
+def _number(text):
+    """A number as the system gives it, decimal or 0x hexadecimal (its first word), or None."""
+    words = str(text or "").split()
+    try:
+        return int(words[0], 16) if words and words[0].lower().startswith("0x") else int(words[0])
+    except (IndexError, ValueError):
+        return None
+
+
+def read_service_refused(text):
+    """X52 (ADR-0013 T-1, T-3, M12.4c2b1): what the rig's Windows job kept of two services made to run `raqib service
+    run`: one from the job's own Python, a tree a user may write (refused-exit, refused-own, refused-text), and one
+    from the Python copied under Program Files (taken-state, taken-text). text: the FILE's text (None: not given). MET
+    where the first did not run - refused-exit REFUSED_WIN32, refused-own REFUSED_OWN (0x2000000F or 536870927),
+    refused-text holding REFUSED_SAID and a path of a drive - and the second ran: taken-state Running, taken-text
+    holding TAKEN_SAID with a counts' sentence (CHECK_COUNTS or CHECK_PLAIN_COUNTS); a byte-order mark before the
+    first key is read past. MISSED with words for each thing not found; n/a where none was given. It never raises."""
+    name = SERVICE_REFUSED_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no services made from two trees were given (--service-refused)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the services' file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in REFUSED_KEYS if key not in got]
+        refused, taken = got.get("refused-text", ""), got.get("taken-text", "")
+        if "refused-exit" in got and _number(got["refused-exit"]) != REFUSED_WIN32:
+            missing.append("the service from the job's own Python: exit %s, not %d (its own number)" % (
+                got["refused-exit"][:40], REFUSED_WIN32))
+        if "refused-own" in got and _number(got["refused-own"]) != REFUSED_OWN:
+            missing.append("the service from the job's own Python: its own number %s, not 15 (0x%08X or %d)" % (
+                got["refused-own"][:40], REFUSED_OWN, REFUSED_OWN))
+        if "refused-text" in got:
+            if REFUSED_SAID not in refused:
+                missing.append("the service from the job's own Python: its text file's line does not say %s (%s)" % (
+                    REFUSED_SAID, refused[:200]))
+            if not CHECK_PATH.search(refused):
+                missing.append("the service from the job's own Python: its text file's line names no path of a drive"
+                               " (%s)" % refused[:200])
+        if "taken-state" in got and got["taken-state"] != "Running":
+            missing.append("the service from the copy under Program Files: its state is %s, not Running" % (
+                got["taken-state"][:40] or "not said"))
+        if "taken-text" in got and not (TAKEN_SAID in taken and (CHECK_COUNTS.search(taken)
+                                                                 or CHECK_PLAIN_COUNTS.search(taken))):
+            missing.append("the service from the copy under Program Files: its text file's line holds no pass's"
+                           " sentence with its counts (%s)" % taken[:200])
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "the service from the job's own Python did not run (exit %d, its own number 0x%08X): %s;"
+                 " the one from the copy under Program Files ran: %s" % (REFUSED_WIN32, REFUSED_OWN, refused[:300],
+                                                                          taken[:200]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the services made from two trees cannot be read (%s)" % type(exc).__name__)]
+
+
 def read_check(text, name, counts_said, option, second):
     """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
     names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
@@ -1641,6 +1716,7 @@ def main(argv=None):
     p.add_argument("--service-check")
     p.add_argument("--service-check-plain")
     p.add_argument("--service-check-drive")
+    p.add_argument("--service-refused")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1683,6 +1759,9 @@ def main(argv=None):
     checked = a.service_check_drive
     rows += read_service_check_drive(None if checked is None else (text(checked) if os.path.isfile(checked)
                                                                     else ""))
+    # X52 (ADR-0013 T-3): the same, of the two services made to run `raqib service run`, which asks the check
+    refused = a.service_refused
+    rows += read_service_refused(None if refused is None else (text(refused) if os.path.isfile(refused) else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

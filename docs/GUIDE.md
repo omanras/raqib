@@ -597,8 +597,15 @@ calls fixed is taken whatever it is - one carried from another machine, an image
 a program serves - and its names are judged as any other's. The drive is read with the check's own
 reader of its device's name; the autostart reader also asks a drive's kind, for its own purpose. The
 letter is read as the session that asks names it, and the system's account may name it otherwise:
-the install is to have the service ask the check again at its own start, as the system (not built
-yet). A library Raqib loads by name is searched in the program's own folder, in System32 and in
+so a service of Windows that runs `raqib service run` asks the check again at every start of its
+own, as the system, and does not watch a tree it does not take: it says the whole refusal in its
+text file (`service.txt` in `C:\ProgramData\Raqib`), starts no watch, and fails to start with a
+number of its own, 15 (0x2000000F, 536870927), which the system's log says. A service of Windows
+made by hand from a tree a user may change, which watched until now, stops watching with this
+version and says why: make it from a copy the check takes. The check at the start is a reading at
+that moment, and the code that asks it has already run as the system by then: a tree a user may
+change is refused before it watches, not before it runs. A library Raqib loads by name is searched
+in the program's own folder, in System32 and in
 folders the process itself added - read in the interpreter's library, not measured: a test holds
 each mention in Raqib's code of a word on its lists (words by which a library is loaded, a folder
 added or ctypes reached), exactly as it is, so that a change made in good faith and written the
