@@ -1,0 +1,39 @@
+name: service-start-stop
+# Probe only (never merged): the twelfth measurement, second part - a branch's runner asking the check of its own code at its
+# start (ADR-0013 Amendment T), on real Windows.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_start_stop.ps1, .github/workflows/service-start-stop.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: claude/M12.4c2b1
+jobs:
+  field:
+    name: the service asks the check at its start, on real Windows (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, its tests and its rig tools
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q .
+      - name: asked in the field
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_start_stop.ps1"
