@@ -2190,19 +2190,27 @@ collector that is slow, down or refusing never delays or loses a capture
   code that asks it has already run as the system by then (the interpreter,
   its site and the `import` lines of its *.pth files, and Raqib's own
   modules, or the packed program and its runtime), so a tree a user may
-  change is refused before it watches, not before it runs - keeping it from
-  running as the system at all is the install's, not built yet. A service made
-  by hand from such a tree, which watched until now, stops watching with
-  this version and says why. The service's own code runs with the system's
-  rights, so a defect in it is the system's. Measured (Amendment T): asked by
-  the system's own account, the check said word for word what it said to
-  the user who asked, on x64 and ARM64; this runner's own refusal on a real
-  machine and a tree near the check's bound were not. Not measured: a place whose list is closed
-  in meaning but written otherwise (refused, by the letter); a place on a
-  volume that keeps no owners; a shutdown of the machine; a start at boot;
-  the manager's limit of 30 s under a slow start; another account than the
-  system's; a place on another volume, or one with a file held open by
-  another process; Windows before the runners' versions.
+  change is refused before it watches, not before it runs - and it is a
+  reading of the tree as its own code tells it (N-2): a tree a user already
+  changed may make its own check pass, and is then watched. Keeping such a
+  tree from running as the system at all is the install's, not built yet. A
+  service made by hand from such a tree, which watched until now, stops
+  watching with this version and says why. The service's own code runs with
+  the system's rights, so a defect in it is the system's. Measured
+  (Amendments T and U; x64 and ARM64): asked by the system's own account,
+  the check said word for word what it said to the user who asked; and this
+  runner, as a real service, did not run from three trees it refused - the
+  system's log naming its number 15 - and watched from two it took; over
+  about 161000 names its check took 10 s and 32 s, and the service then ran.
+  While its check walks, the system refuses a Stop to its caller (measured:
+  error 1052), for as long as the walk takes, and a start command that waits
+  for the check-point to move gave up after about 20 s of a walk of 32 s
+  while the service went on to run. Not measured: a disk slower than those;
+  a place whose list is closed in meaning but written otherwise (refused, by
+  the letter); a place on a volume that keeps no owners; a shutdown of the
+  machine; a start at boot; a start that outlasts the wait it told; another
+  account than the system's; a place on another volume, or one with a file
+  held open by another process; Windows before the runners' versions.
 - **What the check of the code does not read (`raqib service check`;
   ADR-0013 Amendments K to Q).** On Windows `raqib service check` says
   whether the code a service would run is the system's alone, by the owners
@@ -2247,8 +2255,8 @@ collector that is slow, down or refusing never delays or loses a capture
   serves: who made its lists is not read, and its names are judged as any
   other's. The letter is read as the session that runs the check names it;
   the system's account may name it otherwise or not at all, which the
-  service closes by asking the check at every start of its own, as the
-  system (Amendment T). The system's PATH: a test
+  service answers for itself by asking the check at every start of its own,
+  as the system (Amendment T). The system's PATH: a test
   (tests/test_libraries.py) reads each place in raqib/ where a library is
   loaded, in the forms it knows, and holds that each is a plain name written
   in the code, on one list, with no folder added to the search, no search

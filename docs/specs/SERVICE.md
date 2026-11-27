@@ -282,9 +282,11 @@ probe), Amendment G (this runner's own field run as a real service, f8af8f5, and
 Amendment H (the candidate of Amendment E ended from outside, by the probe 02de365, as Amendment I records it),
 Amendment I's field run of 8914d37 (the runner with the first build of the wait, before the review's changes, as a
 real service ended from outside), Amendment J's field run of 054ef34 (this runner, the same way), the rig's own
-Windows job, which ends the service at every run (X48), and Amendment T's measurements (the check asked by the
-system's own account in a service, and the runner of 0.13.0 serving from two copies, by the probes b1ee4fb and
-25a25a3; not this runner's check).
+Windows job, which ends the service at every run (X48), Amendment T's measurements (the check asked by the system's
+own account - a task of the scheduler run as it - and the runner of 0.13.0 serving from two copies, by the probe
+25a25a3; the service manager's answers, by the probe b1ee4fb), and Amendment U's field run of a411eda (this runner
+asking the check at its start, as a real service made from five trees and from one made large, by the probes 5bdfbd6
+and f01da5c).
 
 **The shape.** `raqib service run` is the command the system's service manager runs; nobody else. Its process hands
 the system its service table (StartServiceCtrlDispatcherW) in a second thread, and runs the watch in the main thread
@@ -346,48 +348,64 @@ place: Amendment F's measurements found that a handle with the right to read the
 renamed a folder while it was held); what keeps a taken place's name is its own list and owner (Amendment F's
 measurements: a plain user's write, listing, renaming and removal of a folder so made were each refused). Only then
 are the process's `HOME` and `USERPROFILE` the place, as the Linux unit's HOME is its state directory, so the watch's
-whole record is written under it. One folder is made, the place; two names are read: the place's, and the state of
-the watch before inside it (through raqib/host.py's `holder()`, which writes nothing; AH-2, Amendment I).
+whole record is written under it. One folder is made, the place; the runner itself reads two names: the place's, and
+the state of the watch before inside it (through raqib/host.py's `holder()`, which writes nothing; AH-2, Amendment I);
+the check of its own code (T-1, below) reads the names of the code this process runs, and writes nothing.
 
-**The check of its own code (Amendment T, T-1 to T-4; M12.4c2b1).** `raqib service run` runs, as the system,
-whatever tree it was started from; `raqib service check` says whether a tree is the system's alone, but only to the
-session that asks it. So at every start, after the place is taken and its text file begun and before RUNNING, the
-runner asks the check itself: the same function of raqib/wincode.py, on the same road (packed or plain) and with
-nothing skipped, through one method of the system's object (`winservice.System.own_check`, which imports
-raqib/wincode.py at its call and hands it the check's own system object), by the very account and session that will
-run the watch - so the drive's letter, the paths and the lists are read as the service reads them. The order of a
-start is: START_PENDING (a wait of 5 s); the place made or found and read; the text file begun and its first line (the
-place); START_PENDING again with a wait of 60 s (`CHECK_WAIT_HINT`, T-2); the check; RUNNING; the wait for the watch
-before (AH-2, below); the watch. The check's seconds are read on the system's object's clock (monotonic), and its line
-in the text file says them. Taken, that one line is the pass's own sentence, as `raqib service check` prints it, and
-the road goes on: "raqib service run: its own code, checked at this start by this process (ADR-0013 T-1), in 0.31 s:
-raqib service check: the code a service would run is the system's alone: checked N names, ..." (with the drives it
-asked). A start that passes is otherwise line for line as before. Not taken, for any reason the check has - a name not
-the system's alone, with its role; a drive that is not a disk's volume; a plain interpreter not started with `-I`; a
-packed runtime it does not walk; not Windows - the line holds the whole refusal, as that command prints it ("...: raqib
-service check: NOT the system's alone: NAME, WORDS; no watch is begun; the system is told the service's own exit
-536870927 (0x2000000F: ...)"); an answer of a form the runner does not know, and an exception out of the check (its
-trace first), are refused the same way with their own words and "what was not read is never the system's". Each part
-of the answer is made printable and cut at 4000 characters, the cut marked "...". Then no watch is begun, the wait for
-the watch before is not entered, and the system is told the service's own number 15 (0x2000000F), from START_PENDING:
-the start command fails at once and the system's log says the number. A Stop that comes during the check is obeyed
-after it: where the check passed, no watch is begun and the system is told 0 (AF-4's line, "it was not begun"); where
-it refused, 15. A Stop that came before it does not skip it, and no START_PENDING is told after its STOP_PENDING.
+**The check of its own code (Amendment T, T-1 to T-4; M12.4c2b1).** `raqib service run` runs, as the system, whatever
+tree it was started from; `raqib service check` says whether a tree is the system's alone, but only to the session
+that asks it. So at every start, after the place is taken and its text file begun and before RUNNING, the runner asks
+the check itself: the same function of raqib/wincode.py, on the same road (packed or plain) and with nothing skipped,
+through one method of the system's object (`winservice.System.own_check`, which imports raqib/wincode.py at its call
+and hands it the check's own system object), by the very account and session that will run the watch - so the drive's
+letter, the paths and the lists are read as the service reads them. The order of a start is: START_PENDING (a wait of
+5 s); the place made or found and read; the text file begun and its first line (the place); START_PENDING again with a
+wait of 60 s (`CHECK_WAIT_HINT`, T-2); the check; RUNNING; the wait for the watch before (AH-2, below); the watch. The
+check's seconds are read on the system's object's clock (monotonic), and its line in the text file says them. Taken,
+that one line is the pass's own sentence, as `raqib service check` prints it, and the road goes on: "raqib service
+run: its own code, checked at this start by this process (ADR-0013 T-1), in 0.31 s: raqib service check: the code a
+service would run is the system's alone: checked N names, ..." (with the drives it asked). A start that passes is
+otherwise line for line as before. Not taken, for any reason the check has - a name not the system's alone, with its
+role; a drive that is not a disk's volume; a plain interpreter not started with `-I`; a packed runtime it does not
+walk; not Windows - the line holds the whole refusal, as that command prints it ("...: raqib service check: NOT the
+system's alone: NAME, WORDS; no watch is begun; the system is told the service's own exit 536870927 (0x2000000F:
+...)"); an answer of a form the runner does not know, and an exception out of the check (its trace first), are refused
+the same way with their own words and "what was not read is never the system's". Each part of the answer is made
+printable and cut at 4000 characters, the cut marked "...". Then no watch is begun, the wait for the watch before is
+not entered, and the system is told the service's own number 15 (0x2000000F), from START_PENDING: the start command
+fails at once and the system's log says the number. A Stop that comes during the check is obeyed after it: where the
+check passed, no watch is begun and the system is told 0 (AF-4's line, "it was not begun"); where it refused, 15. A
+Stop that came before it does not skip it, and no START_PENDING is told after its STOP_PENDING. On the machines
+measured no Stop reaches the runner then - the system refuses it to its caller (below) - and the road is kept for a
+system that delivers one.
 
-The wait of 60 s (T-2): Amendment T measured the check asked by the system's own account, in a service, on GitHub's
-Windows machines (x64 and ARM64, the probe branch 25a25a3): about 150 names in 0.2 to 0.3 s packed and about 10000 in
-1.1 to 1.9 s for a plain interpreter, its answers word for word the ones the user who asked got. A tree near the
-check's bound of 200000 names (WALK_MAX) was not measured: at the slowest rate measured it would take about 38 s, and
-the wait told is above that with room. Whether the system takes a second START_PENDING's wait with its check-point
-left at 0 was not measured. Said (T-4): a service of Windows made by hand from a tree a user may change, which watched
-until now, stops watching with this version and says why - in its text file and, by its number, in the system's log.
-The check at the start is a reading at that moment: a tree changed while the service runs is not seen until the next
-start (a watch of its own tree is another task). What the check at the start does not give, and is said: the code
-that asks it has already run as the system by then - the interpreter, its site and the `import` lines of its *.pth
-files, and Raqib's own modules up to the runner (N-2), or the packed program and its runtime - so a tree a user may
-change is refused before it watches, not before it runs; only a service that is not made from such a tree (the
-install's refusal, M12.4c2b2) keeps it from running as the system. The system told to start the service again after
-its number 15 is the install's too (M12.4c2b2).
+The wait of 60 s (T-2, U-2): Amendment T measured the check asked by the system's own account (a task of the scheduler
+run as it; x64 and ARM64, the probe branch 25a25a3): about 150 names in 0.2 to 0.3 s packed and about 10000 in 1.1 to
+1.9 s for a plain interpreter, its answers word for word the ones the user who asked got. Amendment U measured this
+runner as a real service (the probe branch 5bdfbd6, of a411eda; x64 and ARM64): its line of the check said 0.02 to
+0.03 s for the packed copy and 0.6 to 1.7 s for the copied Python; over that copy made large with 150000 empty files
+(about 161000 names) it said 9.8 s on x64 and 31.7 s on ARM64, and the service then said RUNNING and watched - the
+second START_PENDING told with its check-point left at 0 and the wait of 60 s; and with more files than the check's
+bound of 200000 names (WALK_MAX) it was refused after 40.7 s on ARM64, with the number 15. So on the slower machine
+measured a tree at the bound takes about two thirds of the wait told; a slower disk is not measured. While the check
+walked, the system said of the service START_PENDING with its check-point 0 and the wait of 60 s; a Stop sent then was
+refused to its caller (the system's error 1052, "The requested control is not valid for this service") and never
+reached the runner - so the service is not stopped through the manager while its check walks, for as long as the walk
+takes, which the check's bound bounds; a start command that waits on the state (`Start-Service`) waited the 10 s and
+the 32 s and took the start; one that waits for the check-point to move (`net start`) took the start of 10 s and, of
+the one of 32 s, said after about 20 s that the service could not be started, while the service went on to RUNNING
+(the probe branch f01da5c). The runner does not raise its check-point while the check walks: a task of its own (U-4).
+Said (T-4): a service of Windows made by hand from a tree a user may change, which watched until now, stops watching
+with this version and says why - in its text file and, by its number, in the system's log (measured: event 7024 of the
+Service Control Manager, "terminated with the following service-specific error: %%536870927"). The check at the start
+is a reading at that moment: a tree changed while the service runs is not seen until the next start (a watch of its
+own tree is another task). What the check at the start does not give, and is said: the code that asks it has already
+run as the system by then - the interpreter, its site and the `import` lines of its *.pth files, and Raqib's own
+modules up to the runner (N-2), or the packed program and its runtime - so a tree a user may change is refused before
+it watches, not before it runs - and, as for the command (N-2), it is a reading of the tree as its own code tells it:
+a tree a user already changed may make its own check pass, and is then watched; only a service that is not made from
+such a tree (the install's refusal, M12.4c2b2) keeps it from running as the system. The system told to start the
+service again after its number 15 is the install's too (M12.4c2b2).
 
 **The text file.** A service has no standard streams (each is None; Amendment E). The runner gives the watch a
 text file in the place, `service.txt`, for its report and its errors. It is begun anew at each start; the one
@@ -554,25 +572,26 @@ ends its process once and keeps the two files (tools/rig/service_again.ps1).
 
 **What was not measured.** A place whose list is closed in meaning but written otherwise (refused, by the letter); a
 place on a volume that keeps no owners; an owner written as a whole SID and not as SY or BA (refused with 13, by the
-letter); a Stop that comes while the service is still START_PENDING; a RUNNING the system does not take (the service
-would stay START_PENDING for the watch's life, said only in the text file); where the Stop's interrupt surfaces after
-the watch's call on a real machine; a call by a file's owner that asks only for the right to change its list, inside a
-folder closed after he put it there; reparse points of other kinds than a junction and a link; the runner under Python
-3.11 as a service; a Stop that comes while the watch is still starting (it may end with no final report and an
-unfinished state, which the next watch says as a hole; nothing else is built for it); a watch that ignores its
-interrupt (not built); a shutdown of the machine (the control was not sent); a service's start at boot; the manager's
-limit of 30 s under a slow start; another account than the system's; a place on another volume, or one with a file
-held open by another process; Windows before the runners' versions. Of the watch before (Amendment H): a power loss; a
-machine's shutdown without a Stop; a clock set back between the heartbeat and the start (the seconds said are then
-wrong, and said as read); what a power loss leaves of the state on NTFS or ext4 (AI-2); the Linux unit's exit 3 after
-such a start, as systemd reads it; the hole of a state that cannot be read, and the early write on a start ended
-before its first round, on a real machine; a state removed before a start - the watch before is then said nowhere,
-also where an administrator removes it as the unparsed refusal advises; an object at the state's path that is no host
-watch's (taken as nothing held, said nowhere); a state with a negative or NaN staleness written by a living watch
-(said as one that ended or stopped writing); taking over at once where the process the state names is gone (recorded,
-not ruled). Of the check at the start (Amendment T): a tree near WALK_MAX; a second START_PENDING's wait with its
-check-point at 0; this runner's own refusal (15) on a real machine, before the rig's X52 reads it. The install, its
-start at boot, the system told to start it again, and the event log are M12.4c2b2's.
+letter); a RUNNING the system does not take (the service would stay START_PENDING for the watch's life, said only in
+the text file); where the Stop's interrupt surfaces after the watch's call on a real machine; a call by a file's owner
+that asks only for the right to change its list, inside a folder closed after he put it there; reparse points of other
+kinds than a junction and a link; the runner under Python 3.11 as a service; a Stop that comes while the watch is
+still starting (it may end with no final report and an unfinished state, which the next watch says as a hole; nothing
+else is built for it); a watch that ignores its interrupt (not built); a shutdown of the machine (the control was not
+sent); a service's start at boot; a start that outlasts the wait it told (one of 32 s under a wait of 60 s was taken);
+another account than the system's; a place on another volume, or one with a file held open by another process; Windows
+before the runners' versions. Of the watch before (Amendment H): a power loss; a machine's shutdown without a Stop; a
+clock set back between the heartbeat and the start (the seconds said are then wrong, and said as read); what a power
+loss leaves of the state on NTFS or ext4 (AI-2); the Linux unit's exit 3 after such a start, as systemd reads it; the
+hole of a state that cannot be read, and the early write on a start ended before its first round, on a real machine; a
+state removed before a start - the watch before is then said nowhere, also where an administrator removes it as the
+unparsed refusal advises; an object at the state's path that is no host watch's (taken as nothing held, said nowhere);
+a state with a negative or NaN staleness written by a living watch (said as one that ended or stopped writing); taking
+over at once where the process the state names is gone (recorded, not ruled). Of the check at the start (Amendments T
+and U): a disk slower than the two machines measured, on which a tree near WALK_MAX may outlast the wait told; a
+machine joined to a domain, or one whose Program Files an administrator's policy lists otherwise; a tree changed
+between the check and the watch's own imports. The install, its start at boot, the system told to start it again, and
+the event log are M12.4c2b2's.
 
 X52 (`tools/rig/check.py --service-refused FILE`, T-3; the job's wiring is the Table's): FILE holds lines `key: value`
 of two services made to run `raqib service run` - `refused-exit`, `refused-own` and `refused-text` of the one made from
@@ -643,8 +662,9 @@ letter names: each drive a path of the walk is on is asked once (its letter comp
 program's or the interpreter's drive first, then each drive of a root, an entry of the path (one that is not there
 too), a line of a *.pth file or a name the interpreter itself looks for, as it is met. The letter is read as the
 session that runs the check names it: the system's account may name a letter otherwise, or not at all, and the check
-does not ask it; the service closes this by asking the check at every start of its own, as the system, and not
-watching a tree it refuses (Amendment T, T-1: the runner's section, above). The system's answer is its kind (GetDriveTypeW of `X:\`, a number) and its device's name (the
+does not ask it; the service answers this for itself by asking the check at every start of its own, as the system, and
+not watching a tree it refuses (Amendment T, T-1: the runner's section, above; measured there: a letter a user's
+session gave to a folder is not there for the system at all). The system's answer is its kind (GetDriveTypeW of `X:\`, a number) and its device's name (the
 first name QueryDosDeviceW gives for `X:`), read by one function beside the one reader of a name
 (`winservice.System.read_drive`). The device's name has that one reader in the tree; the kind has two, for the
 autostart reader asks it too, for its own purpose (`raqib/autostart.py`, AJ-4). A path is judged only where its drive

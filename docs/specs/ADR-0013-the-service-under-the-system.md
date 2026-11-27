@@ -1024,3 +1024,49 @@ service.
   that grow (5 s, 30 s, 300 s; the count forgotten after an hour without a failure), so that a service ended
   from outside is back in seconds and a refusal that cannot pass is asked again every five minutes and said each
   time.
+
+## Amendment U (the Table, 2026-11-27) - the review of M12.4c2b1 (docs/review/2026-11-27-M12.4c2b1.md) and its field runs: what the check at the start gives, said truly; lands as 0.14.0
+The builder (a411eda) built T-1 to T-3 and asked ten questions; the reviewer's verdict was NEXT with small
+fixes. Both found the Table's own words wrong: T-1's FOR said the service is never the road by which a user's
+file runs as the system, and it cannot be - the code that asks the check has run as the system by then. Measured
+on real Windows after the build (the probe branch 5bdfbd6 and f01da5c, of a411eda; the rig's own job on 4750b1f;
+x64 and ARM64): a service made from the job's own Python, from its own packed folder and from a copy under
+Program Files started without `-I` did not run - STOPPED, the system's exit 1066 with the service's own
+0x2000000F, two lines in its text file (the place, the refusal with the name and the entry), and event 7024 in
+the system's log with the number; from the packed copy and from the Python copied one folder deeper with `-I` it
+ran and watched, its line saying the pass in 0.02 to 0.03 s and 0.6 to 1.7 s. Over that copy made large (about
+157000 to 161000 names) the check took 9 to 10 s on x64 and 31 to 32 s on ARM64 and the service then ran; past
+WALK_MAX it was refused after 40.7 s. While it walked the system said START_PENDING, check-point 0, wait 60 s; a
+Stop sent then was refused to its caller (error 1052) and reached nothing; `Start-Service` waited and took both
+starts; `net start` took the one of 10 s and gave up on the one of 32 s after about 20 s, saying the service
+could not be started while it went on to RUNNING. The rig: X48 to X52 MET.
+- U-1 (T-1's reason, corrected; the builder's question 1, the review's finding 1). What the check at the start
+  gives: the answer of the very account and session that runs, at every start; a tree that is not the system's
+  alone is not watched from, and says so in the text file and the system's log; a tree that stopped being the
+  system's alone since it was installed is found at its next start. What it does not give: it does not keep such
+  a tree from running as the system - the interpreter, its site, the `import` lines of *.pth files and Raqib's
+  modules up to the runner have run by then - and, run by the code it judges (N-2), a tree already changed may
+  make its own check pass. Keeping such a tree from being made a service at all is the install's (M12.4c2b2),
+  asked by an administrator's session of a tree no user has yet changed. T-1's FOR is read as this. MUST NOT
+  TOUCH: no document says the check at the start prevents.
+- U-2 (the wait and the check-point; questions 3 and 4, as measured). The wait of 60 s stands: the system took
+  it with the check-point left at 0, and a tree at the check's bound took about two thirds of it on the slower
+  machine. A Stop does not reach the runner while it starts; the road built for one is kept, tested by the
+  stand-in, and said as not taken on the machines measured. Question 5: a Stop before the check does not skip it
+  - a refusal hidden behind a Stop would be a finding lost.
+- U-3 (the review's small findings, made by the Table). Whatever ends the check is a refusal with 15, every
+  BaseException (question 6; nothing legitimate is raised there); the number is set before anything is written;
+  X52 reads only the runner's own line, never the command's output; a vacuous assertion out, and the plain
+  road's sentence tied to the command's as the packed road's was. Questions 2, 7, 8, 9 and 10: as built (a
+  function of wincode that makes the line belongs to a task in which wincode may change; no released version
+  told 15).
+- U-4 (recorded for a task of its own, after M12.4c2b2). The runner does not raise its check-point while the
+  check walks, and a start command that waits for it to move gives up on a long walk (measured: `net start`,
+  about 20 s into a walk of 32 s) though the service starts. It touches the status road and its lock, and is
+  measured with that command before it lands. Until then the documents say it. Also recorded, not ruled: the
+  trace of an exception out of the check is written as it is, not made printable; a Stop asked before a refused
+  check is not said in the text file; raqib/cli.py's comment that it alone imports wincode is no longer true.
+- U-5 (lands, and next). M12.4c2b1 lands as 0.14.0 after the gate on the tree to be merged. The changelog says
+  first that a service of Windows made by hand from a tree a user may change stops watching with this version
+  (T-4). Next: M12.4c2b2 (install, remove and status; the install refuses a tree the check does not take, starts
+  the service by the system's own call and waits on its state), then the check-point (U-4).
