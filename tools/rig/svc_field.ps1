@@ -95,6 +95,14 @@ Try-Start "open and not empty"
 Events-Tail
 "the place after it: $(Sddl $place); files in it: $((Get-ChildItem $place -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', ')"
 
+"=== a place closed after it existed (the list set on it): refused"
+Clear-Place
+New-Item -ItemType Directory -Force $place | Out-Null
+icacls $place /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+"the place: $(Sddl $place)"
+Try-Start "closed after it existed"
+"the place after it: $(Sddl $place)"
+
 "=== the place an administrator made, open and empty"
 Clear-Place
 New-Item -ItemType Directory -Force $place | Out-Null
