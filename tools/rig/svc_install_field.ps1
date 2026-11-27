@@ -6,7 +6,11 @@
 # Program Files, one under the public folder, one local user and the service RaqibWatch, and removes them.
 param([string]$PackedDir)
 $ErrorActionPreference = "Continue"
-function Flat($lines) { ((($lines -join " | ") -replace "S-1-5-21-[0-9-]+", "S-1-5-21-<a user>") -replace "[ \t]+", " ").Trim() }
+function Flat($lines) {
+  $t = ((($lines -join " | ") -replace "S-1-5-21-[0-9-]+", "S-1-5-21-<a user>") -replace "[ \t]+", " ").Trim()
+  $t = $t -replace "raqib service check: the code a service would run is the system's alone: checked (\d+) names.*?HarddiskVolume\d+`"", '<the check passed: $1 names>'
+  $t -replace "a service named RaqibWatch is there \(opened with the rights 0x5.*?\| (RESULT: [A-Z, ]+)", '<status''s lines> | $1'
+}
 function Cut($s, $n) { if ($null -eq $s) { "" } else { $s.Substring(0, [Math]::Min($n, $s.Length)) } }
 $name = "RaqibWatch"
 $place = Join-Path $env:ProgramData "Raqib"
