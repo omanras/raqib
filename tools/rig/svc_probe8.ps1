@@ -18,7 +18,8 @@ $exe = "$home8\raqib.exe"
 "it says: $(& $exe --version)"
 $inner = (Get-ChildItem "$home8\_internal" -File | Select-Object -First 1).FullName
 $deep = (Get-ChildItem "$home8\_internal" -Directory | Select-Object -First 1).FullName
-python $script --survey "C:\" "C:\Program Files" $home8 $exe "$home8\_internal" $inner $deep "D:\" "C:\Users" $env:USERPROFILE | ForEach-Object { Mask (Cut $_ 420) }
+$pyexe = (Get-Command python).Source; $pydir = Split-Path $pyexe
+python $script --survey "C:\" "C:\Program Files" $home8 $exe "$home8\_internal" $inner $deep "D:\" "C:\Users" $env:USERPROFILE "C:\Windows" "C:\Windows\System32" "C:\Windows\System32\kernel32.dll" "C:\Windows\System32\sc.exe" "C:\ProgramData" $pyexe $pydir (Split-Path $pydir) "$pydir\Lib\site-packages" "$pydir\Lib\os.py" $env:LOCALAPPDATA $env:TEMP | ForEach-Object { "WHOLE " + (Mask $_) }
 "reparse points under it: $((Get-ChildItem $home8 -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue).Count); files and folders under it: $((Get-ChildItem $home8 -Recurse -Force).Count)"
 
 New-Item -ItemType Directory -Force $pub | Out-Null
