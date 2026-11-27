@@ -15,7 +15,7 @@ python $probe numbers $name $command
 "left after it: $((Get-CimInstance Win32_Service -Filter "Name='$name'" | Measure-Object).Count) service(s) of the name"
 Remove-Item -Recurse -Force $place -ErrorAction SilentlyContinue
 "=== what a plain user may open and read of a service"
-python $probe numbers $name $command | Select-Object -First 1
+python $probe make $name $command | Select-Object -First 1
 New-Item -ItemType Directory -Force $pub | Out-Null
 icacls $pub /grant "*S-1-1-0:(OI)(CI)F" | Out-Null
 $pw = ConvertTo-SecureString ((-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 22 | ForEach-Object { [char]$_ })) + "aA1!") -AsPlainText -Force
@@ -45,10 +45,8 @@ Remove-Item -Recurse -Force $place -ErrorAction SilentlyContinue
 "=== the same exit, without the flag"
 New-Item -ItemType Directory -Force $place | Out-Null
 $before = Get-Date
-python $probe numbers $name $command | Select-Object -First 4
-$h = Get-Service $name -ErrorAction SilentlyContinue
-try { Start-Service $name -ErrorAction Stop } catch { "start: $(($_.Exception.Message -split "`n")[0])" }
-Start-Sleep 12
+python $probe noflag $name $command
+Start-Sleep 2
 "what the system's log says of it since: $((Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'; StartTime=$before} -ErrorAction SilentlyContinue | Where-Object { $_.Message -match $name -or $_.Message -match 'Raqib probe 10' } | Group-Object Id | ForEach-Object { "$($_.Count) of event $($_.Name)" }) -join '; ')"
 python $probe remove $name
 "=== removed"

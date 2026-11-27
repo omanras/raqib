@@ -4,6 +4,8 @@ ruling on `raqib service install | remove | status` for Windows. It makes one se
     python svc_probe10.py numbers NAME COMMAND   the system's numbers for each call made at the wrong moment
     python svc_probe10.py plain NAME             what a caller with no rights may open and read
     python svc_probe10.py flag NAME COMMAND      made with "start again on an exit of its own" (the failure flag)
+    python svc_probe10.py noflag NAME COMMAND    the same without the flag
+    python svc_probe10.py make NAME COMMAND      made, and nothing more
     python svc_probe10.py remove NAME
 """
 import ctypes
@@ -169,9 +171,12 @@ def main(argv):
         return 1
     print(config(h))
     print(described(h))
-    if what == "flag":
+    if what == "make":
+        adv.CloseServiceHandle(h)
+        return 0
+    if what in ("flag", "noflag"):
         print("start: %s; %s" % (said(adv.StartServiceW(h, 0, None)), state(h)))
-        for i in range(8):
+        for i in range(6):
             time.sleep(3)
             print("    after %2d s: %s" % (3 * (i + 1), state(h)))
         adv.CloseServiceHandle(h)
