@@ -5,6 +5,51 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.14.0 - 2026-11-27
+
+What is new:
+- First, for anyone who made a service of Windows by hand: `raqib service run` now asks `raqib service check` of
+  its own code at every start, as the system, before it says it is running (ADR-0013 Amendments T and U). A
+  service made from a tree a user may change, which watched until now, stops watching with this version. It
+  fails to start with a number of its own, 15 (0x2000000F); its text file (`service.txt` in
+  `C:\ProgramData\Raqib`) says the whole refusal, with the name and the entry refused; and the system's log
+  names the number (event 7024). Make the service from a copy the check takes: a packed Raqib under Program
+  Files, or a Python of its own one folder deeper there, started with `-I`.
+- Where the check takes the code, the text file gets one new line: the pass's sentence and the seconds the check
+  took. Nothing else changes in a start.
+- What this gives and what it does not. It is the answer of the very account that runs, at every start, and a
+  tree that is not the system's alone is not watched from. It does not keep such a tree from running as the
+  system: the code that asks the check has run by then, and the check is run by the code it judges. Refusing to
+  make such a service at all is the install's, which is not built yet.
+- Measured on GitHub's Windows machines, x64 and ARM64, as a real service: made from three trees the check
+  refuses it did not run, with 15 and the log's line; made from two it takes it ran and watched, the check
+  taking 0.02 s for a packed copy and 0.6 to 1.7 s for a copied Python. Over a tree made large (about 160000
+  names) the check took 10 s and 32 s and the service then ran; past the check's bound it was refused.
+- The rig makes its service from a copy under Program Files, and reads a refused and a taken service at every
+  run (X52).
+- The test of the libraries Raqib loads by name now says what it is for - a guard against a change made in good
+  faith that no reader notices, not a wall against code written to pass it - and names what it does not hold
+  (ADR-0013 Amendment S).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window or the Linux service. On Windows, before you update a service made by
+  hand, ask the check as the service is run; where it refuses, make the service from a copy it takes.
+
+Not measured:
+- A disk slower than the two machines measured: a very large tree may then outlast the wait of 60 s the service
+  tells the system while it checks.
+- While the check walks, the system refuses a Stop (measured), and a start command that waits for the service's
+  check-point to move gave up about 20 s into a check of 32 s although the service then started; the service
+  does not raise its check-point yet. Only a very large tree walks that long.
+- A machine joined to a domain; Program Files with access lists changed by policy; a tree changed between the
+  check and the watch's own start.
+- Installing, removing and asking the status of the service on Windows: not built.
+
 ## 0.13.0 - 2026-11-27
 
 What is new:

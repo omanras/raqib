@@ -1,5 +1,7 @@
 # The rig's service of Windows, ended from outside (ADR-0013 AH-3, AI-5; X48). On GitHub's throwaway Windows
-# machine it makes the service RaqibWatch from the Raqib this job installed (`python -I -m raqib service run`),
+# machine it makes the service RaqibWatch from a copy of this job's Python, Raqib in it, that it puts under Program
+# Files as an administrator would, one folder deeper (`python -I -m raqib service run`; ADR-0013 T-3: the service
+# asks the check of its own code at every start, and the job's own Python is a tree a user may write),
 # tells the system to start it again 5 s after an end that was not a Stop, ends its process once, waits for the
 # service to read a round again, and keeps what tools/rig/check.py reads:
 #
@@ -9,16 +11,18 @@
 #   FOLDER\service-events.jsonl   the place's events file, both runs in it
 #   FOLDER\service.txt, service.before.txt   the two runs' own text, for a person
 #
-# Then it stops the service, removes it and removes its place (C:\ProgramData\Raqib). It judges nothing: a step
-# that fails leaves a file unwritten, and the check says X48 MISSED with the words of what is missing. It ends no
-# process but the service's own, which it made.
+# Then it stops the service, removes it and removes its place (C:\ProgramData\Raqib) and the copy. It judges
+# nothing: a step that fails leaves a file unwritten, and the check says X48 MISSED with the words of what is
+# missing. It ends no process but the service's own, which it made.
 param([Parameter(Mandatory = $true)][string]$Out)
 $ErrorActionPreference = "Continue"
 $name = "RaqibWatch"
 $place = Join-Path $env:ProgramData "Raqib"
-$py = (Get-Command python).Source
+$holder = Join-Path $env:ProgramFiles "RaqibRigService"   # N-1: the interpreter two folders below Program Files
+$py = Join-Path $holder "Py\python.exe"
 function Svc { Get-CimInstance Win32_Service -Filter "Name='$name'" }
-New-Item -ItemType Directory -Force $Out | Out-Null
+New-Item -ItemType Directory -Force $Out, $holder | Out-Null
+Copy-Item (Split-Path (Get-Command python).Source) (Join-Path $holder "Py") -Recurse
 if (Test-Path $place) { Remove-Item -Recurse -Force $place }
 New-Service -Name $name -BinaryPathName "`"$py`" -I -m raqib service run" -StartupType Manual | Out-Null
 sc.exe failure $name reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
@@ -47,6 +51,6 @@ try { Stop-Service $name -ErrorAction Stop; "stopped" } catch { "the stop failed
 Copy-Item "$place\.raqib\host\events.jsonl" (Join-Path $Out "service-events.jsonl") -ErrorAction SilentlyContinue
 Copy-Item "$place\service.txt", "$place\service.before.txt" $Out -ErrorAction SilentlyContinue
 sc.exe delete $name | Out-Null
-Remove-Item -Recurse -Force $place -ErrorAction SilentlyContinue
-"removed: the service $(-not (Svc)), its place $(-not (Test-Path $place))"
+Remove-Item -Recurse -Force $place, $holder -ErrorAction SilentlyContinue
+"removed: the service $(-not (Svc)), its place $(-not (Test-Path $place)), the copy $(-not (Test-Path $holder))"
 exit 0

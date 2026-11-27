@@ -891,6 +891,21 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert 'subst "${letter}:" $system' in drive and 'subst "${letter}:" /D' in drive and "service check" in drive
     assert "tools\\rig\\service_check_drive.ps1 -Packed $env:RUNNER_TEMP\\service-check\\pack\\dist\\raqib" in windows
     assert ("--service-check-drive $env:RUNNER_TEMP\\service-check-drive\\service-check-drive.txt" in windows)
+    # T-3 (X48, X52): the job's services are made from a copy of its Python under Program Files, one folder deeper,
+    # with -I; one more is made from the job's own Python, which the runner's own check refuses
+    again = (ROOT / "tools" / "rig" / "service_again.ps1").read_text(encoding="utf-8")
+    refused = (ROOT / "tools" / "rig" / "service_refused.ps1").read_text(encoding="utf-8")
+    for script in (again, refused):
+        assert script.isascii() and "pip install" not in script and "taskkill" not in script.replace(
+            "taskkill /f /pid $killed", "")   # X48 ends the one process it made, and nothing else does
+        assert "-I -m raqib service run" in script and "Join-Path $env:ProgramFiles" in script
+        assert "Remove-Item -Recurse -Force $holder" in script or "$place, $holder" in script
+    assert '$py = Join-Path $holder "Py\\python.exe"' in again and "(Get-Command python).Source) (Join-Path" in again
+    assert all("%s: " % key in refused for key in check.REFUSED_KEYS)
+    assert "its own code, checked at this start" in refused and check.RUNNER_SAID.endswith(
+        "its own code, checked at this start")
+    assert "tools\\rig\\service_refused.ps1 -Out $env:RUNNER_TEMP\\service-refused" in windows
+    assert "--service-refused $env:RUNNER_TEMP\\service-refused\\service-refused.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1347,3 +1362,100 @@ def test_x51_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
 def test_x49_and_x50_still_read_the_pass_with_its_drives():
     assert "C: \"\\Device\\HarddiskVolume3\"" in checked_line() and check.CHECK_COUNTS.search(checked_line())
     assert "D: \"\\Device\\HarddiskVolume1\"" in plain_line() and check.CHECK_PLAIN_COUNTS.search(plain_line())
+
+
+# --- X52 (ADR-0013 T-1, T-3, M12.4c2b1): the service asks the check of its own code at every start -----------------
+def service_lines():
+    """The runner's two lines of the check, as raqib/winservice.py writes them: a refusal of a folder a user may
+    write (the placeholder `user`) and the plain road's pass."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode, winservice
+    head = "raqib service run: its own code, checked at this start by this process (ADR-0013 T-1), in 0.31 s: "
+    bad = ("C:\\Users\\user\\rig\\python", wincode.as_code(0x10, "O:S-1-5-21-1-2-3-1001D:P(A;;FA;;;SY)"))
+    told = "; no watch is begun; the system is told %s" % winservice.told(winservice.EXIT_NOT_ALONE)
+    return head + winservice.REFUSED_SAID % bad + told, head + winservice.PASS_SAID % plain_line().split(": ", 2)[2]
+
+
+def refusedfile(**kw):
+    refused, taken = service_lines()
+    keys = {"refused-exit": "1066", "refused-own": "536870927", "refused-text": refused, "taken-state": "Running",
+            "taken-text": taken}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x52(text):
+    ((ident, state, words),) = check.read_service_refused(text)
+    assert ident.startswith("X52 ") and ident == check.SERVICE_REFUSED_NAME
+    return state, words
+
+
+def test_x52_met_where_the_users_tree_did_not_run_with_15_and_the_copy_under_program_files_ran():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import winservice
+    assert check.REFUSED_OWN == winservice.EXIT_NOT_ALONE == 0x2000000F and check.REFUSED_WIN32 == 1066
+    assert winservice.SERVICE_SPECIFIC == check.REFUSED_WIN32 and check.REFUSED_SAID in winservice.REFUSED_SAID
+    assert check.TAKEN_SAID in winservice.PASS_SAID
+    assert check.RUNNER_SAID == "raqib service run: " + winservice.CHECK_HEAD.split(" by this process")[0]
+    state, words = x52(refusedfile())
+    assert state == check.MET, words
+    assert words.startswith("the service from the job's own Python did not run (exit 1066, its own number"
+                            " 0x2000000F): raqib service run: its own code, checked at this start")
+    for own in ("0x2000000F", "0x2000000f", "536870927", "536870927 (0x2000000f)"):
+        assert x52(refusedfile(**{"refused-own": own}))[0] == check.MET, own
+    assert x52(refusedfile().replace("\n", "\r\n"))[0] == check.MET and x52("\ufeff" + refusedfile())[0] == check.MET
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"refused-exit": "0"}, "the service from the job's own Python: exit 0, not 1066"),
+    ({"refused-exit": "1077"}, "exit 1077, not 1066"),
+    ({"refused-own": "0"}, "its own number 0, not 15 (0x2000000F or 536870927)"),
+    ({"refused-own": "15"}, "its own number 15, not 15"),
+    ({"refused-own": "0x2000000E"}, "its own number 0x2000000E, not 15"),
+    ({"refused-own": "fifteen"}, "its own number fifteen, not 15"),
+    ({"refused-text": "raqib service run: the watch returned with 0"}, "does not say NOT the system's alone"),
+    ({"refused-text": "raqib service check: NOT the system's alone: no path here"}, "names no path of a drive"),
+    ({"taken-state": "Stopped"}, "its state is Stopped, not Running"),
+    ({"taken-state": ""}, "its state is not said, not Running"),
+    ({"taken-text": "raqib service check: the code a service would run is the system's alone"},
+     "holds no pass's sentence with its counts"),
+    ({"taken-text": "raqib service check: NOT the system's alone: C:\\x, y"}, "holds no pass's sentence"),
+    # the command's own output, which says the same sentences, is not the service's text file (U-3)
+    ({"refused-text": "raqib service check: NOT the system's alone: C:\\Users\\user\\rig, owned by a user"},
+     "the service from the job's own Python: its text file's line is not the runner's own"),
+    ({"taken-text": plain_line()},
+     "the service from the copy under Program Files: its text file's line is not the runner's own"),
+    ({"refused-exit": None}, "no refused-exit"), ({"refused-own": None}, "no refused-own"),
+    ({"refused-text": None}, "no refused-text"), ({"taken-state": None}, "no taken-state"),
+    ({"taken-text": None}, "no taken-text"),
+])
+def test_x52_missed_for_each_thing_not_found(kw, said):
+    state, words = x52(refusedfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x52_missed_where_the_file_is_empty_and_n_a_where_none_was_given():
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x52(text) == (check.MISSED, "missing: the services' file is empty or was not written (silence is a"
+                                           " finding)")
+    assert x52(None) == (check.SKIP, "no services made from two trees were given (--service-refused)")
+    assert x52(object())[0] == check.MISSED   # never raises
+
+
+def test_x52_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "refused.txt").write_text(refusedfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    (tmp_path / "bom.txt").write_text("\ufeff" + refusedfile(), encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X52 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-refused", str(tmp_path / "refused.txt")]) == check.MET
+    assert row(["--service-refused", str(tmp_path / "bom.txt")]) == check.MET
+    assert row(["--service-refused", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP
