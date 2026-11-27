@@ -1,0 +1,58 @@
+name: service-check-field
+# Probe only (never merged): the field's word on a branch's `raqib service check` (ADR-0013 Amendment K).
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_check_field.ps1, .github/workflows/service-check-field.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: claude/M12.4c1
+jobs:
+  field:
+    name: raqib service check on real Windows (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, its tests and its rig tools
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib tests docs pyproject.toml tools/rig/check.py tools/rig/service_check.ps1 tools/rig/pack.sh
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1 pytest
+      - name: the check's own tests on this machine (the one that reads a real system file among them)
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_wincode.py -q -rs 2>&1 | Select-Object -Last 12
+          exit 0
+      - name: the rig's own step, and what X49 reads of it
+        shell: pwsh
+        run: |
+          & tools\rig\service_check.ps1 -Out $env:RUNNER_TEMP\service-check
+          Get-Content $env:RUNNER_TEMP\service-check\service-check.txt
+          python -c "import sys; sys.path.insert(0, 'tools/rig'); import check; [print(r) for r in check.read_service_check(open(sys.argv[1], encoding='utf-8-sig').read())]" $env:RUNNER_TEMP\service-check\service-check.txt
+          exit 0
+      - name: packed as one file too (the job's packer)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\one | Out-Null
+          Set-Location $env:RUNNER_TEMP\one
+          "import sys`nfrom raqib.cli import main`nsys.exit(main())" | Set-Content -Encoding ascii entry.py
+          python -m PyInstaller --noconfirm --onefile --name raqib --collect-all raqib --exclude-module tkinter --log-level WARN entry.py 2>&1 | Select-Object -Last 2
+          exit 0
+      - name: asked in the field
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_check_field.ps1" -PackedDir "$env:RUNNER_TEMP\service-check\pack\dist\raqib" -OneFile "$env:RUNNER_TEMP\one\dist\raqib.exe"
