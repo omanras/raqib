@@ -870,7 +870,16 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert 'cp -r "$RUNNER_TEMP/packed-home/.raqib/host" rig-out/packed-host' in linux           # the review's S3
     assert '--packed "$RUNNER_TEMP/packed.out"' in linux
     windows = rig[rig.index("\n  windows:"):rig.index("\n  linux:")]
-    assert "pyinstaller" not in windows.lower() and "--packed" not in windows
+    assert "--packed" not in windows   # X47's packed watch is Linux's
+    # K-8 (X49): the Windows job packs too, with the same pinned packer and pack.sh's arguments, for the check only
+    assert windows.lower().count("pyinstaller") == 1 and "pyinstaller==6.11.1" in windows
+    asked = (ROOT / "tools" / "rig" / "service_check.ps1").read_text(encoding="utf-8")
+    assert asked.isascii() and "pip install" not in asked and "--onefile" not in asked
+    for flag in ("--onedir", "--name %s " % check.PACKED_NAME, "--collect-all raqib", "--exclude-module tkinter",
+                 "--noconfirm"):
+        assert flag in asked
+    assert "service check" in asked and "tools\\rig\\service_check.ps1" in windows
+    assert "--service-check $env:RUNNER_TEMP\\service-check\\service-check.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---

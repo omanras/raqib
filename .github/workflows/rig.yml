@@ -19,6 +19,10 @@
 # The packed watch (ADR-0007 CG-3, M17.2a): on Linux the job installs PyInstaller 6.11.1 (the job's tool, never a
 # dependency of Raqib), packs the installed Raqib into one folder (tools/rig/pack.sh), runs its host watch of four
 # rounds with a home of its own, and X47 says whether its every ask was answered and no helper ended.
+# Whose the code is (ADR-0013 K-8, M12.4c1): on Windows the job packs the installed Raqib the same way
+# (tools/rig/service_check.ps1), copies the folder into Program Files, and asks `raqib service check` of that copy
+# and of the one in the job's own folder; X49 says whether the first was taken and the second refused. The check
+# changes nothing; the copy is removed by the run.
 name: rig
 
 on:
@@ -91,6 +95,12 @@ jobs:
         if: always()
         shell: pwsh
         run: tools\rig\service_again.ps1 -Out $env:RUNNER_TEMP\service-again
+      - name: whose the code a service would run is, asked of a packed Raqib in Program Files and of one in the job's folder (X49; the packer is this job's, never Raqib's)
+        if: always()
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -q pyinstaller==6.11.1
+          tools\rig\service_check.ps1 -Out $env:RUNNER_TEMP\service-check
       - name: the autostart places read by Raqib itself beside a second run of the stand-in (X37)
         if: always()
         shell: pwsh
@@ -98,7 +108,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -110,6 +120,7 @@ jobs:
           Copy-Item $env:RUNNER_TEMP\forward.json, $env:RUNNER_TEMP\autostart.json rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\events-check.out rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-again rig-out\service-again -Recurse -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\service-check\service-check.txt rig-out -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
