@@ -110,7 +110,8 @@ def verdict(got):
 
 class Reader:
     """One name's reading as the fixture holds it: what the real reader returns, or its OSError. Its drives (P-1,
-    asked before any name of them is read) read as a disk: C: as measured, D: a stand-in (DISK_STAND_IN)."""
+    asked before any name of them is read) read as a disk: C: as measured (drives.txt), D: a stand-in (DISK_STAND_IN).
+    """
 
     def __init__(self, rows):
         self.rows = {ntpath.normcase(p): (a, t, e) for p, a, t, e in rows}
@@ -256,11 +257,43 @@ def test_e1_attributes_not_read_are_refused():
 
 
 # --- E2 (K-4, K-5, K-7): the walk, on a made-up Windows ----------------------------------------------------------
-# P-1 (Amendment P): what the system says of a drive (winservice.System.read_drive). Measured on GitHub's machines:
-MEASURED_C = (3, "\\Device\\HarddiskVolume3")         # C:\ - kind 3, a disk's device (its number varies)
-FOLDER_LETTER = (3, "\\??\\C:\\ProgramData")          # a letter given to a folder - kind 3, the folder behind \??\
-NOT_THERE_LETTER = OSError(2, "the device's name of Q: was not read (the drive's kind 1)")   # kind 1, error 2
-DISK_STAND_IN = (3, "\\Device\\HarddiskVolume1")      # a stand-in, not measured: any other letter read as a disk
+# P-1, Q-1 (Amendments P, Q): what the system says of a drive (winservice.System.read_drive), measured on GitHub's
+# machines and read from tests/fixtures/wincode/drives.txt (never retyped here)
+DRIVES = ROOT / "tests" / "fixtures" / "wincode" / "drives.txt"
+
+
+def drives_measured():
+    """{"x64" or "arm64": [(letter, what it was, kind, the device's name or the reader's error)]} as drives.txt holds
+    them; an error (`not read: error N`) is built in the words winservice.System.read_drive raises it with."""
+    out, section = {}, None
+    for line in DRIVES.read_text(encoding="ascii").splitlines():
+        if line.startswith("#"):
+            head = re.match(r"# windows-\S+ \((x64|ARM64)\)\Z", line)
+            if head:
+                section = head.group(1).lower()
+                out[section] = []
+            continue
+        letter, what, kind, name = line.split("\t")
+        error = re.match(r"not read: error ([0-9]+)\Z", name)
+        if error:
+            name = OSError(int(error.group(1)), "the device's name of %s was not read (the drive's kind %d)" % (
+                letter, int(kind)))
+        out[section].append((letter, what, int(kind), name))
+    return out
+
+
+DRIVE_ROWS = drives_measured()
+
+
+def drive_row(letter, what, section="x64"):
+    (got,) = [(k, n) for x, w, k, n in DRIVE_ROWS[section] if x == letter and w == what]
+    return got
+
+
+MEASURED_C = drive_row("C:", "the system's disk")    # kind 3, a disk's volume (its number varies)
+FOLDER_LETTER = drive_row("R:", "a letter given to a folder (subst R: C:\\ProgramData)")   # kind 3, the folder's path
+NOT_THERE_LETTER = drive_row("Q:", "a letter that is not there")[1]   # kind 1, error 2: the reader's error
+DISK_STAND_IN = (3, "\\Device\\HarddiskVolume1")   # a stand-in, not measured: a letter no test gives, of Q-1's form
 TOP = "C:\\Program Files\\RaqibProbe8"
 PROGRAM = TOP + "\\raqib.exe"
 MODULES = TOP + "\\_internal"
@@ -270,7 +303,8 @@ GOOD_FILE = "O:BAD:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)"
 
 class Machine:
     """A made-up Windows: names read from the measured x64 rows (or as a test gives them), listings as given; its
-    drives as a test gives them (P-1), else C: as measured and any other letter a disk (DISK_STAND_IN)."""
+    drives as a test gives them (P-1), else C: as measured (drives.txt) and any other letter a stand-in disk of Q-1's
+    form (DISK_STAND_IN)."""
 
     def __init__(self, names=None, lists=None, platform="win32", packed=True, program=PROGRAM, modules=MODULES,
                  isolated=True, no_site=False, base=None, prefix=None, base_prefix=None, path=(), package=None,
@@ -557,7 +591,8 @@ def test_e3_exit_0_one_sentence_of_what_was_checked_by_count(monkeypatch, capsys
     assert out == ("raqib service check: the code a service would run is the system's alone: %s\n"
                    % wincode.checked_words({"folders": 3, "files": 2, "above": 2}, [("C:", MEASURED_C[1])]))
     assert out.endswith(' and the drive asked before any name of it was read, each said by the system to be of the'
-                        ' fixed kind with a device\'s name beginning \\Device\\: C: "\\Device\\HarddiskVolume3"\n')
+                        ' fixed kind with a device\'s name of the form \\Device\\HarddiskVolumeN:'
+                        ' C: "\\Device\\HarddiskVolume3"\n')
     assert "checked 7 names" in out and "3 folders and 2 files" in out and "2 folders above it to the drive" in out
 
 
@@ -712,14 +747,24 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
                   "one beginning with a dot, which site skips, is read even so",
                   "none of their lines taken or run by the check",
                   # P-1, P-2 (M12.4c2a): the drive and the libraries loaded by name, moved to what is refused
-                  "**The drive (Amendment P, P-1).**", "the check asks what the drive's letter names",
-                  "A path is judged only where its drive is of the fixed kind (3) and its device's name begins with"
-                  " `\\Device\\`", "(0 unknown, 1 no root, 2 removable, 3 fixed, 4 remote, 5 a disc, 6 a RAM disk;"
+                  "**The drive (Amendments P and Q, P-1 and Q-1).**", "the check asks what the drive's letter names",
+                  "A path is judged only where its drive is of the fixed kind (3) and its device's name is, whole and"
+                  " with its case, `\\Device\\HarddiskVolume` and one or more of the digits 0-9",
+                  "(0 unknown, 1 no root, 2 removable, 3 fixed, 4 remote, 5 a disc, 6 a RAM disk;"
                   " another number said as it is)", "**What Amendment P measured and read, and what it did not.**",
                   "`\\??\\C:\\ProgramData`", "a letter given to a folder is refused by its drive (P-1, above)",
                   "Not measured, and said: a network drive, a removable disk and a disc",
-                  "X51 (`tools/rig/check.py --service-check-drive FILE`"):
+                  "X51 (`tools/rig/check.py --service-check-drive FILE`",
+                  # Q-1 to Q-3 (M12.4c2a REDO): the form, the session, the readers, a fixed disk, the third place
+                  "a volume of another kind of disk (not measured, and refused until it is)",
+                  "The letter is read as the session that runs the check names it",
+                  "The device's name has that one reader in the tree; the kind has two",
+                  "A disk the system calls fixed is taken as a disk whatever it is",
+                  "The reading names three places a library is searched", "nothing holds what the interpreter's own"
+                  " start adds", "**What Amendment Q measured, and what it changed.**"):
         assert words in spec, words
+    assert "first met by" not in spec and "or a share reads so" not in spec
+    assert "begins with `\\Device\\`." not in spec
     assert "a letter given to a folder is read as a drive of its own" not in spec
     assert "to be pinned by a test with the install" not in spec
     assert "Packed with its own runtime only" not in spec and "nothing of them run" not in spec
@@ -735,11 +780,15 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
     said = " ".join(commands.split())
     assert "Run `raqib service check` on Windows before a service of Windows is made to run" in said
     threat = flat("docs/THREAT_MODEL.md")
-    assert "**What the check of the code does not read (`raqib service check`; ADR-0013 Amendments K to P).**" \
+    assert "**What the check of the code does not read (`raqib service check`; ADR-0013 Amendments K to Q).**" \
         in threat
-    for words in ("closed by Amendment P", "judges a path only on a drive of the fixed kind whose device's name begins"
-                  " `\\Device\\`", "tests/test_libraries.py", "a letter the system's account has and the asker has"
-                  " not"):   # M12.4c2a (P-1, P-2): moved from not read to what is refused
+    for words in ("closed by Amendment P", "judges a path only on a drive of the fixed kind whose device's name is,"
+                  " whole, a disk's volume in the form measured (`\\Device\\HarddiskVolume` and a number, nothing"
+                  " after it", "tests/test_libraries.py", "a letter the system's account has and the asker has"
+                  " not",   # M12.4c2a (P-1, P-2): moved from not read to what is refused
+                  "The device's name has one reader in the tree; the kind has two", "a volume a program serves",
+                  "The letter is read as the session that runs the check names it", "names three places",
+                  "nothing holds what the interpreter's own start adds"):   # M12.4c2a REDO (Q-1 to Q-3)
         assert words in threat, words
     assert "not yet pinned by a test" not in threat and "refused with the install, not yet" not in threat
     assert "whoever may add the missing thing decides what runs" in threat and "never passed (exit 2)" in threat
@@ -1048,7 +1097,8 @@ def test_m_exit_0_on_the_plain_road_says_its_counts(monkeypatch, capsys):
     assert out == "raqib service check: the code a service would run is the system's alone: %s\n" % (
         wincode.plain_words(counts, [("C:", MEASURED_C[1])]))
     assert out.endswith('; and the drive asked before any name of it was read, each said by the system to be of the'
-                        ' fixed kind with a device\'s name beginning \\Device\\: C: "\\Device\\HarddiskVolume3"\n')
+                        ' fixed kind with a device\'s name of the form \\Device\\HarddiskVolumeN:'
+                        ' C: "\\Device\\HarddiskVolume3"\n')
     for piece in ("checked 19 names", "6 entries of its path and the raqib package's folder, whole, 11 folders and 7"
                   " files", "(the creator's own inherit-only entry apart)", "1 of those entries not there",
                   "0 *.pth files read, 0 of their lines walked as entries, none of their lines taken or run by the"
@@ -1315,9 +1365,61 @@ def test_m_the_real_system_objects_answers_are_the_running_interpreters(tmp_path
 
 
 # --- M12.4c2a (ADR-0013 Amendment P, P-1): the drive a path is on, asked before any name of it is read -------------
-# The readings are the measured ones above (MEASURED_C, FOLDER_LETTER, NOT_THERE_LETTER) or invented here, said so.
-def drive_head(letter, path):
-    return "the drive %s (first met by %s), asked before any name of it is read (ADR-0013 P-1): " % (letter, path)
+# The readings are the measured ones above (MEASURED_C, FOLDER_LETTER, NOT_THERE_LETTER, DRIVE_ROWS: drives.txt) or
+# invented here, said so.
+def drive_head(letter):
+    return "the drive %s, asked before any name of it is read (ADR-0013 P-1, Q-1): " % letter
+
+
+def other_form(name):   # Q-2: the words of a fixed drive whose device's name is not of Q-1's form
+    return ('the system says kind 3 (fixed) and names its device "%s", a device\'s name not of the form asked for'
+            " (\\Device\\HarddiskVolumeN, N one or more of the digits 0-9, and nothing after it); %s" % (
+                wincode._said(name), wincode.DRIVE_ONLY))
+
+
+@pytest.mark.parametrize("name", [
+    "\\Device\\HarddiskVolume3\\Users\\someone\\Rig",   # the review's finding 1, exactly
+    "\\Device\\HarddiskVolume3\\", "\\Device\\HarddiskVolume3 ", "\\Device\\HarddiskVolume3\n",
+    "\\device\\harddiskvolume3", "\\DEVICE\\HARDDISKVOLUME3", "\\Device\\HarddiskVolume",
+    "\\Device\\HarddiskVolume\u0663", "\\Device\\HarddiskVolume\uff13", "\\Device\\HarddiskVolume3\u0663",
+    "\\Device\\HarddiskDmVolumes\\x\\Volume1", "\\Device\\LanmanRedirector\\x", "\\??\\C:\\ProgramData",
+    "x\\Device\\HarddiskVolume3", " \\Device\\HarddiskVolume3", "\\??\\\\Device\\HarddiskVolume3", "",
+])
+def test_q1_a_device_name_not_whole_of_the_form_measured_is_refused_with_the_name_and_the_form(name):
+    m = Machine(drives={"C:": (3, name)})   # each of the fixed kind; invented but the folder's (drives.txt)
+    bad, counts = wincode.check(m)
+    assert bad == ("C:\\", drive_head("C:") + other_form(name)) and bad[1].isprintable()
+    assert m.reads == [] and m.listed == [] and sum(counts.values()) == 0 and m.drives_asked == ["C:\\"]
+    assert "first met" not in bad[1] and "share" not in bad[1]
+
+
+def test_q1_the_form_is_one_pattern_matched_whole_with_its_case():
+    assert wincode.DISK_DEVICE.pattern == r"\\Device\\HarddiskVolume[0-9]+" and wincode.DISK_FORM == \
+        "\\Device\\HarddiskVolumeN" and not wincode.DISK_DEVICE.flags & re.IGNORECASE
+    source = (ROOT / "raqib" / "wincode.py").read_text(encoding="utf-8")
+    assert source.count("HarddiskVolume[0-9]+") == 1 and source.count("DISK_DEVICE.") == 1 and \
+        "DISK_DEVICE.fullmatch(name)" in source
+
+
+def test_q1_every_disks_line_of_drives_txt_is_taken_and_every_other_line_refused():
+    taken, refused_lines = [], []
+    for section, rows in sorted(DRIVE_ROWS.items()):
+        for letter, what, kind, name in rows:
+            disk = "disk" in what and "letter" not in what   # what it was, as the fixture says it
+            got = name if isinstance(name, BaseException) else (kind, name)
+            bad = wincode.drive_refused(letter, got)
+            m = Machine(drives={"C:": got})                   # the line's reading given as the walk's own drive's
+            walked, counts = wincode.check(m, [])
+            if disk:
+                taken.append((section, letter, what))
+                assert bad is None and walked is None and m.reads == MEASURED_READS, (section, letter, what)
+            else:
+                refused_lines.append((section, letter, what))
+                assert bad[0] == letter + "\\" and walked == ("C:\\", drive_head("C:") + bad[1][len(
+                    drive_head(letter)):]) and m.reads == [] and sum(counts.values()) == 0, (section, letter, what)
+                assert "first met" not in bad[1] and "share" not in bad[1]
+    assert sorted(DRIVE_ROWS) == ["arm64", "x64"] and len(taken) == 7 and len(refused_lines) == 7
+    assert [w for _, _, w in taken].count("the system's disk") == 2
 
 
 def test_p1_the_measured_c_is_asked_once_before_any_name_of_it_and_said_in_the_pass(monkeypatch, capsys):
@@ -1330,18 +1432,17 @@ def test_p1_the_measured_c_is_asked_once_before_any_name_of_it_and_said_in_the_p
     assert wincode.check(m)[0] is None and m.drives_asked == ["C:\\"] and m.events[0] == ("drive", "C:\\")
     code, out = through(monkeypatch, Machine())
     assert code == 0 and out.endswith(': C: "\\Device\\HarddiskVolume3"\n') and "to the drive's letter" in out
-    assert wincode.drive_refused("C:", MEASURED_C, "C:\\x") is None
+    assert wincode.drive_refused("C:", MEASURED_C) is None and MEASURED_C == (3, "\\Device\\HarddiskVolume3")
 
 
 def test_p1_a_letter_given_to_a_folder_is_refused_with_its_kind_and_device_and_nothing_of_it_read(monkeypatch):
     m = Machine(drives={"C:": FOLDER_LETTER})
     bad, counts = wincode.check(m)
-    assert bad == ("C:\\", drive_head("C:", "C:\\") + 'the system says kind 3 (fixed) and names its device'
-                   ' "\\??\\C:\\ProgramData", a device\'s name that does not begin with \\Device\\ (a letter given to'
-                   " a folder or a share reads so); " + wincode.DRIVE_ONLY)
+    assert bad == ("C:\\", drive_head("C:") + other_form("\\??\\C:\\ProgramData")) and FOLDER_LETTER[0] == 3
     assert m.reads == [] and m.listed == [] and sum(counts.values()) == 0
     code, out = through(monkeypatch, Machine(drives={"C:": FOLDER_LETTER}))
-    assert code == 1 and out.startswith("raqib service check: NOT the system's alone: C:\\, the drive C: (first met")
+    assert code == 1 and out.startswith("raqib service check: NOT the system's alone: C:\\, the drive C:, asked"
+                                        " before")
 
 
 @pytest.mark.parametrize("kind, word", [(0, "unknown"), (1, "no root"), (2, "removable"), (4, "remote"),
@@ -1350,7 +1451,7 @@ def test_p1_a_letter_given_to_a_folder_is_refused_with_its_kind_and_device_and_n
 def test_p1_every_kind_but_the_fixed_is_refused_with_its_word(kind, word):
     m = Machine(drives={"C:": (kind, "\\Device\\HarddiskVolume3")})   # invented: a disk's name, another kind
     bad, _ = wincode.check(m)
-    assert bad[0] == "C:\\" and bad[1].startswith(drive_head("C:", "C:\\") + "the system says kind %d (%s" % (
+    assert bad[0] == "C:\\" and bad[1].startswith(drive_head("C:") + "the system says kind %d (%s" % (
         kind, word)) and bad[1].endswith(' and names its device "\\Device\\HarddiskVolume3": not the fixed kind; '
                                          + wincode.DRIVE_ONLY)
     assert m.reads == []
@@ -1361,7 +1462,7 @@ def test_p1_every_kind_but_the_fixed_is_refused_with_its_word(kind, word):
 def test_p1_a_device_name_not_read_is_refused_with_the_systems_number():
     m = Machine(drives={"C:": NOT_THERE_LETTER})
     bad, _ = wincode.check(m)
-    assert bad == ("C:\\", drive_head("C:", "C:\\") + "its device's name was not read (the device's name of Q: was"
+    assert bad == ("C:\\", drive_head("C:") + "its device's name was not read (the device's name of Q: was"
                    " not read (the drive's kind 1) (error 2)); %s; %s" % (wincode.DRIVE_ONLY, wincode.NOT_READ))
     assert m.reads == []
     bad, _ = wincode.check(Machine(drives={"C:": ValueError("not a drive's root")}))
@@ -1369,7 +1470,7 @@ def test_p1_a_device_name_not_read_is_refused_with_the_systems_number():
 
 
 @pytest.mark.parametrize("got, said", [
-    ((3, ""), 'the system says kind 3 (fixed) and names its device "", a device\'s name that does not begin with'),
+    ((3, ""), 'the system says kind 3 (fixed) and names its device "", a device\'s name not of the form asked for'),
     ((3, None), "a kind or a device's name of a type the check does not know (kind 3, device's name None): not read"),
     ((3, b"\\Device\\HarddiskVolume3"), "of a type the check does not know (kind 3, device's name b'"),
     (("3", "\\Device\\HarddiskVolume3"), "of a type the check does not know (kind '3', device's name"),
@@ -1378,7 +1479,7 @@ def test_p1_a_device_name_not_read_is_refused_with_the_systems_number():
     ((3,), "the system's answer is not a kind and a device's name ((3,)): not read"),
     ("\\Device\\HarddiskVolume3", "the system's answer is not a kind and a device's name ('"),
     (None, "the system's answer is not a kind and a device's name (None): not read"),
-    ((3, "\\device\\HarddiskVolume3"), 'names its device "\\device\\HarddiskVolume3", a device\'s name that does'),
+    ((3, "\\device\\HarddiskVolume3"), 'names its device "\\device\\HarddiskVolume3", a device\'s name not of the'),
 ])
 def test_p1_a_name_or_kind_not_known_is_refused_unread(got, said):   # invented readings, each refused
     m = Machine(drives={"C:": got})
@@ -1406,17 +1507,19 @@ def test_p1_a_second_drive_that_is_a_folders_letter_is_refused_after_the_walks_e
     m = second_disk(drives={"E:": (3, "\\??\\C:\\Program Files\\Rig")})   # invented: a letter given to a folder
     rows, given = road("copy")
     bad, _ = wincode.check(m)
-    assert bad[0] == "E:\\" and bad[1].startswith(drive_head("E:", "E:\\")) and \
+    assert bad[0] == "E:\\" and bad[1].startswith(drive_head("E:")) and \
         'names its device "\\??\\C:\\Program Files\\Rig"' in bad[1]
     assert m.drives_asked == ["C:\\", "E:\\"] and not [r for r in m.reads if r.upper().startswith("E:")]
     assert ntpath.normcase(given["path"][-1]) in [ntpath.normcase(r) for r in m.reads]   # the walk's earlier names
     m = plain(path=road("copy")[1]["path"] + ["E:\\x"], drives={"E:": FOLDER_LETTER})   # an entry on it
     bad = refused(m)
-    assert bad[0] == "E:\\" and bad[1].startswith(drive_head("E:", "E:\\")) and m.drives_asked == ["C:\\", "E:\\"]
+    assert bad[0] == "E:\\" and bad[1].startswith(drive_head("E:")) and m.drives_asked == ["C:\\", "E:\\"]
     assert not [r for r in m.reads if r.upper().startswith("E:")]
+    reads = [ntpath.normcase(r) for r in m.reads]   # Q-4: the walk's earlier names were read, the entries before E:
+    assert all(ntpath.normcase(e) in reads for e in road("copy")[1]["path"]) and ntpath.normcase(COPY) in reads
     m = plain(path=["Q:\\x"], drives={"Q:": NOT_THERE_LETTER})   # measured: a letter that is not there
     bad = refused(m)
-    assert bad[0] == "Q:\\" and "(the drive's kind 1) (error 2)" in bad[1] and "first met by Q:\\" in bad[1]
+    assert bad[0] == "Q:\\" and "(the drive's kind 1) (error 2)" in bad[1] and bad[1].startswith(drive_head("Q:"))
     assert not [r for r in m.reads if r.upper().startswith("Q:")]
 
 
@@ -1429,13 +1532,15 @@ def test_p1_a_second_drive_that_is_a_disk_is_asked_once_and_said_in_the_pass(mon
     assert m.events.index(("drive", "E:\\")) < m.events.index(("read", "E:\\"))
     code, out = through(monkeypatch, second_disk())
     assert code == 0 and out.endswith('; and the drives asked before any name of them was read, each said by the'
-                                      ' system to be of the fixed kind with a device\'s name beginning \\Device\\:'
+                                      ' system to be of the fixed kind with a device\'s name of the form'
+                                      ' \\Device\\HarddiskVolumeN:'
                                       ' C: "\\Device\\HarddiskVolume3", E: "\\Device\\HarddiskVolume1"\n')
     assert check_counts().search(out)
-    # a device's name that begins \\Device\\ is taken by P-1 as written, and said made printable (invented)
-    m = second_disk(drives={"E:": (3, "\\Device\\Harddisk\x1b[2J")})
+    # Q-1: a device's name with more after a volume's is not taken; it is said made printable (invented)
+    m = second_disk(drives={"E:": (3, "\\Device\\HarddiskVolume5\x1b[2J")})
     code, out = through(monkeypatch, m)
-    assert code == 0 and out.endswith(' E: "\\Device\\Harddisk?[2J"\n') and "\x1b" not in out
+    assert code == 1 and 'names its device "\\Device\\HarddiskVolume5?[2J", a device\'s name not of the form' in out
+    assert "\x1b" not in out and wincode.DISK_DEVICE.fullmatch(DISK_STAND_IN[1])   # the stand-in is of the form
 
 
 def check_counts():
@@ -1444,12 +1549,19 @@ def check_counts():
     return check.CHECK_PLAIN_COUNTS
 
 
-def test_p1_the_same_drive_in_two_letter_cases_is_asked_once():
-    m = Machine(modules="c:\\PROGRAM FILES\\raqibprobe8\\_INTERNAL")
-    assert wincode.check(m)[0] is None and m.drives_asked == ["C:\\"]
-    m = plain(path=road("copy")[1]["path"] + ["c:\\program files\\rig\\raqibprobe9py\\lib"])
+def test_p1_the_same_drive_in_two_letter_cases_is_asked_once(monkeypatch):
+    met, drive = [], wincode._Walk._drive
+
+    def recorded(self, path):   # what _Walk._drive itself is given, then the walk's own _drive
+        met.append(path)
+        return drive(self, path)
+    monkeypatch.setattr(wincode._Walk, "_drive", recorded)
+    entry = COPY.lower() + "\\new\\x"   # a stand-in entry, not there, on c:, in a folder the walk did not read before
+    m = plain(path=road("copy")[1]["path"] + [entry])
     drives = []
-    assert wincode.check(m, drives)[0] is None and m.drives_asked == ["C:\\"] and drives == [("C:", MEASURED_C[1])]
+    assert wincode.check(m, drives)[0] is None and drives == [("C:", MEASURED_C[1])]
+    assert ntpath.dirname(entry) in met and [p for p in met if p.startswith("C:")]   # both cases reach _drive
+    assert m.drives_asked == ["C:\\"]   # and the system was asked once: the letter is folded (Q-4)
 
 
 def test_p1_the_real_system_object_asks_winservices_reader_of_a_drive(monkeypatch):
@@ -1504,6 +1616,7 @@ def test_p1_read_drive_gives_the_kind_and_the_first_name_or_the_systems_error():
     with pytest.raises(OSError) as e:
         s.read_drive("Q:\\")
     assert e.value.errno == 2 and "(the drive's kind 1)" in str(e.value)
+    assert e.value.args == NOT_THERE_LETTER.args   # the reader's own words, of drives.txt's Q: (kind 1, error 2)
     for root in ("C:", "C:\\x", "\\\\?\\C:\\", "1:\\", None, b"C:\\", "\u00e9:\\"):
         s._api = SimpleNamespace(ctypes=Buffers(0), k32=Kernel(3, "\\Device\\X\0\0"))
         with pytest.raises(ValueError):
@@ -1517,5 +1630,5 @@ def test_p1_the_real_system_drive_reads_kind_3_and_a_disks_device():
     import os
     root = (os.environ.get("SystemDrive") or "C:") + "\\"
     kind, name = winservice.System().read_drive(root)
-    assert kind == 3 and name.startswith("\\Device\\"), (kind, name)
-    assert wincode.drive_refused(root[:2].upper(), (kind, name), root) is None
+    assert kind == 3 and wincode.DISK_DEVICE.fullmatch(name), (kind, name)
+    assert wincode.drive_refused(root[:2].upper(), (kind, name)) is None

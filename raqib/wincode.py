@@ -49,12 +49,15 @@ PTH_MAX bytes, no byte PTH_ODD finds - and its lines that are paths by site's ru
 entries; the check takes or runs none of its lines as code. The check is run by the code it judges (N-2): the
 interpreter that asks has run its site, and the import lines of its *.pth files, at its start.
 
-The drive (Amendment P, P-1; both roads): each drive a path of the walk is on is asked once, before any name of it is
-read - by its letter, without case - and a path is judged only where the system says of its drive the fixed kind (3)
-and a device's name that begins with \\Device\\ (drive_refused). Any other kind (DRIVE_KINDS), a device's name
-that does not (a letter given to a folder or a share reads so), a device's name not read, a kind or a name of a type
-not known: refused, with the letter, the kind and its word and the device's name; nothing of that drive is read. The
-pass says the drives asked, each letter with its device's name (drives_said).
+The drive (Amendment P, P-1, its test replaced by Q-1; both roads): each drive a path of the walk is on is asked once,
+before any name of it is read - by its letter, without case - and a path is judged only where the system says of its
+drive the fixed kind (3) and a device's name that is, whole and with its case, \\Device\\HarddiskVolume and one or
+more of the digits 0-9 (DISK_DEVICE: the form measured of every disk's volume; drive_refused). Any other kind
+(DRIVE_KINDS), a device's name of any other form (a letter given to a folder reads as the folder's path behind \\??\\;
+a volume's name with anything after it; a volume of another kind of disk, not measured, refused until it is), a
+device's name not read, a kind or a name of a type not known: refused, with the letter, the kind and its word, the
+device's name as read and the form asked for; nothing of that drive is read. The pass says the drives asked, each
+letter with its device's name (drives_said).
 
 Every call of the system (the platform, whether packed, the program's path, the modules' folder, the running
 interpreter's flags, base, prefixes, path and package, the one read of a name, a drive's kind and device's name, a
@@ -115,14 +118,16 @@ THERE, MISSING, BENEATH = "there", "not there", "beneath a file"   # how a road 
 DEVICE_NAMES = re.compile(r"(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9\u00b9\u00b2\u00b3]"
                           r"|LPT[0-9\u00b9\u00b2\u00b3])(?:\..*)?\Z", re.I)   # a device's name, any extension
 NOT_IN_A_NAME = '\\/:*?"<>|'
-# P-1: a drive is taken only of the fixed kind with a device's name that begins DISK_DEVICE (measured: a disk's
-# `\\Device\\HarddiskVolumeN`; a letter given to a folder `\\??\\` and the folder's path). The kinds' words are
-# GetDriveTypeW's numbers as the system's documents name them; only 1 and 3 were seen (Amendment P)
+# Q-1 (replaces P-1's test): a drive is taken only of the fixed kind with a device's name that is, whole and with its
+# case, DISK_DEVICE - the form measured of every disk's volume (tests/fixtures/wincode/drives.txt); [0-9] and not \d
+# (which takes digits that are not ASCII), fullmatch and not $ (which lets a newline after it pass). The kinds' words
+# are GetDriveTypeW's numbers as the system's documents name them; only 1 and 3 were seen (Amendment P)
 DRIVE_FIXED = 3
 DRIVE_KINDS = {0: "unknown", 1: "no root", 2: "removable", 3: "fixed", 4: "remote", 5: "a disc", 6: "a RAM disk"}
-DISK_DEVICE = "\\Device\\"
-DRIVE_ONLY = ("a path is judged only on a drive the system says is of the fixed kind (3) with a device's name"
-              " beginning \\Device\\, and nothing of this drive is read")
+DISK_DEVICE = re.compile(r"\\Device\\HarddiskVolume[0-9]+")
+DISK_FORM = "\\Device\\HarddiskVolumeN"   # the form in words: N one or more of the digits 0-9, nothing after it
+DRIVE_ONLY = ("a path is judged only on a drive the system says is of the fixed kind (3) with a device's name of the"
+              " form %s (a disk's volume, as measured), and nothing of this drive is read" % DISK_FORM)
 
 Entry = namedtuple("Entry", "kind flags rights name text")
 _OWNER = re.compile(r"O:(S-1-[0-9]+(?:-[0-9]+)+|[A-Z]{2})")
@@ -367,7 +372,7 @@ class _Walk:
             got = self.system.drive(letter + "\\")
         except (OSError, ValueError) as exc:
             got = exc
-        bad = drive_refused(letter, got, path)
+        bad = drive_refused(letter, got)
         self.drives[letter] = bad
         if bad is None:
             self.taken.append((letter, got[1]))
@@ -560,13 +565,12 @@ def _kind_word(kind):
     return DRIVE_KINDS.get(kind, "a number this check knows no word for")
 
 
-def drive_refused(letter, got, path):
-    """P-1: None where the system's answer `got` for the drive `letter` (`X:`), met first by `path`, is the fixed kind
-    and a device's name that begins with \\Device\\; else (the drive's root, the words of its refusal). got: (kind,
-    device's name) as winservice.System.read_drive gives them, or the error it raised."""
+def drive_refused(letter, got):
+    """Q-1: None where the system's answer `got` for the drive `letter` (`X:`) is the fixed kind and a device's name
+    that is, whole, of DISK_DEVICE's form; else (the drive's root, the words of its refusal). got: (kind, device's
+    name) as winservice.System.read_drive gives them, or the error it raised."""
     root = letter + "\\"
-    head = "the drive %s (first met by %s), asked before any name of it is read (ADR-0013 P-1)" % (
-        letter, _said(path))
+    head = "the drive %s, asked before any name of it is read (ADR-0013 P-1, Q-1)" % letter
     if isinstance(got, BaseException):
         return root, "%s: its device's name was not read (%s); %s; %s" % (head, _why(got), DRIVE_ONLY, NOT_READ)
     if not isinstance(got, tuple) or len(got) != 2:
@@ -580,9 +584,9 @@ def drive_refused(letter, got, path):
     said = 'kind %d (%s) and names its device "%s"' % (kind, _kind_word(kind), _said(name))
     if kind != DRIVE_FIXED:
         return root, "%s: the system says %s: not the fixed kind; %s" % (head, said, DRIVE_ONLY)
-    if not name.startswith(DISK_DEVICE):
-        return root, ("%s: the system says %s, a device's name that does not begin with \\Device\\ (a letter given"
-                      " to a folder or a share reads so); %s" % (head, said, DRIVE_ONLY))
+    if not DISK_DEVICE.fullmatch(name):
+        return root, ("%s: the system says %s, a device's name not of the form asked for (%s, N one or more of the"
+                      " digits 0-9, and nothing after it); %s" % (head, said, DISK_FORM, DRIVE_ONLY))
     return None
 
 
@@ -591,8 +595,8 @@ def drives_said(drives):
     if not drives:
         return ""
     return ("; and the drive%s asked before any name of %s was read, each said by the system to be of the fixed kind"
-            " with a device's name beginning \\Device\\: %s" % (
-                "s" if len(drives) > 1 else "", "them" if len(drives) > 1 else "it",
+            " with a device's name of the form %s: %s" % (
+                "s" if len(drives) > 1 else "", "them" if len(drives) > 1 else "it", DISK_FORM,
                 ", ".join('%s "%s"' % (_said(letter, 2), _said(name)) for letter, name in drives)))
 
 

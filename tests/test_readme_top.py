@@ -373,11 +373,20 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
     "What the interpreter does with those names was read in its source, not measured.",
     "A Raqib packed with Python 3.14 or later is refused for now: that runtime reads `pyvenv.cfg` above the"
     " program's folder, and the packed road does not judge it yet.",
-    # M12.4c2a (ADR-0013 P-1): the one sentence the drive adds to the paragraph
-    "A path is judged only on a drive the system says is of the fixed kind with a device's name beginning"
-    " `\\Device\\`, as a disk's is: a letter given to a folder or a share, a removable disk, a network drive, a"
-    " disc and a letter with no device are refused, with the kind and the device's name said, and the pass ends with"
-    " the drives it asked.",
+    # M12.4c2a REDO (ADR-0013 Q-1 to Q-3): the sentences the drive and the libraries add to the paragraph
+    "A path is judged only on a drive the system says is of the fixed kind with a device's name that is, whole, a"
+    " disk's volume in the form measured, `\\Device\\HarddiskVolume` and a number with nothing after it.",
+    "A letter given to a folder, a volume's name with anything after it, a volume of another kind of disk (not"
+    " measured, so refused until it is), any other kind of drive and a letter with no device are refused, with the"
+    " kind and the device's name said and the form asked for, and the pass ends with the drives it asked.",
+    "A disk the system calls fixed is taken whatever it is - one carried from another machine, an image attached, a"
+    " volume a program serves - and its names are judged as any other's.",
+    "The drive is read with the check's own reader of its device's name; the autostart reader also asks a drive's"
+    " kind, for its own purpose.",
+    "The letter is read as the session that asks names it, and the system's account may name it otherwise: the"
+    " install is to have the service ask the check again at its own start, as the system (not built yet).",
+    "A library Raqib loads by name is searched in the program's own folder, in System32 and in folders the process"
+    " itself added: a test holds that Raqib adds none, and nothing holds what the interpreter's own start adds.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK

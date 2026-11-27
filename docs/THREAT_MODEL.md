@@ -2189,7 +2189,7 @@ collector that is slow, down or refusing never delays or loses a capture
   system's; a place on another volume, or one with a file held open by
   another process; Windows before the runners' versions.
 - **What the check of the code does not read (`raqib service check`;
-  ADR-0013 Amendments K to P).** On Windows `raqib service check` says
+  ADR-0013 Amendments K to Q).** On Windows `raqib service check` says
   whether the code a service would run is the system's alone, by the owners
   and lists of the packed program's folder, whole, or, for a plain
   interpreter asked with `-I`, of its folder, its base's, its prefixes, the
@@ -2211,30 +2211,43 @@ collector that is slow, down or refusing never delays or loses a capture
   reaches past every list it reads; the packed runtime's own roads outside
   the program's folder, if it has any (it takes the packer's word that
   everything loads from there); the labels of a system list; or anything
-  that changes after it was read. Two things it once did not read are
-  closed by Amendment P. What a drive's letter names: before any name of a
-  drive is read, the check asks the system the drive's kind and its
-  device's name, once for each drive met, and judges a path only on a drive
-  of the fixed kind whose device's name begins `\Device\` - a letter given
-  to a folder (measured: it reads of the fixed kind, its device's name the
-  folder's own path behind `\??\`) or to a share, a removable disk, a
-  network drive, a disc and a letter with no device are refused, with the
-  kind and the device's name said, because what is above such a letter is
-  not what the check reads, or can be changed where it cannot see. The
-  system's PATH: a test (tests/test_libraries.py) reads every place in
-  raqib/ where a library is loaded and holds that each is a plain name
-  written in the code, on one list, with no folder added to the search, no
-  search mode and no name worked out at run time, and on Windows finds each
-  in System32; with ctypes' search as read in its source (not measured: the
-  application's folder, System32 and folders the process added, never the
-  PATH), a library Raqib asks for comes from the program's own folder,
-  which the check walks, or from System32. On the plain road it does not
-  read what the system's own account would add to the path that the asker's
-  does not (only the system writes there), a finder or hook a package
-  installs (an editable install is met only as its *.pth file and the
-  package's folder), or what an `import` line of a *.pth file does (the file
-  is found the system's alone, and none of its lines is taken or run by the
-  check); a plain interpreter asked without `-I`, or with `-S`, is never
+  that changes after it was read. Two things it once did not read are closed
+  by Amendment P, and the first narrowed by Amendment Q. What a drive's
+  letter names: before any name of a drive is read, the check asks the
+  system the drive's kind and its device's name, once for each drive met,
+  and judges a path only on a drive of the fixed kind whose device's name
+  is, whole, a disk's volume in the form measured (`\Device\HarddiskVolume`
+  and a number, nothing after it; tests/fixtures/wincode/drives.txt) - a
+  letter given to a folder (measured: it reads of the fixed kind, its
+  device's name the folder's own path behind `\??\`), a volume's name with
+  anything after it, a volume of another kind of disk (not measured, refused
+  until it is), any other kind of drive and a letter with no device are
+  refused, with the kind, the device's name and the form asked for said,
+  because what is above such a letter is not what the check reads, or can be
+  changed where it cannot see. The device's name has one reader in the tree;
+  the kind has two, for the autostart reader asks it too, for its own
+  purpose. A disk the system calls fixed is taken as a disk whatever it is -
+  one carried from another machine, an image attached, a volume a program
+  serves: who made its lists is not read, and its names are judged as any
+  other's. The letter is read as the session that runs the check names it;
+  the system's account may name it otherwise or not at all, which the
+  install is to close by having the service ask the check at its own start,
+  as the system (not built). The system's PATH: a test
+  (tests/test_libraries.py) reads every place in raqib/ where a library is
+  loaded and holds that each is a plain name written in the code, on one
+  list, with no folder added to the search, no search mode and no name
+  worked out at run time, and on Windows finds each in System32; ctypes'
+  search as read in its source (not measured) names three places, never the
+  PATH: the program's own folder, which the check walks; System32; and
+  folders the process itself added - of these the test holds that raqib/
+  adds none, and nothing holds what the interpreter's own start adds (site,
+  an `import` line of a *.pth file, sitecustomize). On the plain road it
+  does not read what the system's own account would add to the path that the
+  asker's does not (only the system writes there), a finder or hook a
+  package installs (an editable install is met only as its *.pth file and
+  the package's folder), or what an `import` line of a *.pth file does (the
+  file is found the system's alone, and none of its lines is taken or run by
+  the check); a plain interpreter asked without `-I`, or with `-S`, is never
   passed (exit 2). An entry of the path that is not there, and a name the
   interpreter looks for that is not there, is judged by the deepest folder
   of it that is there, as the code itself: whoever may add the missing thing
@@ -2245,17 +2258,17 @@ collector that is slow, down or refusing never delays or loses a capture
   base executable's and its base prefix; a packed runtime of Python 3.14 or
   later, which reads a venv file above the program's folder though its home
   is set, is refused until the packed road judges that name. Not measured: a
-  removable disk, a network drive and a disc (refused by their kinds, the
-  system's own numbers read in its documents, not seen), a letter the
-  system's account has and the asker has not, a folder mounted on a volume
-  with no letter, whether a library's own dependencies are searched as the
-  library is, a machine joined to a domain, Program Files
-  with lists an administrator changed, a file the system itself marks as a
-  reparse point; whether `-I` reads the registry's paths on x64 or after
-  3.11 (on ARM64 with 3.11.9 it did not), the Store's Python, an embedded
-  distribution, Python older than 3.10, the names the interpreter looks for
-  on a real machine, and whether bytecode caches are written when an
-  administrator asks.
+  removable disk, a network drive and a disc (refused by their kinds if the
+  system's documents hold, the system's own numbers read in them, not seen),
+  a letter the system's account has and the asker has not, or names
+  otherwise, a folder mounted on a volume with no letter, whether a
+  library's own dependencies are searched as the library is, a machine
+  joined to a domain, Program Files with lists an administrator changed, a
+  file the system itself marks as a reparse point; whether `-I` reads the
+  registry's paths on x64 or after 3.11 (on ARM64 with 3.11.9 it did not),
+  the Store's Python, an embedded distribution, Python older than 3.10, the
+  names the interpreter looks for on a real machine, and whether bytecode
+  caches are written when an administrator asks.
 
 ## 7. Platform
 

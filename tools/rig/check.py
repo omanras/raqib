@@ -71,8 +71,9 @@ MISSED and n/a as X49.
 --service-check-drive: what the rig's Windows job kept of `raqib service check` asked through a letter given to the
 folder of its packed copy in Program Files (ADR-0013 P-3, M12.4c2a): FILE holds lines `key: value` (letter-exit,
 letter-words). X51 MET only where the exit is 1 and the words name the drive's kind (`kind N (word)`) and a device's
-name that does not begin with \\Device\\ (`names its device "NAME"`), as raqib/wincode.py drive_refused says them;
-MISSED with words for each thing not found, a file given and missing included; n/a where none was given.
+name that is not, whole, of a disk's volume's form `\\Device\\HarddiskVolumeN` (`names its device "NAME"`; ADR-0013
+Q-1, Q-5), as raqib/wincode.py drive_refused says them; MISSED where the name is of that form (the letter was a
+disk's) and with words for each thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1344,15 +1345,16 @@ SERVICE_CHECK_DRIVE_NAME = ("X51 `raqib service check` asked through a letter gi
 DRIVE_KEYS = ("letter-exit", "letter-words")
 DRIVE_KIND = re.compile(r"kind (-?\d+) \(([^()]*)\)")         # raqib/wincode.py drive_refused's words
 DRIVE_DEVICE = re.compile(r'names its device "(.*?)"[,:]')
-DISK_DEVICE = "\\Device\\"                                    # raqib/wincode.py DISK_DEVICE
+DISK_DEVICE = re.compile(r"\\Device\\HarddiskVolume[0-9]+")    # raqib/wincode.py DISK_DEVICE (Q-1), matched whole
 
 
 def read_service_check_drive(text):
     """X51 (ADR-0013 P-3, M12.4c2a): what the rig's Windows job kept of `raqib service check` asked through a letter
     given to the folder of its packed copy in Program Files (letter-exit, letter-words). text: the FILE's text (None:
     not given). MET where the exit is 1 and the words name a kind (DRIVE_KIND) and a device's name (DRIVE_DEVICE)
-    that does not begin with \\Device\\; a byte-order mark before the first key is read past. MISSED with words for
-    each thing not found; n/a where none was given. It never raises."""
+    that is not, whole, of DISK_DEVICE's form (Q-5); a byte-order mark before the first key is read past. MISSED where
+    the name is of that form (the letter was a disk's) and with words for each thing not found; n/a where none was
+    given. The letter's device is not tied to the job's own copy (Q-5: kept, said). It never raises."""
     name = SERVICE_CHECK_DRIVE_NAME
     try:
         if text is None:
@@ -1371,10 +1373,10 @@ def read_service_check_drive(text):
                 missing.append("the check through the letter: its words name no kind of the drive (%s)" % words[:200])
             if not device:
                 missing.append("the check through the letter: its words name no device's name (%s)" % words[:200])
-            elif device.group(1).startswith(DISK_DEVICE):
-                missing.append("the check through the letter: the device's name it names, %s, begins with \\Device\\"
-                               " (a disk's), not a letter given to a folder (%s)" % (device.group(1)[:200],
-                                                                                      words[:200]))
+            elif DISK_DEVICE.fullmatch(device.group(1)):
+                missing.append("the check through the letter: the device's name it names, %s, is of a disk's volume's"
+                               " form, \\Device\\HarddiskVolumeN (the letter was a disk's), not a letter given to a"
+                               " folder (%s)" % (device.group(1)[:200], words[:200]))
         if missing:
             return [(name, MISSED, "missing: %s" % "; ".join(missing))]
         return [(name, MET, "the check through the letter was refused (exit 1), naming kind %s (%s) and the device"

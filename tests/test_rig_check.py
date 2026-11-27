@@ -1250,8 +1250,15 @@ def letter_line():
     import sys
     sys.path.insert(0, str(ROOT))
     from raqib import wincode
-    root, words = wincode.drive_refused("R:", (3, "\\??\\C:\\Program Files\\RaqibRig"),
-                                        "R:\\raqib.exe")   # a stand-in letter and folder: the check's own words
+    root, words = wincode.drive_refused("R:", (3, "\\??\\C:\\Program Files\\RaqibRig"))   # a stand-in letter
+    return "raqib service check: NOT the system's alone: %s, %s" % (root, words)     # and folder: the check's words
+
+
+def refused_line(letter, got):
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    root, words = wincode.drive_refused(letter, got)
     return "raqib service check: NOT the system's alone: %s, %s" % (root, words)
 
 
@@ -1271,15 +1278,27 @@ def test_x51_met_where_the_letter_was_refused_naming_a_kind_and_a_device_not_a_d
     import sys
     sys.path.insert(0, str(ROOT))
     from raqib import wincode
-    assert check.DISK_DEVICE == wincode.DISK_DEVICE   # the words are the check's own
+    assert (check.DISK_DEVICE.pattern, check.DISK_DEVICE.flags) == (wincode.DISK_DEVICE.pattern,
+                                                                    wincode.DISK_DEVICE.flags)   # Q-1's one form
     state, words = x51(letterfile())
     assert state == check.MET, words
     assert words.startswith('the check through the letter was refused (exit 1), naming kind 3 (fixed) and the device'
                             ' \\??\\C:\\Program Files\\RaqibRig: raqib service check: NOT the system\'s alone: R:\\')
     assert x51(letterfile().replace("\n", "\r\n"))[0] == check.MET and x51("\ufeff" + letterfile())[0] == check.MET
-    other = wincode.drive_refused("S:", (2, "\\??\\C:\\x"), "S:\\x")[1]   # invented: another kind, not a disk's
+    assert "first met by" not in words and "share" not in words   # Q-2
+    other = refused_line("S:", (2, "\\??\\C:\\x"))   # invented: another kind, not a disk's
     state, words = x51(letterfile(**{"letter-words": other}))
     assert state == check.MET and "naming kind 2 (removable)" in words
+    for name in ("\\Device\\HarddiskVolume3\\Users\\someone\\Rig", "\\Device\\HarddiskVolume3\\",
+                 "\\Device\\HarddiskVolume", "\\device\\harddiskvolume3"):   # invented: names not of Q-1's form
+        state, words = x51(letterfile(**{"letter-words": refused_line("S:", (3, name))}))
+        assert state == check.MET and "naming kind 3 (fixed) and the device %s:" % name in words, words
+
+
+@pytest.mark.parametrize("got", [(1, "\\Device\\HarddiskVolume3"), (2, "\\Device\\HarddiskVolume12")])
+def test_x51_missed_where_the_name_said_is_a_disks_volume(got):   # invented: a disk's name, refused by its kind
+    state, words = x51(letterfile(**{"letter-words": refused_line("S:", got)}))
+    assert state == check.MISSED and "the device's name it names, %s, is of a disk's volume's form" % got[1] in words
 
 
 @pytest.mark.parametrize("kw, said", [
@@ -1292,7 +1311,8 @@ def test_x51_met_where_the_letter_was_refused_naming_a_kind_and_a_device_not_a_d
      "its words name no device's name"),
     ({"letter-words": "raqib service check: NOT the system's alone: R:\\, the system says kind 1 (no root) and names"
                       " its device \"\\Device\\HarddiskVolume3\": not the fixed kind"},
-     "the device's name it names, \\Device\\HarddiskVolume3, begins with \\Device\\ (a disk's)"),
+     "the device's name it names, \\Device\\HarddiskVolume3, is of a disk's volume's form, \\Device\\HarddiskVolumeN"
+     " (the letter was a disk's)"),
     ({"letter-words": "raqib service check: NOT the system's alone: C:\\Program Files, as a folder above it (K-3)"},
      "its words name no kind of the drive"),
     ({"letter-exit": None}, "no letter-exit"), ({"letter-words": None}, "no letter-words"),
