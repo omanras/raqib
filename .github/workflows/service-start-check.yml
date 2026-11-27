@@ -1,0 +1,49 @@
+name: service-start-check
+# Probe only (never merged): the twelfth measurement - a branch's runner asking the check of its own code at its
+# start (ADR-0013 Amendment T), on real Windows.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_start_check.ps1, .github/workflows/service-start-check.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: claude/M12.4c2b1
+jobs:
+  field:
+    name: the service asks the check at its start, on real Windows (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, its tests and its rig tools
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib tests docs pyproject.toml tools/rig/check.py tools/rig/service_check.ps1 tools/rig/pack.sh
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1 pytest
+      - name: the runner's and the check's tests on this machine
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_winservice.py tests/test_wincode.py tests/test_libraries.py -q -rs 2>&1 | Select-Object -Last 8
+          exit 0
+      - name: the rig's own packed copy
+        shell: pwsh
+        run: |
+          & tools\rig\service_check.ps1 -Out $env:RUNNER_TEMP\service-check | Select-Object -Last 3
+          exit 0
+      - name: asked in the field
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_start_check.ps1" -PackedDir "$env:RUNNER_TEMP\service-check\pack\dist\raqib" -Out "$env:RUNNER_TEMP\start-check"
