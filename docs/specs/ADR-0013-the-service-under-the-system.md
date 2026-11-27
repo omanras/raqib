@@ -914,3 +914,67 @@ changed from another module), and its list of what it does not see was not whole
   M12.4c2a2 (R-3), then M12.4c2b (K-9, O-5, Q's two additions: the runner asks the check at its own start as the
   system and does not watch a tree it does not take; the install writes the command by the path the check
   judged).
+
+## Amendment S (the Table, 2026-11-27) - the review of M12.4c2a2 (docs/review/2026-11-27-M12.4c2a2.md): what the hold on the libraries is for, and where it ends
+The third reviewer of this hold found its tables true to the tree, compared exactly both ways, and every one of
+the thirty forms the two reviews before had named failing at its own line - and then defeated it again: a
+library's object reached from another file, through getattr of its holder, a closure or the heap; the names
+CI-3's hand-over reads bound otherwise; the environment written through a name it was bound to; a table changed
+by its name written in a string; the interpreter's own loaders of code. Verdict REDO. The findings are right, and
+the fault is the Table's: three reviews were asked to defeat a reading of source text, and source text can
+always be written to defeat a reading of it. Whoever can write a file of raqib/ can write anything there; a scan
+is no wall against that, and R-3's "a new load cannot be written without changing the test's own list" promised
+one.
+- S-1 (what the hold is for). It guards against a change made in good faith that no reader notices: a new
+  library's name, a library loaded by a path, a folder added to the search, the PATH or the whole environment
+  set, a loader handed somewhere new, ctypes used in a way the tree did not use it. Each of those, written the
+  ordinary way, changes a table of the test, and a reviewer reads the table's change. It does not hold code
+  written to get past it, and no later task is asked to make it. FOR: the claim is one that can be kept.
+  MUST NOT TOUCH: the tables as built (true, and exact both ways).
+- S-2 (said exactly). The test's first lines and the three documents say S-1 in its own words, and name what is
+  therefore not held: an object of a library reached outside the function and file that loaded it, or by
+  getattr of what holds it, a closure, or the interpreter's own lists of live objects; a name the held
+  statements read, bound otherwise elsewhere; a table reached by its name as a string from another module; the
+  interpreter's own roads to code that is not a library by name (its import system given a path, sys.path,
+  extension modules); what the system's own libraries load by the registry's word; and all that R-3 already
+  said. "Any other fails" is said nowhere.
+- S-3 (the ordinary forms still missed, closed; findings 3, 6, 7, 8). The environment written through a name
+  os.environ was bound to in the same function is an ordinary form: followed and held. getattr of a library's
+  object by a name beginning with an underscore is held as any other use. A class pattern's keyword names are
+  read as mentions. That `sys.modules` is counted where a file imports sys is proved by a case of its own.
+- S-4 (the cost; the builder's question 2 and the review's view). `compile`, `exec` and `eval` reach code only as
+  the interpreter's own names: counted as names, as attributes of anything but a module bound by `import re`,
+  and in strings that are not docstrings. A new regular expression or a sentence of help no longer changes a
+  table.
+- S-5 (the builder's questions, kept as built unless S-3 or S-4 say otherwise). The twelve words added; case
+  kept; a read of the environment by any key not counted; compound statements held whole; `loader` counted in
+  other files; the two tables. The form autostart's reader of a drive's kind has (a library's name bound again)
+  is held as it is and stays.
+- S-6 (lands after the REDO and a reading of S-2 to S-4 alone; and next). No fourth attempt to defeat it is asked.
+  It moves no number (a test and its documents). Next: M12.4c2b1, then M12.4c2b2.
+- S-7 (the review of the REDO, docs/review/2026-11-27-M12.4c2a2-redo.md, verdict NEXT; the builder's nine questions;
+  the cost). The reviewer kept to S-1's bound and found the four ordinary forms closed, each case proving its form,
+  and the narrowing true to the tree row for row; what was left was wording, and the Table made it by hand (below).
+  Ruled:
+  - Question 1: one rule for `os.environ` and for a name bound to it, as built - a `.get` given a key that is not a
+    string written in the code is held by its statement. The HANDOFF's E1 said in its last sentence that the reads the
+    tree makes through such names stay uncounted, and in its first that they are held: the contradiction was the
+    Table's, and three statements that only read are held. FOR: a hold that does not depend on how a name is spelled.
+    Question 2: no list of methods that only read; one row today does not earn a rule.
+  - Question 3: the forms followed are the ones the tree uses, as built; a name bound at a file's top is followed
+    through the whole file (the review's finding 4), and that is now said where the rule is said. Questions 4 to 6 and
+    8: as built. Question 7: the short form in the guide and the threat model said something other than S-2 (finding
+    2) and is re-worded: a library's object reached from elsewhere or through what holds it, a name it reads bound
+    elsewhere, a table reached from elsewhere. Question 9: the gate's matrix (Python 3.11 and 3.12, Linux and Windows)
+    read green on the builder's commit.
+  - The cost the reviewer named: the eleven rows added to ENVIRON hold whole statements, and an edit of one for
+    another reason (a check added to doctor's list, a keyword added where the watch makes its notifier) changes the
+    table. Accepted as built: the change is one row printed by the test's own helper, and a reviewer reads it. If such
+    changes become routine, the rows where the name is only handed on are to be held by what it is handed to and not
+    by the statement's text - a task of its own then, not now. MUST NOT TOUCH: an ENVIRON row's change is read, never
+    passed because it is usual.
+  - Made by the Table after the review (findings 1 to 5): "every place a library is loaded" and "every mention" became
+    each place in the forms it knows and each mention of a word on its lists, in the test's first lines and the three
+    documents; "the PATH is closed by a test" became held by a test; the short form above; the file's top said; and
+    the two made-up cases that allowed any other reason at their lines now name the one other reason each may give.
+  - It lands as tests and documents; no number moves (ADR-0015). Next: M12.4c2b1.

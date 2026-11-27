@@ -599,10 +599,17 @@ reader of its device's name; the autostart reader also asks a drive's kind, for 
 letter is read as the session that asks names it, and the system's account may name it otherwise:
 the install is to have the service ask the check again at its own start, as the system (not built
 yet). A library Raqib loads by name is searched in the program's own folder, in System32 and in
-folders the process itself added - read in the interpreter's library, not measured: a test holds the
-ways it knows of adding one and of loading by another name (its own text says what it does not see),
-and nothing holds what the interpreter's own start adds. It is a reading at one moment: run it again
-after anything there changes.
+folders the process itself added - read in the interpreter's library, not measured: a test holds
+each mention in Raqib's code of a word on its lists (words by which a library is loaded, a folder
+added or ctypes reached), exactly as it is, so that a change made in good faith and written the
+ordinary way (a new library, a library's path, a folder added, the PATH set) changes what the test
+holds, and a reviewer reads it. It is no wall against code written to get past it: it does not hold
+a library's object reached from elsewhere or through what holds it, a name it reads bound elsewhere,
+a table reached from elsewhere, the interpreter's own roads to code (its imports by a path,
+sys.path, extension modules), what the system's own libraries load by the registry's word, a word
+built from pieces at run time, the loads the interpreter itself makes, or whether a library's own
+dependencies are searched as it is (not measured), and nothing holds what the interpreter's own
+start adds. It is a reading at one moment: run it again after anything there changes.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

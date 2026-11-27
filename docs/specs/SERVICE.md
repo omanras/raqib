@@ -793,20 +793,36 @@ K-3 as they are); a letter that is not there has no root (kind 1) and its device
 error 2). Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10), not measured: a library
 asked for by a bare name is searched with the system's default folders - the application's own folder, System32, and
 folders the process itself added - and not along the PATH or in the folder the process was started in. So the system's
-PATH is closed by a test (P-2, tests/test_libraries.py): it reads every place in raqib/ where a library is loaded and
-holds that each name is a plain name written in the code, with no path and no name worked out, no folder added to the
-search and no search mode given, and on one list (advapi32, dnsapi, dwmapi, iphlpapi, kernel32, shcore, shell32,
-user32); on Windows it also finds each name of the list in System32. The one call that changes the search,
-SetDllDirectoryW with no folder at the entry (ADR-0007 CI-3), takes the folder searched first back to the system's
-own. The reading names three places a library is searched: the program's own folder, which the check walks as the code
-itself; System32; and folders the process itself added. Of the third, the test holds the ways it knows by which raqib/
-could add one, not every way (Amendment R: its first lines say what it does not yet hold, and a task of its own
-re-makes it as a list of what is allowed); nothing holds what the interpreter's own start adds (site, an `import` line
-of a *.pth file, sitecustomize), which the check walks as files and does not read for what it adds. Since Amendment Q
-(Q-4) the test also refuses a loader asked by index, ctypes' low loader and the class its loaders are made by, a
-loading call given more than its name, a search call's name written in a string, the environment written whole or by
-the setters it knows past `os.environ`, a table of names changed after it was written, a loader handed on as a value,
-and a second call of CI-3's call or one given a folder; what it still does not see is said in its own first lines. Not
+PATH is held by a test (P-2, tests/test_libraries.py; what it is for and where it ends is said below): it reads each
+place in raqib/ where a library is loaded, in the forms it knows, and holds that each name is a plain name written in
+the code, with no path and no name worked out, no folder added to the search and no search mode given, and on one list
+(advapi32, dnsapi, dwmapi, iphlpapi, kernel32, shcore, shell32, user32); on Windows it also finds each name of the
+list in System32. The one call that changes the search, SetDllDirectoryW with no folder at the entry (ADR-0007 CI-3),
+takes the folder searched first back to the system's own. The reading names three places a library is searched: the
+program's own folder, which the check walks as the code itself; System32; and folders the process itself added. Of the
+third, the test holds since Amendment R (R-3) every mention in raqib/ of a word by which a library can be loaded, the
+search changed, the environment set past `os.environ` or ctypes reached by another road - as a name, an attribute, an
+import, a keyword, a parameter or a whole word in a string, docstrings too, but `compile`, `exec` and `eval` not in a
+docstring or as an attribute of `re` (Amendment S, S-4) - by file, function and count, compared whole and exactly; and
+it holds the statement around each load and CI-3's function and `own.library_folder` word for word, every attribute
+taken of ctypes on one list, each table of names and each loader as written with every mention of its name, each use
+of a library's object in the function and file that loaded it, and each use of `os.environ`, or of a name it is bound
+to in a function (bound at a file's top, through the file), but a read of one name, by its statement. What that is for
+(S-1): a change made in good faith and written the ordinary way - a new library, a library's path, a folder added, the
+PATH or the whole environment set, a loader handed somewhere new, ctypes used as the tree did not use it - changes a
+table of the test, and a reviewer reads the change; it is no wall against code written to get past it, so it does not
+hold (S-2) a library's object reached outside the function and file that loaded it (by getattr of what holds it, a
+closure or the interpreter's own lists of live objects), a name the held statements read bound otherwise elsewhere, a
+table reached by its name as a string from another module, the interpreter's own roads to code that is not a library
+by name (its import system given a path, `sys.path`, extension modules), what the system's own libraries load by the
+registry's word, a word built from pieces at run time that is on no list, or the loads the interpreter itself makes
+outside raqib/; nothing holds what the interpreter's own start adds (site, an `import` line of a *.pth file,
+sitecustomize), which the check walks as files and does not read for what it adds. The refusals of Amendment Q (Q-4)
+stand beneath it:
+a loader asked by index, ctypes' low loader and the class its loaders are made by, a loading call given more than its
+name, a search call's name written in a string, the environment written whole or by the setters it knows past
+`os.environ`, a table of names changed after it was written, a loader handed on as a value, and a second call of
+CI-3's call or one given a folder. Not
 measured, and said: a network drive, a removable disk and a disc (their kinds are the system's own numbers, read in
 its documents, not seen); a letter the system's account has and the asker has not, or names otherwise; a folder
 mounted on a volume with no letter; whether a library's own dependencies are searched as the library is.
