@@ -211,6 +211,10 @@ class System:
         k32.GetFileInformationByHandle.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
         k32.CloseHandle.argtypes = [wintypes.HANDLE]
         k32.LocalFree.argtypes = [wintypes.LPVOID]
+        k32.GetDriveTypeW.restype = wintypes.UINT                       # P-1: the drive (read_drive)
+        k32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
+        k32.QueryDosDeviceW.restype = wintypes.DWORD
+        k32.QueryDosDeviceW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
         self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, k32=k32, status=SERVICE_STATUS,
                                           attributes=SECURITY_ATTRIBUTES, entry=SERVICE_TABLE_ENTRY,
                                           handler=handler_ex, main=service_main)
@@ -309,6 +313,24 @@ class System:
         finally:
             k32.CloseHandle(h)
         return info[0], said
+
+    def read_drive(self, root):
+        """ADR-0013 P-1: (kind, device's name) of the drive whose root is `root` (`X:\\`), as the system says them:
+        its kind (GetDriveTypeW of the root, the number) and the first name QueryDosDeviceW writes for `X:` into a
+        buffer of a fixed bound; OSError (the system's error) where that name is not read, ValueError where `root` is
+        not a drive's root. raqib/wincode.py judges them; this reads only."""
+        if not (isinstance(root, str) and len(root) == 3 and root[0].isascii() and root[0].isalpha()
+                and root[1:] == ":\\"):
+            raise ValueError("not a drive's root (X:\\): %r" % (root,))
+        api = self._win()
+        ctypes, k32 = api.ctypes, api.k32
+        bound = 1024                     # characters: the names of one device, each ended by a zero, the list by two
+        kind = k32.GetDriveTypeW(root)
+        names = ctypes.create_unicode_buffer(bound)
+        if not k32.QueryDosDeviceW(root[:2], names, bound):
+            raise OSError(ctypes.get_last_error(), "the device's name of %s was not read (the drive's kind %d)"
+                          % (root[:2], kind))
+        return kind, names.value         # the first name: up to its zero
 
     def begin_text(self, path, before):
         """The text file begun anew (binary): the one before kept once as `before`; OSError."""

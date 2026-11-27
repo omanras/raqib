@@ -2189,7 +2189,7 @@ collector that is slow, down or refusing never delays or loses a capture
   system's; a place on another volume, or one with a file held open by
   another process; Windows before the runners' versions.
 - **What the check of the code does not read (`raqib service check`;
-  ADR-0013 Amendments K to O).** On Windows `raqib service check` says
+  ADR-0013 Amendments K to P).** On Windows `raqib service check` says
   whether the code a service would run is the system's alone, by the owners
   and lists of the packed program's folder, whole, or, for a plain
   interpreter asked with `-I`, of its folder, its base's, its prefixes, the
@@ -2210,12 +2210,25 @@ collector that is slow, down or refusing never delays or loses a capture
   (backup and restore, taking ownership, debugging programs), each of which
   reaches past every list it reads; the packed runtime's own roads outside
   the program's folder, if it has any (it takes the packer's word that
-  everything loads from there); the system's PATH (this Raqib loads no
-  library by a bare name that System32 does not hold, not yet pinned by a
-  test); the labels of a system list; what a drive's letter really names (a
-  letter given to a folder or a share reads as a drive of its own, and the
-  folders really above it are not read - refused with the install, not yet);
-  or anything that changes after it was read. On the plain road it does not
+  everything loads from there); the labels of a system list; or anything
+  that changes after it was read. Two things it once did not read are
+  closed by Amendment P. What a drive's letter names: before any name of a
+  drive is read, the check asks the system the drive's kind and its
+  device's name, once for each drive met, and judges a path only on a drive
+  of the fixed kind whose device's name begins `\Device\` - a letter given
+  to a folder (measured: it reads of the fixed kind, its device's name the
+  folder's own path behind `\??\`) or to a share, a removable disk, a
+  network drive, a disc and a letter with no device are refused, with the
+  kind and the device's name said, because what is above such a letter is
+  not what the check reads, or can be changed where it cannot see. The
+  system's PATH: a test (tests/test_libraries.py) reads every place in
+  raqib/ where a library is loaded and holds that each is a plain name
+  written in the code, on one list, with no folder added to the search, no
+  search mode and no name worked out at run time, and on Windows finds each
+  in System32; with ctypes' search as read in its source (not measured: the
+  application's folder, System32 and folders the process added, never the
+  PATH), a library Raqib asks for comes from the program's own folder,
+  which the check walks, or from System32. On the plain road it does not
   read what the system's own account would add to the path that the asker's
   does not (only the system writes there), a finder or hook a package
   installs (an editable install is met only as its *.pth file and the
@@ -2232,7 +2245,11 @@ collector that is slow, down or refusing never delays or loses a capture
   base executable's and its base prefix; a packed runtime of Python 3.14 or
   later, which reads a venv file above the program's folder though its home
   is set, is refused until the packed road judges that name. Not measured: a
-  removable or shared drive, a machine joined to a domain, Program Files
+  removable disk, a network drive and a disc (refused by their kinds, the
+  system's own numbers read in its documents, not seen), a letter the
+  system's account has and the asker has not, a folder mounted on a volume
+  with no letter, whether a library's own dependencies are searched as the
+  library is, a machine joined to a domain, Program Files
   with lists an administrator changed, a file the system itself marks as a
   reparse point; whether `-I` reads the registry's paths on x64 or after
   3.11 (on ARM64 with 3.11.9 it did not), the Store's Python, an embedded

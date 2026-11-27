@@ -49,13 +49,20 @@ PTH_MAX bytes, no byte PTH_ODD finds - and its lines that are paths by site's ru
 entries; the check takes or runs none of its lines as code. The check is run by the code it judges (N-2): the
 interpreter that asks has run its site, and the import lines of its *.pth files, at its start.
 
+The drive (Amendment P, P-1; both roads): each drive a path of the walk is on is asked once, before any name of it is
+read - by its letter, without case - and a path is judged only where the system says of its drive the fixed kind (3)
+and a device's name that begins with \\Device\\ (drive_refused). Any other kind (DRIVE_KINDS), a device's name
+that does not (a letter given to a folder or a share reads so), a device's name not read, a kind or a name of a type
+not known: refused, with the letter, the kind and its word and the device's name; nothing of that drive is read. The
+pass says the drives asked, each letter with its device's name (drives_said).
+
 Every call of the system (the platform, whether packed, the program's path, the modules' folder, the running
-interpreter's flags, base, prefixes, path and package, the one read of a name, a folder's listing, a *.pth file's
-bytes) goes through one object, System; a test hands its own. The *.pth file's bytes are the only file this module
-opens: one bounded read in binary mode, in System.read_bytes. Nothing runs at import; ctypes is only in winservice's
-reader, declared at its first call. The standard library only; the check writes nothing (the interpreter that runs
-it may write bytecode caches beside what it imports, where the asker may write); no right is asked; no program is
-started; no network.
+interpreter's flags, base, prefixes, path and package, the one read of a name, a drive's kind and device's name, a
+folder's listing, a *.pth file's bytes) goes through one object, System; a test hands its own. The *.pth file's
+bytes are the only file this module opens: one bounded read in binary mode, in System.read_bytes. Nothing runs at
+import; ctypes is only in winservice's readers (of a name, of a drive), declared at their first call. The standard
+library only; the check writes nothing (the interpreter that runs it may write bytecode caches beside what it
+imports, where the asker may write); no right is asked; no program is started; no network.
 """
 from __future__ import annotations
 
@@ -108,6 +115,14 @@ THERE, MISSING, BENEATH = "there", "not there", "beneath a file"   # how a road 
 DEVICE_NAMES = re.compile(r"(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9\u00b9\u00b2\u00b3]"
                           r"|LPT[0-9\u00b9\u00b2\u00b3])(?:\..*)?\Z", re.I)   # a device's name, any extension
 NOT_IN_A_NAME = '\\/:*?"<>|'
+# P-1: a drive is taken only of the fixed kind with a device's name that begins DISK_DEVICE (measured: a disk's
+# `\\Device\\HarddiskVolumeN`; a letter given to a folder `\\??\\` and the folder's path). The kinds' words are
+# GetDriveTypeW's numbers as the system's documents name them; only 1 and 3 were seen (Amendment P)
+DRIVE_FIXED = 3
+DRIVE_KINDS = {0: "unknown", 1: "no root", 2: "removable", 3: "fixed", 4: "remote", 5: "a disc", 6: "a RAM disk"}
+DISK_DEVICE = "\\Device\\"
+DRIVE_ONLY = ("a path is judged only on a drive the system says is of the fixed kind (3) with a device's name"
+              " beginning \\Device\\, and nothing of this drive is read")
 
 Entry = namedtuple("Entry", "kind flags rights name text")
 _OWNER = re.compile(r"O:(S-1-[0-9]+(?:-[0-9]+)+|[A-Z]{2})")
@@ -333,10 +348,30 @@ def _not_there(got):
 class _Walk:
     """E2: one walk, each name read once (names compared without case), counted by kind and role."""
 
-    def __init__(self, system):
+    def __init__(self, system, taken=None):
         self.system, self.code, self.above, self.alone, self.walked = system, set(), set(), set(), 0
         self.counts = {"folders": 0, "files": 0, "above": 0}   # the plain road adds "alone" (N-3)
         self.got, self.kind, self.lists = {}, {}, {}
+        self.drives = {}                                       # P-1: a letter (upper case) -> None or its refusal
+        self.taken = [] if taken is None else taken            # P-1: (letter, device's name) of each drive taken
+
+    def _drive(self, path):
+        """P-1: None where the drive `path` is on was asked and taken - asked once (its letter without case), before
+        any name of it is read; else the refusal (the drive's root, words)."""
+        if not isinstance(path, str) or not _DRIVE.match(path):    # not met: every path read passed path_refused
+            return _said(path), "not a path of a drive (X:\\): its drive is not asked; %s" % NOT_READ
+        letter = path[:2].upper()
+        if letter in self.drives:
+            return self.drives[letter]
+        try:
+            got = self.system.drive(letter + "\\")
+        except (OSError, ValueError) as exc:
+            got = exc
+        bad = drive_refused(letter, got, path)
+        self.drives[letter] = bad
+        if bad is None:
+            self.taken.append((letter, got[1]))
+        return bad
 
     def _count(self, key, kind):
         """Each name counted once, by the strictest role it was taken in: as the code itself, whole (folders,
@@ -355,6 +390,9 @@ class _Walk:
         key = ntpath.normcase(path)
         if key in self.got:
             return None, self.got[key]
+        bad = self._drive(path)            # P-1: the drive first, once; a drive refused is read no further
+        if bad:
+            return bad, None
         self.walked += 1
         if self.walked > WALK_MAX:
             return (_said(path), "more than %d names to walk (WALK_MAX): a walk that is not whole is not a pass"
@@ -469,13 +507,14 @@ class _Walk:
         return None, MISSING
 
 
-def check(system):
-    """E2 (K-4, K-5; M-1 to M-5): (bad, counts). bad is (name, words) of the first name refused - or of the program,
-    where it is not Windows', or a plain interpreter not asked with -I and its site - or None where the code a
-    service would run is the system's alone; counts says what was walked: folders and files judged as the code itself
-    (K-2), folders above (K-3), and on the plain road what plain_words says. Packed, the packed road; else the plain
-    one. The check writes nothing."""
-    walk = _Walk(system)
+def check(system, drives=None):
+    """E2 (K-4, K-5; M-1 to M-5; P-1): (bad, counts). bad is (name, words) of the first name refused - or of the
+    program, where it is not Windows', or a plain interpreter not asked with -I and its site, or of a drive's root
+    refused - or None where the code a service would run is the system's alone; counts says what was walked: folders
+    and files judged as the code itself (K-2), folders above (K-3), and on the plain road what plain_words says.
+    drives: a list, or None; each drive asked and taken is put on it, (its letter, its device's name), in the order
+    asked. Packed, the packed road; else the plain one. The check writes nothing."""
+    walk = _Walk(system, drives)
 
     def done(bad):
         return bad, dict(walk.counts)
@@ -515,6 +554,46 @@ def check(system):
         if bad:
             return done(bad)
     return done(None)
+
+
+def _kind_word(kind):
+    return DRIVE_KINDS.get(kind, "a number this check knows no word for")
+
+
+def drive_refused(letter, got, path):
+    """P-1: None where the system's answer `got` for the drive `letter` (`X:`), met first by `path`, is the fixed kind
+    and a device's name that begins with \\Device\\; else (the drive's root, the words of its refusal). got: (kind,
+    device's name) as winservice.System.read_drive gives them, or the error it raised."""
+    root = letter + "\\"
+    head = "the drive %s (first met by %s), asked before any name of it is read (ADR-0013 P-1)" % (
+        letter, _said(path))
+    if isinstance(got, BaseException):
+        return root, "%s: its device's name was not read (%s); %s; %s" % (head, _why(got), DRIVE_ONLY, NOT_READ)
+    if not isinstance(got, tuple) or len(got) != 2:
+        return root, "%s: the system's answer is not a kind and a device's name (%s): not read; %s; %s" % (
+            head, _said(repr(got), 80), DRIVE_ONLY, NOT_READ)
+    kind, name = got
+    if type(kind) is not int or not isinstance(name, str):
+        return root, ("%s: a kind or a device's name of a type the check does not know (kind %s, device's name %s):"
+                      " not read; %s; %s" % (head, _said(repr(kind), 40), _said(repr(name), 80), DRIVE_ONLY,
+                                             NOT_READ))
+    said = 'kind %d (%s) and names its device "%s"' % (kind, _kind_word(kind), _said(name))
+    if kind != DRIVE_FIXED:
+        return root, "%s: the system says %s: not the fixed kind; %s" % (head, said, DRIVE_ONLY)
+    if not name.startswith(DISK_DEVICE):
+        return root, ("%s: the system says %s, a device's name that does not begin with \\Device\\ (a letter given"
+                      " to a folder or a share reads so); %s" % (head, said, DRIVE_ONLY))
+    return None
+
+
+def drives_said(drives):
+    """P-1 (E3): the drives a pass asked, each letter with its device's name, as the pass ends ("" where none)."""
+    if not drives:
+        return ""
+    return ("; and the drive%s asked before any name of %s was read, each said by the system to be of the fixed kind"
+            " with a device's name beginning \\Device\\: %s" % (
+                "s" if len(drives) > 1 else "", "them" if len(drives) > 1 else "it",
+                ", ".join('%s "%s"' % (_said(letter, 2), _said(name)) for letter, name in drives)))
 
 
 def not_asked(system):
@@ -689,20 +768,22 @@ def _pth_read(system, walk, pth):
     return None, data
 
 
-def checked_words(counts):
-    """K-6 (service.checked_words' twin): what the check walked, by count (never a sentence without them)."""
+def checked_words(counts, drives=()):
+    """K-6 (service.checked_words' twin): what the check walked, by count (never a sentence without them), and the
+    drives it asked (P-1, drives_said)."""
     total = counts["folders"] + counts["files"] + counts["above"]
     return ("checked %d names, each the system's alone (its owner the system, the administrators or the system's"
             " installer, no reparse point, its list there): under the program's folder, whole, %d folders and %d"
             " files, each giving any other name only reading and executing (the creator's own inherit-only entry"
             " apart), and %d folders above it to the drive's letter, each giving any other name, in the entries that"
-            " apply to the folder itself, only that and adding a thing beside" % (
-                total, counts["folders"], counts["files"], counts["above"]))
+            " apply to the folder itself, only that and adding a thing beside%s" % (
+                total, counts["folders"], counts["files"], counts["above"], drives_said(drives)))
 
 
-def plain_words(counts):
+def plain_words(counts, drives=()):
     """M-5, N-2, N-3 (service.checked_words' twin, the plain road): what the check walked, by count. The first number
-    is the names walked whole and the folders above; the folders judged themselves only are said apart, after it."""
+    is the names walked whole and the folders above; the folders judged themselves only are said apart, after it;
+    then the drives asked (P-1, drives_said)."""
     total = counts["folders"] + counts["files"] + counts["above"]
     base = ", its base's" if counts["base"] else ""
     prefixes = ("its prefix and base prefix (its exec prefixes among them)", "its prefix, base prefix and one exec"
@@ -718,10 +799,10 @@ def plain_words(counts):
             " by the check; and %d folders above them to the drive's letter, each giving any other name, in the"
             " entries that apply to the folder itself, only that and adding a thing beside; and besides those %d"
             " names, %d folders judged themselves only, as the code itself, each the deepest folder that is there of"
-            " a name not there" % (
+            " a name not there%s" % (
                 total, base, prefixes[counts["exec"]], counts["entries"], counts["folders"], counts["files"],
                 counts["missing"], counts["beneath"], counts["own"], base, counts["own_there"], counts["pth"],
-                counts["pth_lines"], counts["above"], total, counts["alone"]))
+                counts["pth_lines"], counts["above"], total, counts["alone"], drives_said(drives)))
 
 
 def not_windows(platform):
@@ -754,6 +835,11 @@ class System:
         if self._reader is None:
             self._reader = winservice.System()
         return self._reader.read_place(path)
+
+    def drive(self, root):                   # P-1: winservice's reader of a drive, beside the one reader of a name
+        if self._reader is None:
+            self._reader = winservice.System()
+        return self._reader.read_drive(root)
 
     def listdir(self, path):
         return os.listdir(path)
@@ -822,10 +908,11 @@ def cli_check(args, out, system=None):
         if words:
             _say("raqib service check: %s: %s" % (_said(system.program()), words))
             return 2
-    bad, counts = check(system)
+    drives = []
+    bad, counts = check(system, drives)
     if bad is None:
         out.write("raqib service check: the code a service would run is the system's alone: %s\n"
-                  % (plain_words(counts) if "entries" in counts else checked_words(counts)))
+                  % (plain_words(counts, drives) if "entries" in counts else checked_words(counts, drives)))
         return 0
     out.write("raqib service check: NOT the system's alone: %s, %s\n" % bad)
     return 1

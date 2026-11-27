@@ -582,6 +582,21 @@ name of the forms above, two names of one folder that differ only in case (a fol
 would run is not known), and a walk past 200000 names (WALK_MAX, the Linux number) are each refused as not read: what
 was not read is never the system's. A name's kind is the one read through its handle, never the listing's.
 
+**The drive (Amendment P, P-1).** Before any name of a drive is read, the check asks what the drive's letter names:
+each drive a path of the walk is on is asked once (its letter compared without case) - on both roads, the program's or
+the interpreter's drive first, then each drive of a root, an entry of the path (one that is not there too), a line of
+a *.pth file or a name the interpreter itself looks for, as it is met. The system's answer is its kind (GetDriveTypeW
+of `X:\`, a number) and its device's name (the first name QueryDosDeviceW gives for `X:`), read by one function beside
+the one reader of a name (`winservice.System.read_drive`; no second copy of its calls in the tree). A path is judged
+only where its drive is of the fixed kind (3) and its device's name begins with `\Device\`. Refused, each with its
+own words, the letter, the kind as a number with the system's word for it (0 unknown, 1 no root, 2 removable, 3
+fixed, 4 remote, 5 a disc, 6 a RAM disk; another number said as it is) and the device's name made printable: a kind
+that is not 3; a device's name that does not begin with `\Device\` (a letter given to a folder or a share reads so);
+a device's name not read (the system's number said); a kind or a name of a type the check does not know. A refused
+drive is exit 1, and nothing of it is read: what is above such a letter is not what the check reads, or can be changed
+where the check cannot see. So "to the drive's letter" in the pass means a disk's letter, and the pass ends with the
+drives it asked, each letter with its device's name.
+
 **The roads walked (K-5, M-2).** Two: the packed road, and the plain road below. Packed with its own runtime
 (`sys.frozen`, as tools/rig/pack.sh packs it): the root
 is the folder the program file is in. The folders above it are read first, from the drive down, then the root and
@@ -648,7 +663,7 @@ too, where that is neither of the two folders: the interpreter takes a venv's bu
 `pyvenv.cfg` names, and the base prefix is that folder whatever the interpreter says its base executable is (O-1).
 "Two folders above" is the interpreter's own compiled-in value, read in its build files at the four versions (`..\..`;
 another build of Python may hold another, and is not known). The names are made from the paths as the interpreter says
-them, not resolved: a letter given to a folder is read as a drive of its own (below), and a link on the way is a
+them, not resolved: a letter given to a folder is refused by its drive (P-1, above), and a link on the way is a
 reparse point and refused. A `._pth` file beside the runtime library is inside a walked folder where the library lies
 beside the interpreter, which is not asked. Read: Modules/getpath.py at 3.11.9, 3.12.10, 3.13.9 and 3.14.0,
 Lib/site.py at 3.11.9 and 3.12.10; not read: the start of Python 3.10 and older (another file; Raqib asks for 3.11),
@@ -675,8 +690,8 @@ runs it may write bytecode caches beside what it imports, where the asker may wr
 
 | Exit | When | What it says |
 |---|---|---|
-| 0 | Windows, and every name walked of the road - packed, or a plain interpreter asked with `-I` - is the system's alone | on the output, one sentence with its counts: packed, "raqib service check: the code a service would run is the system's alone: checked N names, each the system's alone (...): under the program's folder, whole, F folders and G files, ..., and A folders above it to the drive's letter, ..."; on the plain road, "... checked N names, each the system's alone (...): under the interpreter's folder, its base's, its prefix and base prefix, E entries of its path and the raqib package's folder, whole, F folders and G files, ...; M of those entries not there, each judged by the deepest folder of it that is there, itself only, and B beneath a file, each judged by that file; O names the interpreter itself looks for at every start for its folder (...), each judged as an entry is, T of them there; P *.pth files read, L of their lines walked as entries, none of their lines taken or run by the check; and A folders above them to the drive's letter, ...; and besides those N names, J folders judged themselves only, as the code itself, ..." ("its base's" said only where a base in another folder was walked, its exec prefixes only where they are roots of their own; N is F + G + A) - never a pass without them; each says the creator's own inherit-only entry was left apart, and that above only the entries that apply to the folder itself were read (M-5) |
-| 1 | a name is not the system's alone, or was not read | on the output: "raqib service check: NOT the system's alone: NAME, ROLE: WHY", the first name refused, its role (`as the code itself (K-2)`, `as a folder above it (K-3)`, or none where it is the path's form, the modules' place, a *.pth file's bytes or the walk's bound) and why; an entry not there is said as "ENTRY, not there (error 2): the deepest folder of it that is there, FOLDER, judged for it ROLE: WHY"; one of N-1's names ends with "(the name NAME: WHICH, which the interpreter itself looks for at every start ... above the interpreter's folder FOLDER)" |
+| 0 | Windows, and every name walked of the road - packed, or a plain interpreter asked with `-I` - is the system's alone | on the output, one sentence with its counts: packed, "raqib service check: the code a service would run is the system's alone: checked N names, each the system's alone (...): under the program's folder, whole, F folders and G files, ..., and A folders above it to the drive's letter, ..."; on the plain road, "... checked N names, each the system's alone (...): under the interpreter's folder, its base's, its prefix and base prefix, E entries of its path and the raqib package's folder, whole, F folders and G files, ...; M of those entries not there, each judged by the deepest folder of it that is there, itself only, and B beneath a file, each judged by that file; O names the interpreter itself looks for at every start for its folder (...), each judged as an entry is, T of them there; P *.pth files read, L of their lines walked as entries, none of their lines taken or run by the check; and A folders above them to the drive's letter, ...; and besides those N names, J folders judged themselves only, as the code itself, ..." ("its base's" said only where a base in another folder was walked, its exec prefixes only where they are roots of their own; N is F + G + A) - never a pass without them; each says the creator's own inherit-only entry was left apart, and that above only the entries that apply to the folder itself were read (M-5); each ends with the drives asked (P-1): "; and the drive asked before any name of it was read, each said by the system to be of the fixed kind with a device's name beginning \Device\: C: "\Device\HarddiskVolume3"" (with two or more, "the drives ... of them", each `LETTER "DEVICE"`) |
+| 1 | a name is not the system's alone, or was not read | on the output: "raqib service check: NOT the system's alone: NAME, ROLE: WHY", the first name refused, its role (`as the code itself (K-2)`, `as a folder above it (K-3)`, or none where it is the path's form, the modules' place, a *.pth file's bytes or the walk's bound) and why; an entry not there is said as "ENTRY, not there (error 2): the deepest folder of it that is there, FOLDER, judged for it ROLE: WHY"; one of N-1's names ends with "(the name NAME: WHICH, which the interpreter itself looks for at every start ... above the interpreter's folder FOLDER)"; a drive refused (P-1) is said as "X:\, the drive X: (first met by PATH), asked before any name of it is read (ADR-0013 P-1): the system says kind K (WORD) and names its device "DEVICE"..." with why |
 | 2 | not Windows, or a plain interpreter not started with `-I` or started with `-S` | on the error stream, which, and for a plain interpreter the command to ask it by: `"PATH" -I -m raqib service check` (M-1) |
 
 Names and texts said are made printable (a character that is not is `?`) and cut at 200 characters, the cut marked
@@ -690,7 +705,11 @@ second exit 1 with a path of a drive and a role in its words. On the plain road 
 Program Files as an administrator would, install Raqib into the copy, and ask the copy with `-I` and its own Python
 with `-I` (M-6; the wiring is the Table's): X50 (`tools/rig/check.py --service-check-plain FILE`, the same four keys
 and the same reading as X49) is MET only where the copy is exit 0 with the plain road's counts adding up and the job's
-own Python exit 1 with a path of a drive and a role in its words.
+own Python exit 1 with a path of a drive and a role in its words. Through a letter (P-3; the wiring is the Table's):
+the job is to give a letter to the folder of its packed copy in Program Files and ask the check through that letter;
+X51 (`tools/rig/check.py --service-check-drive FILE`, keys `letter-exit` and `letter-words`) is MET only where the
+answer is exit 1 and its words name a kind (`kind N (WORD)`) and a device's name (`names its device "DEVICE"`) that
+does not begin with `\Device\`.
 
 **What Amendment K measured, and by what.** GitHub's Windows machines, x64 and ARM64 (the same on both unless said),
 every owner and list read through one handle on the name, whole; the texts are tests/fixtures/wincode/measured.txt,
@@ -705,8 +724,9 @@ one). `C:\ProgramData` lets users add files and folders; `D:\` (x64 only) is own
 of the account the job ran as - an administrator's, the machine's built-in one - is owned by the system and gives that
 account everything; a plain user's own profile was not read (Amendment L corrects K's sentence here). So the Linux
 rule (no folder on the way writable by another) is not carried over word for word: it would refuse every path of
-Windows. The one real reading a test makes, on Windows only: `C:\Windows\System32\kernel32.dll` taken as the code
-itself and each folder above it as a folder above (measured so on both machines). Every other verdict here is read
+Windows. The real readings a test makes, on Windows only: `C:\Windows\System32\kernel32.dll` taken as the code
+itself and each folder above it as a folder above (measured so on both machines); and since Amendment P the system's
+drive read as kind 3 with a device's name beginning `\Device\`, and each library of P-2's list found in System32. Every other verdict here is read
 from the measured texts by tests on any system, not on a machine; the walk is held by tests on a made-up Windows.
 
 **What the check itself said on real machines (Amendment L).** GitHub's Windows machines, x64 and ARM64, the same on
@@ -743,17 +763,35 @@ was asked on real machines since (Amendment N's field run, before N-1): X50 is t
 from any list (backup and restore, taking ownership, debugging programs); the packed runtime's own roads - an entry of
 its sys.path outside the program's folder, a variable or a file it might take one from (the check walks the program's
 folder and the folder the runtime names, and takes the packer's word that everything loads from there; not measured
-for any packer); the system's PATH (this Raqib loads no library by a bare name that System32 does not hold - to be
-pinned by a test with the install); the labels of a system list; what the drive's letter names - the letter is read as
-the session that runs the check names it, and a letter given to a folder (`subst`) or to a share reads as a drive of
-its own, so the folders really above it are not read (measured: such a letter reads as a fixed drive, told apart only
-by its device's name; refused with the install, M12.4c2); what changes after the check (it is a reading at one moment,
-as the Linux one is). Not measured: a denying entry on a real file that still lets the asker read (the one tried took
+for any packer); the labels of a system list; what changes after the check (it is a reading at one moment, as the
+Linux one is). The system's PATH and what the drive's letter names were on this list until Amendment P: both are
+closed now (below). Not measured: a denying entry on a real file that still lets the asker read (the one tried took
 reading from the asker too, and the file was refused as not read); a file the system itself marks as a reparse point
 (it would be refused); a removable or shared drive; a machine joined to a domain; Program Files on a machine whose
 lists an administrator changed; a plain user's own profile. Measured since Amendment K and kept for the tasks that
 rule them: a volume that keeps no lists (FAT32, exFAT) gives every name the owner `WD` and a null list, and is refused
 as it is.
+
+**What Amendment P measured and read, and what it did not.** Measured (the probe branch cf233f5; GitHub's Windows
+machines, x64 and ARM64): the system says a disk's letter is of the fixed kind and names its device
+`\Device\HarddiskVolumeN` (`C:\` read kind 3 and `\Device\HarddiskVolume3`; the number varies); a letter given to a
+folder (`subst`) is said of the fixed kind too, and its device's name is the folder's own path behind `\??\` (as
+`\??\C:\ProgramData`) - so the kind alone does not tell them apart, and the device's name does; a volume that keeps no
+lists (FAT32, exFAT) is a fixed disk whose every name reads with the owner `WD` and a null list (refused by K-2 and
+K-3 as they are); a letter that is not there has no root (kind 1) and its device's name is not read (the system's
+error 2). Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10), not measured: a library
+asked for by a bare name is searched with the system's default folders - the application's own folder, System32, and
+folders the process itself added - and not along the PATH or in the folder the process was started in. So the
+system's PATH is closed by a test (P-2, tests/test_libraries.py): it reads every place in raqib/ where a library is
+loaded and holds that each name is a plain name written in the code, with no path and no name worked out, no folder
+added to the search and no search mode given, and on one list (advapi32, dnsapi, dwmapi, iphlpapi, kernel32, shcore,
+shell32, user32); on Windows it also finds each name of the list in System32. The one call that changes the search,
+SetDllDirectoryW with no folder at the entry (ADR-0007 CI-3), takes the folder searched first back to the system's
+own. With the reading above, a library Raqib asks for comes from the program's own folder - which the check walks as
+the code itself - or from System32. Not measured, and said: a network drive, a removable disk and a disc (their kinds
+are the system's own numbers, read in its documents, not seen); a letter the system's account has and the asker has
+not; a folder mounted on a volume with no letter; whether a library's own dependencies are searched as the library
+is.
 
 **What the plain road does not read, and what was not measured (Amendment M).** Not read: what the system's own
 account would add to the path that the asker's does not (a path the registry gives under the asking user's own key is

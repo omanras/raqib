@@ -302,6 +302,39 @@ def test_e1_standard_library_only_ctypes_inside_system_nothing_at_import_no_star
     assert (ROOT / "raqib" / "winservice.py").read_bytes().isascii()
 
 
+def test_p1_the_drives_two_calls_are_declared_with_the_others_at_the_first_call_and_used_by_read_drive_alone():
+    """M12.4c2a (ADR-0013 P-1, E1): GetDriveTypeW and QueryDosDeviceW are declared in System._win, with the other
+    calls, and called only in System.read_drive; QueryDosDeviceW nowhere else in raqib/ (GetDriveTypeW is
+    raqib/autostart.py's own as well, AJ-4, declared there)."""
+    source = (ROOT / "raqib" / "winservice.py").read_text(encoding="ascii")
+    tree = ast.parse(source)
+    system = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "System")
+    methods = {n.name: n for n in system.body if isinstance(n, ast.FunctionDef)}
+    declared = {ast.unparse(n.targets[0]): ast.unparse(n.value) for n in ast.walk(methods["_win"])
+                if isinstance(n, ast.Assign) and any(w in ast.unparse(n.targets[0]) for w in ("GetDriveType",
+                                                                                             "QueryDosDevice"))}
+    assert declared == {"k32.GetDriveTypeW.restype": "wintypes.UINT",
+                        "k32.GetDriveTypeW.argtypes": "[wintypes.LPCWSTR]",
+                        "k32.QueryDosDeviceW.restype": "wintypes.DWORD",
+                        "k32.QueryDosDeviceW.argtypes": "[wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]"}
+    for name in ("GetDriveTypeW", "QueryDosDeviceW"):
+        where = {m for m, fn in methods.items() for n in ast.walk(fn)
+                 if isinstance(n, ast.Attribute) and n.attr == name}
+        assert where == {"_win", "read_drive"}, (name, where)
+        outside = [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == name]
+        assert len(outside) == sum(1 for fn in methods.values() for n in ast.walk(fn)
+                                   if isinstance(n, ast.Attribute) and n.attr == name)   # none outside System
+    calls = [ast.unparse(n) for n in ast.walk(methods["read_drive"]) if isinstance(n, ast.Call)]
+    assert "self._win()" in calls and "k32.GetDriveTypeW(root)" in calls and "k32.QueryDosDeviceW(root[:2], names," \
+        " bound)" in calls and "ctypes.create_unicode_buffer(bound)" in calls
+    assert not [n for n in ast.walk(methods["read_drive"]) if isinstance(n, (ast.Import, ast.ImportFrom))]
+    others = [p for p in (ROOT / "raqib").rglob("*.py") if "QueryDosDevice" in p.read_text(encoding="utf-8")]
+    assert others == [ROOT / "raqib" / "winservice.py"]
+    kinds = sorted(p.name for p in (ROOT / "raqib").rglob("*.py") if "GetDriveType" in p.read_text(encoding="utf-8"))
+    assert kinds == ["autostart.py", "wincode.py", "winservice.py"] and "GetDriveTypeW(" not in (
+        ROOT / "raqib" / "wincode.py").read_text(encoding="ascii")   # wincode names it in its words only
+
+
 def test_e1_nothing_sets_an_owner_or_a_list_on_anything_that_exists_and_15_is_gone():
     source = (ROOT / "raqib" / "winservice.py").read_text(encoding="ascii")
     for name in ("SetNamedSecurityInfo", "SetSecurityInfo", "SetFileSecurity", "SetKernelObjectSecurity",

@@ -373,6 +373,11 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
     "What the interpreter does with those names was read in its source, not measured.",
     "A Raqib packed with Python 3.14 or later is refused for now: that runtime reads `pyvenv.cfg` above the"
     " program's folder, and the packed road does not judge it yet.",
+    # M12.4c2a (ADR-0013 P-1): the one sentence the drive adds to the paragraph
+    "A path is judged only on a drive the system says is of the fixed kind with a device's name beginning"
+    " `\\Device\\`, as a disk's is: a letter given to a folder or a share, a removable disk, a network drive, a"
+    " disc and a letter with no device are refused, with the kind and the device's name said, and the pass ends with"
+    " the drives it asked.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK
