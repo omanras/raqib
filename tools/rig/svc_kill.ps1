@@ -30,7 +30,7 @@ $seconds = [int]((Get-Date) - $t).TotalSeconds
 @("killed-pid: $killed", "again-pid: $again", "again-seconds: $seconds", "state: $state") | Set-Content -Encoding ascii $out
 Start-Sleep 8
 "--- the text of the service started again (service.txt):"
-Get-Content "$place\service.txt" -ErrorAction SilentlyContinue | Select-String -Pattern "raqib service run:|hole:|watch-unended|ended without its end|round \d+: \d+ records" | Select-Object -First 10 | ForEach-Object { "    " + (Cut $_.Line 330) }
+Get-Content "$place\service.txt" -ErrorAction SilentlyContinue | Select-String -Pattern "raqib service run:|hole: watch-|round 1: \d+ records" | Select-Object -First 10 | ForEach-Object { "    " + (Cut $_.Line 330) }
 "--- the text of the one that was ended (service.before.txt), its last lines:"
 Get-Content "$place\service.before.txt" -ErrorAction SilentlyContinue | Select-Object -Last 3 | ForEach-Object { "    " + (Cut $_ 200) }
 $t = Get-Date
@@ -52,6 +52,8 @@ for row in check.read_service_again(run, events):
     print(row[1], row[0][:60], '::', str(row[2])[:400])
 "@
 $code | python -I -
+"--- the hole as the events hold it:"
+Select-String -Path "$env:RUNNER_TEMP\service-events.jsonl" -Pattern "watch-unended" | Select-Object -First 1 | ForEach-Object { "    " + (Cut ($_.Line -replace '^.*"summary":"', 'summary: ') 420) }
 "=== started once more after a clean stop: no such hole"
 Start-Service $name; Start-Sleep 8; Stop-Service $name
 "holes of the kind in the events now: $((Select-String -Path "$place\.raqib\host\events.jsonl" -Pattern 'watch-unended').Count) (one, from the run after the ended one)"
