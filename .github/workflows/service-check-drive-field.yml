@@ -1,0 +1,52 @@
+name: service-check-drive-field
+# Probe only (never merged): the field's word on a branch's `raqib service check` and the drive a path is on
+# (ADR-0013 Amendment P), and its test of the libraries loaded by name on real Windows.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_check_drive_field.ps1, .github/workflows/service-check-drive-field.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: claude/M12.4c2a
+jobs:
+  field:
+    name: raqib service check and the drive, on real Windows (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, its tests and its rig tools
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib tests docs pyproject.toml tools/rig/check.py tools/rig/service_check.ps1 tools/rig/service_check_plain.ps1 tools/rig/service_check_drive.ps1 tools/rig/pack.sh
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1 pytest
+      - name: the check's, the reader's and the libraries' tests on this machine
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_wincode.py tests/test_libraries.py tests/test_winservice.py -q -rs 2>&1 | Select-Object -Last 12
+          exit 0
+      - name: the rig's own three steps, and what X49, X50 and X51 read of them
+        shell: pwsh
+        run: |
+          & tools\rig\service_check.ps1 -Out $env:RUNNER_TEMP\service-check | Select-Object -Last 3
+          & tools\rig\service_check_plain.ps1 -Out $env:RUNNER_TEMP\service-check-plain | Select-Object -Last 3
+          & tools\rig\service_check_drive.ps1 -Packed $env:RUNNER_TEMP\service-check\pack\dist\raqib -Out $env:RUNNER_TEMP\service-check-drive
+          python -c "import sys; sys.path.insert(0, 'tools/rig'); import check; r = lambda p: open(p, encoding='utf-8-sig').read(); [print(x) for x in check.read_service_check(r(sys.argv[1])) + check.read_service_check_plain(r(sys.argv[2])) + check.read_service_check_drive(r(sys.argv[3]))]" $env:RUNNER_TEMP\service-check\service-check.txt $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt
+          exit 0
+      - name: asked in the field
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_check_drive_field.ps1" -PackedDir "$env:RUNNER_TEMP\service-check\pack\dist\raqib"
