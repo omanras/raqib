@@ -1,10 +1,17 @@
-# HANDOFF — none open  (M15.1, M14.1a, M15.2, M14.1b, M15.2b, M17.1, M15.3a, M13.1, M14.1c, M16.1, M15.3b, M14.1d, M17.2a, M17.2b, M12.4a, M12.4b, M12.4c1, M12.4c1b, M12.4c2a, M12.4c2a2, M12.4c2b1, M12.4c2b2a, M12.4c2b2b, M12.4c2b2c and M12.4c2b3 landed by 2026-11-27; the next tasks are on their own branches)
+# HANDOFF — M12.4c2b4  (ADR-0013 Amendment ZE: `raqib service remove --purge` on Windows removes the record too)
 
-Task: none on main. Do not build here. Next, each on a branch of its own when the Table writes it: M12.4c2b4 (`remove --purge` on Windows; ADR-0013 X-1), a live reader for macOS, M17.2c (the watch says at its start that a loader's variable was in its environment; ADR-0007 CI-4, CK-4), M15.3c (the watch reads Windows' autostart places and rules judge a change; ADR-0014 AL-6), M14.2 (a short connection given to its process; ADR-0007 CF-1, CF-4), M16.2 (a Splunk app from siem/).
-
-From 0.2.0 on (ADR-0015): a merge into main that changes what Raqib does moves `raqib.__version__`, writes its entry at the top of CHANGELOG.md and runs `python3 tools/event_examples.py --write`. The Table does it in the merge.
+Task: on Windows `raqib service remove --purge` is refused today ("not built", raqib/wininstall.py PURGE_REFUSED). Build it exactly as docs/specs/ADR-0013-the-service-under-the-system.md Amendment ZE rules (read ZE-1 to ZE-4 whole, its first paragraph for what was measured, and X-6 and Y-3 above it for the remove as it is and the place's judgement).
 
 Scope:
-  (none)
+  raqib/wininstall.py, tests/test_wininstall.py, raqib/cli.py (ONLY the help's sentences about --purge on Windows), docs/GUIDE.md and docs/specs/SERVICE.md (ONLY the sentences that say --purge is not built on Windows), tests/test_readme_top.py and tests/test_service.py (ONLY where they hold those sentences word for word)
 
-If you were started as a builder on this file: STOP, commit nothing, and say that no task is open.
+Exit criteria:
+- E1 (ZE-1, ZE-3) `remove(system, out, reader=None, purge=False, place=None)`: the service's remove first, unchanged; the record touched only where it ended with exit 0 (gone, or none installed); then `place_judged` (the function as it is - do not copy its logic): "absent" -> one line, nothing to remove, exit 0; "refused" -> its words, the name left, exit 1; "taken" -> removed as E2. cli_run passes --purge to remove and still refuses it with any other action. PURGE_REFUSED goes.
+- E2 (ZE-2) the removal through new calls on wininstall's System (list a folder's names with each one's attributes without following a link, remove a file, remove an empty folder) that a test's stand-in answers; bottom up; a reparse point inside neither entered nor removed, counted, and the place then left; each error counted by the system's number, the first one's path kept; nothing outside the place is ever named in a call (a test asserts every path handed to the stand-in begins with the place's own path).
+- E3 (ZE-4) the lines and the exit: what was read of the place; removed (how many folders, how many files, the place gone) with exit 0 and a RESULT that says the service and the record removed; or what is left, RESULT saying the record NOT removed, exit 1; error 5 said with "an administrator is needed"; without --purge the record's line says that --purge removes it; every path printable ASCII (`_error_said`).
+- E4 tests for each sentence of ZE-1 to ZE-4 on stand-ins (the existing made-up system and reader in tests/test_wininstall.py extended, not replaced), the judgement's words tied to winservice.prepare's as the install's test ties them; every existing test of remove still passes with what it asserts unchanged except the record's line.
+- E5 the documents in Scope say what is built, each sentence true to the code; what was measured named as ZE's first paragraph names it (this branch itself is not yet asked on a real machine).
+Not in scope: the runner, the reader (raqib/winmanager.py), the check; tools/rig, .github (the Table's: X56); the version and CHANGELOG.md.
+If an exit criterion needs a file outside Scope: STOP and say which file and which line.
+Commit: `landed: M12.4c2b4 raqib service remove --purge on Windows removes the record too` or `STOP: M12.4c2b4 <reason>`.
+Read HANDOFF.md and do only the task it specifies.

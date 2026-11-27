@@ -1457,3 +1457,48 @@ fixes below, which are asked on real Windows before the merge.
 - ZD-6 (lands). M12.4c2b3 lands as 0.18.0 after the gate on the tree to be merged, its Windows jobs, X55 read as
   met in the rig's Windows log, and the field run of the commit to be merged. Next of the service on Windows:
   the record removed with the service (M12.4c2b4). Then the queue.
+
+## Amendment ZE (the Table, 2026-11-27) - M12.4c2b4: `raqib service remove --purge` on Windows removes the record too (X-1)
+Measured before this ruling (the probe branch 91952bf; Raqib 0.18.0; x64 and ARM64, the same on both). After
+Raqib's own remove, the place - Raqib under ProgramData - read by an administrator through the runner's own
+reader: a folder, no reparse point, owned by the administrators, its list the closed one the runner makes (the
+system and the administrators, whole, protected); in it 3 folders and 11 files, about 109 kB, no reparse point.
+An administrator's process removed its 14 names bottom up, and the place, in under a tenth of a second with no
+error. A folder of that name made by an administrator's shell read with ProgramData's own inherited list, the
+users' entries in it: not the closed list. A link of that name to another folder read as a reparse point, a walk
+of the path listed the target's own file through it, and removing the link removed the link alone. Not measured:
+a file in the place that some process still has open; a plain user asking; a machine whose ProgramData an
+administrator changed; a very large record.
+- ZE-1 (what is removed, and only that). With `--purge`, after the service is removed or where none was
+  installed, the place is removed where raqib/wininstall.py's `place_judged` says "taken" - the reading the
+  runner itself makes of a place it finds: a folder, no reparse point, owned by the system or the
+  administrators, its list the closed one. Any other answer is said in that reading's own words and the name is
+  left exactly as it is: absent - nothing to remove; refused - not the place as Raqib's service makes it. FOR:
+  the one thing this command deletes with an administrator's rights is the thing Raqib made, told by how it
+  reads and never by its name alone. MUST NOT TOUCH: anything outside the place; the judgement itself, which
+  stays one function for the runner, the install and the remove.
+- ZE-2 (never through a link). What is in the place is removed bottom up, by calls of a system object a test can
+  stand in for. Before a folder inside is entered it is asked whether it is a reparse point; one that is, is
+  neither entered nor removed, is counted and said, and the place then stays (measured: a walk goes through a
+  link into its target). A reparse point inside a place only the system and the administrators can write is not
+  expected; it is said as what it is, not judged.
+- ZE-3 (the order, and what stops it). The service's own remove comes first, as it is (X-6). The record is
+  touched only where that ended with the service gone or none installed (exit 0). Where the service is not
+  Raqib's, was refused, failed, or is marked for removal and not yet gone, nothing of the record is touched and
+  the line says so: a service that may still run may still write. `--purge` with any action but remove stays
+  refused.
+- ZE-4 (what it says, and its exit). One line of what was read of the place; then one line of the result: how
+  many folders and files were removed and that the place is gone; or what is left - each error of the system
+  counted by its number, the first one's path said, a reparse point not entered - with `RESULT:` saying the
+  service removed and the record NOT removed, exit 1. A caller who is no administrator is refused by the place's
+  own list, and that is said in the system's words with "an administrator is needed". Without `--purge` the line
+  of the record says that `--purge` removes it. Paths are written as every path here is (printable ASCII).
+- ZE-5 (recorded, not built). Between the reading and the removing the place is named by its path again. Who
+  could change it in between is the system or an administrator - the parties this command already trusts;
+  holding the read's own handle through the removal is not built. A record larger than the one measured is
+  removed name by name with no bound of time; not measured.
+- ZE-6 (the tests, the rig, the documents). Tests on stand-ins for each sentence above, the judgement tied to
+  the runner's as the install's is. The Table wires the rig's claim after the builder: X56 - installed from the
+  copy under Program Files and watched a round, `remove --purge` ends with 0 and the place is gone; with nothing
+  installed and a folder of the name made by a shell, `remove --purge` leaves it and says why. The guide's row,
+  SERVICE.md and the help say `--purge` on Windows as built.
