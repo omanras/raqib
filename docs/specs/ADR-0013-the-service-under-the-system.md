@@ -978,3 +978,49 @@ one.
     documents; "the PATH is closed by a test" became held by a test; the short form above; the file's top said; and
     the two made-up cases that allowed any other reason at their lines now name the one other reason each may give.
   - It lands as tests and documents; no number moves (ADR-0015). Next: M12.4c2b1.
+
+## Amendment T (the Table, 2026-11-27) - M12.4c2b in two; M12.4c2b1: the service asks the check at its own start
+Measured before this ruling (the probe branch b1ee4fb; x64 and ARM64, the same): a service that ends with a
+number of its own is not started again by the system - one line in the system's log - unless it was made with
+the failure flag, and then it is started again after every such end by the actions it was given (nine times in
+twenty seconds with actions of 2 s). A caller with no rights may open the service manager and a service to ask
+its state, its making and its description, and is refused (error 5) the start, the stop, the removal and the
+change. The system's numbers: a name already there 1073; a stop of one not running 1062; a start of one running
+1056; a removal of one running is taken and it runs on, marked - a second removal or a making under that name
+1072; gone only when it has stopped and every handle is closed (then 1060); never started reads state 1 with
+1077. A description set is read back as set.
+And from Amendments Q and R: the check reads a drive's letter as the asking session names it, and the session
+that asks is not the system's. Measured for that (the probe branch 25a25a3; x64 and ARM64, the same): asked by
+the system's own account, the check says word for word what it says to the user who asked - a packed copy under
+Program Files and a Python copied one folder deeper there (asked with `-I`) taken, about 150 names in 0.2 to 0.3
+s and about 10000 in 1.1 to 1.9 s; the job's own Python and its own packed folder refused, by the same name and
+entry; a letter the user's session gave to a folder is not there for the system at all; and the runner of 0.13.0
+serves from both copies (a round read 4 s and 1 s after the start). So on these machines the two answers agree,
+and nothing holds that they do on another: the answer an administrator got is not yet the answer for the
+service.
+- T-1 (the service asks, as the system). At every start the runner asks the check of its own code - the same
+  function, the same roads, nothing skipped - after the place is taken and its text file begun, and before it
+  says RUNNING. Taken: one line in the text file with the pass's own sentence, and it goes on. Not taken, for any
+  reason the check has (a name not the system's alone, a drive that is not a disk's volume, a plain interpreter
+  not started with `-I`, a packed runtime it does not walk, a name not read): the whole refusal in the text
+  file, no watch begun, and the system told a number of the service's own (15: the code is not the system's
+  alone), from START_PENDING, so that the start fails at once and says why in the system's log. FOR: the
+  service is never the road by which a user's file runs as the system; and the letter, the path and the lists
+  are read by the very account and session that will run. MUST NOT TOUCH: the check itself; the order before
+  the check (AF-2); the watch; the Linux unit, whose install checks.
+- T-2 (what is said while it walks). Before the check the runner tells the system it is still starting, with a
+  wait long enough for a large tree (measured: about 150 names in 0.3 s packed, about 11000 in under 2 s for a
+  plain interpreter; a tree near WALK_MAX is not measured, and is said so). The check's time is in the line.
+- T-3 (the rig). The rig's service (X48) is made from a Python copied under Program Files, one folder deeper
+  (N-1), started with `-I`: its own Python is one a plain user may write, and the service now refuses it. X52 is
+  MET where a service made from the job's own Python fails to start with the number 15 and its text file names
+  what was refused, and the one from the copy runs and its text file holds the pass. The Table's wiring.
+- T-4 (said). A service of Windows made by hand from a tree a user may change, which watched until now, stops
+  watching with this version and says why; the changelog says it first. The check at the start is a reading at
+  that moment: a tree changed while the service runs is not seen until the next start (recorded; a watch of its
+  own tree is another task).
+- M12.4c2b2, after it: `raqib service install | remove | status` on Windows (K-9, AG-5, O-5, R-5), with the
+  measurements above: the description as Raqib's mark; status with no rights; the failure flag set with actions
+  that grow (5 s, 30 s, 300 s; the count forgotten after an hour without a failure), so that a service ended
+  from outside is back in seconds and a refusal that cannot pass is asked again every five minutes and said each
+  time.
