@@ -111,6 +111,7 @@ STOP_WAIT_HINT = 30000          # milliseconds told to the system with STOP_PEND
 # system): about 150 names in 0.2 to 0.3 s packed, about 10000 in 1.1 to 1.9 s plain. A walk of WALK_MAX (200000)
 # names at the slowest rate measured is about 38 s: not measured, and the hint is above it with room
 CHECK_WAIT_HINT = 60000
+CHECK_BEAT = 2.0                # the candidate (U-4): seconds between two raisings of the check-point
 CHECK_SAID_MAX = 4000           # T-1: characters of each part of the check's answer said in the text file
 CHECK_HEAD = "its own code, checked at this start by this process (ADR-0013 T-1), in %.2f s"   # the line's head
 PASS_SAID = "raqib service check: the code a service would run is the system's alone: %s"   # wincode.cli_check's
@@ -282,9 +283,9 @@ class System:
             raise OSError(api.ctypes.get_last_error(), "the handler was not registered")
         return handle
 
-    def set_status(self, handle, state, accepted, win32_exit, specific_exit, wait_hint):
+    def set_status(self, handle, state, accepted, win32_exit, specific_exit, wait_hint, check_point=0):
         api = self._win()
-        s = api.status(SERVICE_WIN32_OWN_PROCESS, state, accepted, win32_exit, specific_exit, 0, wait_hint)
+        s = api.status(SERVICE_WIN32_OWN_PROCESS, state, accepted, win32_exit, specific_exit, check_point, wait_hint)
         return bool(api.adv.SetServiceStatus(handle, api.ctypes.byref(s)))
 
     def raise_interrupt(self):
@@ -673,7 +674,7 @@ class Runner:
         self.done.wait()
         self._status(STOPPED)
 
-    def _status(self, state, hint=None):
+    def _status(self, state, hint=None, point=0):
         accepted = (ACCEPT_STOP | ACCEPT_SHUTDOWN) if state == RUNNING else 0
         if hint is None:
             hint = {START_PENDING: START_WAIT_HINT, STOP_PENDING: STOP_WAIT_HINT}.get(state, 0)
@@ -684,7 +685,7 @@ class Runner:
             self.stopped = state == STOPPED
             try:
                 ok = self.system.set_status(self.handle, state, accepted, SERVICE_SPECIFIC if specific else 0,
-                                            specific, hint)
+                                            specific, hint, point)
             except Exception as exc:
                 ok = False
                 self._note("the status %d could not be told: %s: %s" % (state, type(exc).__name__, exc))
@@ -820,8 +821,25 @@ class Runner:
         whole refusal, an answer of a form not known, or an exception out of the check (its trace first)."""
         began = self.system.clock()
         trace, got = "", None
+        over = threading.Event()
+
+        def raising():              # the candidate (U-4): the check-point raised every CHECK_BEAT s while the check walks
+            point = 0
+            while not over.wait(CHECK_BEAT):
+                point += 1
+                with self.lock:
+                    if self.stop_asked.is_set():
+                        return
+                    self._status(START_PENDING, CHECK_WAIT_HINT, point)
+
+        beat = threading.Thread(target=raising, daemon=True)
+        beat.start()
         try:
-            got = self.system.own_check()
+            try:
+                got = self.system.own_check()
+            finally:
+                over.set()
+                beat.join()
         except BaseException as exc:   # T-1, U-3: whatever ends the check is a refusal (15); no Stop is raised here
             trace = traceback.format_exc()
             try:
