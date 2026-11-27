@@ -1,0 +1,40 @@
+name: service-kill
+# Probe only (never merged): the field's word for ADR-0013 Amendment H - a branch's service of Windows ended from
+# outside and started again by the system; what the next watch says; the rig's own check of it (X48).
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_kill.ps1, .github/workflows/service-kill.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: claude/M12.4b
+jobs:
+  service:
+    name: ended from outside, started again (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, its tests and its rig's check
+        shell: pwsh
+        run: |
+          git fetch -q --depth 1 origin $env:RAQIB_REF
+          git log -1 --format='%h %s' FETCH_HEAD
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml tests docs tools/rig/check.py
+          python -m pip install --disable-pip-version-check -q . pytest
+          raqib --version
+          python -m pytest tests/test_winservice.py tests/test_host_unended.py -q 2>&1 | Select-Object -Last 3
+      - name: ended, started again, read
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_kill.ps1"
