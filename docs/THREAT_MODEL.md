@@ -2310,35 +2310,45 @@ collector that is slow, down or refusing never delays or loses a capture
   the Store's Python, an embedded distribution, Python older than 3.10, the
   names the interpreter looks for on a real machine, and whether bytecode
   caches are written when an administrator asks.
-- **What the status of the service on Windows reads (`raqib service
-  status`; ADR-0013 Amendment V).** On Windows `raqib service status` asks
-  the system's service manager, by its own calls and with no rights, about
-  the service named RaqibWatch: it connects to the manager with the right
-  to connect alone and opens the service with the rights to ask its state
-  and its making alone, and reads its description, its making (the
-  command, the type, the start, the account) and its state (with the
-  process's id and the exit the system holds). It writes nothing: no
-  service is made, started, stopped, changed or removed, no file is
-  written, no registry read and no program started. A service of the name
-  is taken as Raqib's only where its description begins with Raqib's mark,
-  `raqib-service/1`; the mark is a word anybody who may make a service can
-  write, so status says what the manager holds of a service so marked, not
-  who made it - whether the code its command names is the system's alone
-  is the check's to say (`raqib service check`, and the runner's check at
-  every start), and status does not read it. Nor does it read the delayed
-start, the failure actions or the failure flag (not measured as a caller
-  with no rights reads them), a service marked for removal (not measured),
-  the place's own list, or what changes after it was read: ACTIVE says the
-  service runs at that moment, not that the watch writes its record. A text
-  it reads from the manager - the description, the command, the account - is
-  another party's: it is written as printable ASCII, a letter outside ASCII
-  by its number, and cut, so that it can break no line and a letter that
-  only looks Latin is seen. What the manager answers a caller with no rights
-  for a service's state, making and description was measured (the probe
-  b1ee4fb, x64 and ARM64), and this command was then asked on real machines
-  by an administrator and by a user outside the administrators' group, who
-  were answered the same (the probe 23d544f); the rig asks it at every run
-  (X53).
+- **What the status of the service on Windows reads (`raqib service status`;
+  ADR-0013 Amendment V).** On Windows `raqib service status` asks the
+  system's service manager, by its own calls and with no rights, about the
+  service named RaqibWatch: it connects to the manager with the right to
+  connect alone and opens the service with the rights to ask its state and
+  its making alone, and reads its description, its making (the command, the
+  type, the start, the account) and its state (with the process's id and the
+  exit the system holds). It writes nothing: no service is made, started,
+  stopped, changed or removed, no file is written, no registry read and no
+  program started. A service of the name is taken as Raqib's only where its
+  description begins with Raqib's mark, `raqib-service/1`; the mark is a
+  word anybody who may make a service can write, so status says what the
+  manager holds of a service so marked, not who made it - whether the code
+  its command names is the system's alone is the check's to say (`raqib
+  service check`, and the runner's check at every start), and status does
+  not read it. It reads too, with the same rights, what the install sets for
+  the system to start the service again - what the system does after an end
+  that was no Stop, the failure flag - and whether its automatic start is
+  delayed, and a service so marked whose start is not automatic, is delayed,
+  or lacks those settings is not as installed, each difference said by what
+  was read and what the install writes (ADR-0013 Amendment Z): a watch that
+  will not come back after it is ended, or will not start with the machine,
+  does not read as the watch that was installed. It does not read a service
+  marked for removal (not measured), the place's own list, or what changes
+  after it was read: ACTIVE says the service runs at that moment, not that
+  the watch writes its record. A text it reads from the manager - the
+  description, the command, the account, the message and the command the
+  system keeps beside the actions - is another party's: it is written as
+  printable ASCII, a letter outside ASCII by its number, and cut, so that it
+  can break no line and a letter that only looks Latin is seen. What the
+  manager answers a caller with no rights for a service's state, making and
+  description was measured (the probe b1ee4fb, x64 and ARM64), and this
+  command was then asked on real machines by an administrator and by a user
+  outside the administrators' group, who were answered the same (the probe
+  23d544f); the rig asks it at every run (X53). What the manager answers
+  such a caller for the start-again settings and the delayed start was
+  measured after (the probe 639362e, x64 and ARM64); their reading by this
+  command was not asked on a real machine before it was built: the rig reads
+  it once its running service is made by Raqib's own install.
 - **What the install and the remove of the service on Windows do (`raqib
   service install | remove`; ADR-0013 Amendment X).** On Windows an
 administrator's `raqib service install` makes the service RaqibWatch by the

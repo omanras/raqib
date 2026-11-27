@@ -607,24 +607,29 @@ not found, a file given and missing included; n/a where none was given.
 
 ## Windows: the status (`raqib service status`)
 
-ADR-0013 Amendments V (V-2 to V-5) and W, in raqib/winmanager.py. On Windows `raqib service status` asks the system's
-service manager, by its own calls and with no rights, about the service named RaqibWatch, and changes nothing. What it
-rests on was measured before it was ruled (Amendment T's first paragraph and Amendment V's, the probe b1ee4fb; x64 and
-ARM64, the same): a caller with no rights may connect to the service manager and open a service to ask its state and
-its making, and reads them - the state with the process's id, the system's exit and the service's own; the type, the
-start, the account and the command (a first ask with no room answers error 122 and the bytes needed); and its
-description, as it was set. A name that is not there answers error 1060; a service never started reads state 1 with
-the exit 1077; such a caller is refused (error 5) the start, the stop, the removal and the change. Not measured, and
-so not read: the delayed start, the failure actions and the failure flag as a caller with no rights reads them; a
-service marked for removal as such a caller sees it. This command itself was asked on real machines after it was built
-(Amendment W; the probe branch 23d544f, of 152fc91; x64 and ARM64, the same): by an administrator and by a user the
-probe made outside the administrators' group, at ten moments - no service of the name; one made without the mark; with
-the mark and never started; running; stopped by a Stop; its start set to automatic; its account set to another than
-the system's; one refused at its start with 15; one whose command lacks `-I`; one whose description only begins like
-the mark - and the two askers were answered the same lines and the same exit at each. The account of a service made
-with none named read `LocalSystem`; a service with no description read as having none. Not measured: a service that is
-starting, stopping or paused as status reads it; a service marked for removal; a machine joined to a domain. The rig
-reads the command at every run (X53, below).
+ADR-0013 Amendments V (V-2 to V-5), W and Z, in raqib/winmanager.py. On Windows `raqib service status` asks the
+system's service manager, by its own calls and with no rights, about the service named RaqibWatch, and changes
+nothing. What it rests on was measured before it was ruled (Amendment T's first paragraph and Amendment V's, the probe
+b1ee4fb; x64 and ARM64, the same): a caller with no rights may connect to the service manager and open a service to
+ask its state and its making, and reads them - the state with the process's id, the system's exit and the service's
+own; the type, the start, the account and the command (a first ask with no room answers error 122 and the bytes
+needed); and its description, as it was set. A name that is not there answers error 1060; a service never started
+reads state 1 with the exit 1077; such a caller is refused (error 5) the start, the stop, the removal and the change.
+Measured after it (Amendment X's first paragraph, the probe branch 639362e; x64 and ARM64, the same), and read since
+M12.4c2b2c (Amendment Z): such a caller, a user outside the administrators' group with the manager opened with 0x1 and
+the service with 0x5, reads by QueryServiceConfig2W what Raqib's install sets - level 2, 64 bytes (the count forgotten
+after 3600 s and three actions of the kind 1, start it again, after 5000, 30000 and 300000 ms), level 4, 4 bytes (the
+failure flag, True), and level 3, 4 bytes (the delayed start, False). Not measured: a service marked for removal as
+such a caller sees it. This command itself was asked on real machines after it was built (Amendment W; the probe
+branch 23d544f, of 152fc91; x64 and ARM64, the same): by an administrator and by a user the probe made outside the
+administrators' group, at ten moments - no service of the name; one made without the mark; with the mark and never
+started; running; stopped by a Stop; its start set to automatic; its account set to another than the system's; one
+refused at its start with 15; one whose command lacks `-I`; one whose description only begins like the mark - and the
+two askers were answered the same lines and the same exit at each. The account of a service made with none named read
+`LocalSystem`; a service with no description read as having none. Not measured: a service that is starting, stopping
+or paused as status reads it; a service marked for removal; a machine joined to a domain. The rig reads the command at
+every run (X53, below). The reading of levels 2, 4 and 3 (M12.4c2b2c) was not asked on a real machine before it was
+built: the rig reads it once X53's running service is made by Raqib's own install (Z-3, the Table's wiring).
 
 **Raqib's service.** The one named RaqibWatch whose description begins with `raqib-service/1` - the mark the Linux
 unit carries in its first line - the mark ending there or at a space. A service of the name without the mark is said
@@ -633,34 +638,44 @@ service install` (below) or by an administrator by hand, as the rig's jobs X48, 
 
 **What it reads and says.** The calls, in this order, each opened with the least rights measured: OpenSCManagerW (to
 connect, 0x1), OpenServiceW (to ask the state and the making, 0x5), QueryServiceConfig2W at level 1 (the description),
-QueryServiceConfigW (the making), QueryServiceStatusEx (the state, at its one level), and CloseServiceHandle for each
-handle opened, the service's before the manager's, on every road. The description and the making are each asked twice:
-first with no room, which must answer error 122 and the bytes it needs, from the structure's own size to 8192 (the
-most QueryServiceConfigW documents), then with those bytes. One line each: whether the name is there; the mark; the
+QueryServiceConfigW (the making), QueryServiceConfig2W at level 2 (the failure actions), at level 4 (the failure flag)
+and at level 3 (the delayed start), QueryServiceStatusEx (the state, at its one level), and CloseServiceHandle for
+each handle opened, the service's before the manager's, on every road. The description, the making and the three
+levels are each asked twice: first with no room, which must answer error 122 and the bytes it needs, from the
+structure's own size to 8192 (the most QueryServiceConfigW documents), then with those bytes; every value is read out
+of those bytes before the call returns, and level 2's actions out of the array the structure points at, which must lie
+wholly inside them, its count first bounded at 64 (a count past the bound, a count with no array, or an array outside
+the bytes is said with the call, and the answer is NOT KNOWN). One line each: whether the name is there; the mark; the
 command as the manager holds it, and whether it is, whole, one of the two forms Raqib's install writes - a quoted
 path, then `service run` (a packed program's), or a quoted path, then `-I -m raqib service run` (a plain
 interpreter's) - with the path it names; the type (0x10, a process of its own); the start by its number and word; the
-account (`LocalSystem`, the system's, read without regard to case); the state by its number and word (1 stopped, 2
-starting, 3 stopping, 4 running, 5 continuing, 6 pausing, 7 paused), with the process's id; and, where it is not
-running, the exit the system holds: 1077 as never started, 1066 with the service's own number - in the runner's own
-words where the service carries the mark (its list above; for 15, that what was refused is in `service.txt` in the
-place), and as the bare number where it does not (W-2: a service without the mark is not read as Raqib's runner) - 0
-as stopped with no failure of a stopped service and as the bare number in any other state, any other as the system's
-number. A service with the mark that is starting is said so, with the reason a start may be long (the check of its own
-code, T-2, and the wait of 60 s it tells the system). A text read from the manager (the description, the command, the
-account) is written as printable ASCII - a character that is not printable as `?`, a printable one outside ASCII as
-its number (`\uXXXX`), so that a letter of another script that reads as a Latin one is seen for what it is (W-3) - and
-cut at 300 characters, the cut marked. Nothing is said that was not read; a call that fails is said with the call and
-the system's number (error 5 says the caller may not ask), and nothing is asked after it but the closes.
+account (`LocalSystem`, the system's, read without regard to case); what the system does after an end that was no Stop
+(each action by its kind's word: 0 nothing, 1 start it again, 2 restart the machine, 3 run a command, any other by its
+number; and its seconds; `none` where there is none; and the seconds after which the count is forgotten), then the
+message for a restart of the machine and the command to run that the system keeps beside the actions, each on a line
+of its own and only where it is there; the failure flag (whether an end the service itself reports with an error is
+such an end too); the delayed start; the state by its number and word (1 stopped, 2 starting, 3 stopping, 4 running, 5
+continuing, 6 pausing, 7 paused), with the process's id; and, where it is not running, the exit the system holds: 1077
+as never started, 1066 with the service's own number - in the runner's own words where the service carries the mark
+(its list above; for 15, that what was refused is in `service.txt` in the place), and as the bare number where it does
+not (W-2: a service without the mark is not read as Raqib's runner) - 0 as stopped with no failure of a stopped
+service and as the bare number in any other state, any other as the system's number. A service with the mark that is
+starting is said so, with the reason a start may be long (the check of its own code, T-2, and the wait of 60 s it
+tells the system). A text read from the manager (the description, the command, the account, the two texts kept beside
+the actions) is written as printable ASCII - a character that is not printable as `?`, a printable one outside ASCII
+as its number (`\uXXXX`), so that a letter of another script that reads as a Latin one is seen for what it is (W-3) -
+and cut at 300 characters, the cut marked. Nothing is said that was not read; a call that fails is said with the call
+and the system's number (error 5 says the caller may not ask), and nothing is asked after it but the closes. Of a
+service without the mark the three levels are said and nothing is judged.
 
 | Answer | Exit | Where |
 |---|---|---|
-| `RESULT: ACTIVE` | 0 | Raqib's, running and as installed: the mark, the command's form, a process of its own, the system's account. ACTIVE says the service runs, not that the watch writes its record. |
-| `RESULT: INSTALLED, NOT ACTIVE` | 1 | Raqib's, in any other state, said by its word; `, NOT AS INSTALLED` is added where it is not, each difference said. |
-| `RESULT: ACTIVE, NOT AS INSTALLED` | 1 | Raqib's, running and not as installed, each difference said. |
+| `RESULT: ACTIVE` | 0 | Raqib's, running and as installed: the mark, the command's form, a process of its own, the system's account; and (Amendment Z) the start automatic (2) and not delayed, started again after 5000, 30000 and 300000 ms after an end that was no Stop, the count forgotten after 3600 s, and the failure flag set - the numbers the install writes. ACTIVE says the service runs, not that the watch writes its record. |
+| `RESULT: INSTALLED, NOT ACTIVE` | 1 | Raqib's, in any other state, said by its word; `, NOT AS INSTALLED` is added where it is not, each difference said (one of Amendment Z's by what was read and what the install writes). |
+| `RESULT: ACTIVE, NOT AS INSTALLED` | 1 | Raqib's, running and not as installed, each difference said: a service whose start-again settings were taken away, or whose start was set to manual, reads so. |
 | `RESULT: NOT INSTALLED` | 3 | No service of the name (error 1060). |
 | `RESULT: NOT INSTALLED BY RAQIB, YET A SERVICE OF THE NAME IS <its state>` | 3 | A service of the name without the mark. |
-| `RESULT: NOT KNOWN` | 3 | A call failed, a close included, or an answer of a shape it does not read. |
+| `RESULT: NOT KNOWN` | 3 | A call failed, a close included, a level of the three that could not be read (its call and the system's number said), or an answer of a shape it does not read. |
 | one line, nothing asked | 2 | Not Windows (raqib/winmanager.py's own answer; on Linux `raqib service status` is the Linux command, as before). |
 
 `--no-start` and `--purge` with `status` are refused on Windows as on Linux (exit 2); `install` and `remove` on
@@ -669,12 +684,11 @@ Windows are raqib/wininstall.py's (below).
 **What it does not do.** It writes nothing to the manager and nothing anywhere: no service is made, started, stopped,
 changed or removed; no file is written by it (the interpreter may write its own cache of the modules the command
 imports, where their folder lets the asker), no registry read, no program started; one library is loaded, advapi32, by
-its name, every call's argument and result types declared. It does not read the delayed start, the failure actions or
-the failure flag, the place's own list, or whether the code the command names is the system's alone (the check's to
-say: `raqib service check`, and the runner's check at every start). Every call goes through one object
-(winmanager.System); the tests hand a stand-in, and one runs the real object's own logic - the two asks, the cast, the
-texts read - against a made-up library, so none needs Windows; the real calls are run only on Windows, by the rig at
-every run.
+its name, every call's argument and result types declared. It does not read the place's own list, or whether the code
+the command names is the system's alone (the check's to say: `raqib service check`, and the runner's check at every
+start). Every call goes through one object (winmanager.System); the tests hand a stand-in, and one runs the real
+object's own logic - the two asks, the cast, the texts read, the array of actions read out of the bytes - against a
+made-up library, so none needs Windows; the real calls are run only on Windows, by the rig at every run.
 
 X53 (`tools/rig/check.py --service-status FILE`, V-5, W-6; tools/rig/service_status.ps1): FILE holds lines `key:
 value` of status asked by a user the job makes outside the administrators' group (`asked-by-administrator: no`) at
@@ -785,8 +799,9 @@ not built. An update over a running service is: remove, then install (X-10).
 is there; they start no program themselves, write no file and read no registry; the place is read and never made; one
 library is loaded, advapi32, by its name, every call's argument and result types declared, and every handle opened is
 closed on every road. The install's check is run by the code it judges (N-2): an administrator who installs from a
-tree a user has already changed runs that code as himself, as on Linux (X-10). The failure actions and the flag are
-set and not yet read back by status (M12.4c2b2c).
+tree a user has already changed runs that code as himself, as on Linux (X-10). Status reads the start, the failure
+actions, the flag and the delayed start back, and says a service without the ones the install writes not as installed
+(Amendment Z, M12.4c2b2c).
 
 X54 (`tools/rig/check.py --service-install FILE`, X-7, Y-6; tools/rig/service_install.ps1): FILE holds lines `key:
 value` - `refused-exit`, `refused-words` and `refused-status` of the install from the job's own Python and status
