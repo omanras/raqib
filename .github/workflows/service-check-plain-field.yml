@@ -1,6 +1,6 @@
 name: service-check-plain-field
 # Probe only (never merged): the field's word on a branch's `raqib service check` for a plain interpreter
-# (ADR-0013 Amendment M).
+# (ADR-0013 Amendments M to O).
 on:
   push:
     branches: [claude/rig-probe]
