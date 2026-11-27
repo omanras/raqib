@@ -1279,3 +1279,30 @@ on those machines.
   watch as a service of Windows is installed, asked and removed by Raqib's own commands. Next, each small:
   status reading the failure actions and the flag as part of "as installed" (M12.4c2b2c), the check-point raised
   while the check walks (M12.4c2b3), `--purge` on Windows; then the queue (a live reader for macOS first).
+
+## Amendment Z (the Table, 2026-11-27) - M12.4c2b2c: `raqib service status` on Windows reads what the install sets, as part of "as installed"
+Measured before this ruling (Amendment X's first paragraph, the probe branch 639362e; x64 and ARM64, the same):
+a user outside the administrators' group, the manager opened with 0x1 and the service with 0x5, read back by
+QueryServiceConfig2W what the install sets - level 2, 64 bytes: the count forgotten after 3600 s and three
+actions of the kind 1 (start it again) after 5000, 30000 and 300000 ms; level 4, 4 bytes: True (the failure
+flag); level 3, 4 bytes: False (the automatic start is not delayed). Since 0.16.0 Raqib's own install makes the
+service so (X-5, X-9), and status says nothing of it: a service whose start-again settings were taken away, or
+whose start was set to manual, reads ACTIVE as one that has them.
+- Z-1 (what status reads more, and says). With the rights it has (0x5) and by the same two asks as the
+  description: level 2, level 4 and level 3. One line each: what the system does after an end that was no Stop
+  (each action by its kind and its seconds, and the seconds after which the count is forgotten); whether an exit
+  of the service's own is such an end (the flag); whether the automatic start is delayed. A level that cannot be
+  read is said with the call and the system's number, and the answer is NOT KNOWN, as for every other call
+  (V-3).
+- Z-2 (as installed, now whole). Raqib's service is as installed where, besides the mark, the command's form, a
+  process of its own and the system's account (V-4): its start is automatic and not delayed; the system starts
+  it again after 5 s, 30 s and then 300 s, the count forgotten after 3600 s; and the flag is set - the numbers
+  the install writes, held in one place and tied by a test. Each difference is said by what was read and what
+  the install writes. FOR: a watch that will not come back after it is ended, or will not start with the
+  machine, is not the watch that was installed, and it must not read as that. MUST NOT TOUCH: the four answers
+  and their exits; a service without the mark, of which these levels are said and not judged.
+- Z-3 (the rig). X53's running service is made by Raqib's own install, so that it reads ACTIVE; the one refused
+  at its start is still made by hand with the mark (the install refuses that tree) and reads installed, not
+  active, not as installed. The Table's wiring.
+- Z-4 (not in this part). Changing any of it: status still writes nothing. The texts the system keeps beside the
+  actions (a message, a command to run) are said only where they are there, as text of another party's (W-3).
