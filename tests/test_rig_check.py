@@ -914,6 +914,8 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert "Administrators" not in asked.replace("administrators' group", "")   # the user joins Users alone
     assert all("%s: " % key in asked for key in check.STATUS_KEYS)
     assert "raqib-service/1 " in asked and "sc.exe description $name $mark" in asked
+    # Z-3: the running service is made by Raqib's own install (only that reads as installed), and removed by it
+    assert "& $copy -I -m raqib service install" in asked and "& $copy -I -m raqib service remove" in asked
     assert "tools\\rig\\service_status.ps1 -Out $env:RUNNER_TEMP\\service-status" in windows
     assert "--service-status $env:RUNNER_TEMP\\service-status\\service-status.txt" in windows
     # X-7, Y-6 (X54): Raqib's own install and remove asked by the job; status after each by a user with no rights
@@ -1510,6 +1512,16 @@ def status_lines():
 
         def making(self, handle):
             return {"type": 0x10, "start": 2, "command": self.command, "account": "LocalSystem"}, 0
+
+        def actions(self, handle):   # M12.4c2b2c (ADR-0013 Z-1): levels 2, 4 and 3, as Raqib's install makes them
+            return {"reset": 3600, "message": None, "command": None,
+                    "actions": [(1, 5000), (1, 30000), (1, 300000)]}, 0
+
+        def flag(self, handle):
+            return 1, 0
+
+        def delayed(self, handle):
+            return 0, 0
 
         def state(self, handle):
             return dict(self.got), 0

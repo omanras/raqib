@@ -1279,3 +1279,67 @@ on those machines.
   watch as a service of Windows is installed, asked and removed by Raqib's own commands. Next, each small:
   status reading the failure actions and the flag as part of "as installed" (M12.4c2b2c), the check-point raised
   while the check walks (M12.4c2b3), `--purge` on Windows; then the queue (a live reader for macOS first).
+
+## Amendment Z (the Table, 2026-11-27) - M12.4c2b2c: `raqib service status` on Windows reads what the install sets, as part of "as installed"
+Measured before this ruling (Amendment X's first paragraph, the probe branch 639362e; x64 and ARM64, the same):
+a user outside the administrators' group, the manager opened with 0x1 and the service with 0x5, read back by
+QueryServiceConfig2W what the install sets - level 2, 64 bytes: the count forgotten after 3600 s and three
+actions of the kind 1 (start it again) after 5000, 30000 and 300000 ms; level 4, 4 bytes: True (the failure
+flag); level 3, 4 bytes: False (the automatic start is not delayed). Since 0.16.0 Raqib's own install makes the
+service so (X-5, X-9), and status says nothing of it: a service whose start-again settings were taken away, or
+whose start was set to manual, reads ACTIVE as one that has them.
+- Z-1 (what status reads more, and says). With the rights it has (0x5) and by the same two asks as the
+  description: level 2, level 4 and level 3. One line each: what the system does after an end that was no Stop
+  (each action by its kind and its seconds, and the seconds after which the count is forgotten); whether an exit
+  of the service's own is such an end (the flag); whether the automatic start is delayed. A level that cannot be
+  read is said with the call and the system's number, and the answer is NOT KNOWN, as for every other call
+  (V-3).
+- Z-2 (as installed, now whole). Raqib's service is as installed where, besides the mark, the command's form, a
+  process of its own and the system's account (V-4): its start is automatic and not delayed; the system starts
+  it again after 5 s, 30 s and then 300 s, the count forgotten after 3600 s; and the flag is set - the numbers
+  the install writes, held in one place and tied by a test. Each difference is said by what was read and what
+  the install writes. FOR: a watch that will not come back after it is ended, or will not start with the
+  machine, is not the watch that was installed, and it must not read as that. MUST NOT TOUCH: the four answers
+  and their exits; a service without the mark, of which these levels are said and not judged.
+- Z-3 (the rig). X53's running service is made by Raqib's own install, so that it reads ACTIVE; the one refused
+  at its start is still made by hand with the mark (the install refuses that tree) and reads installed, not
+  active, not as installed. The Table's wiring.
+- Z-4 (not in this part). Changing any of it: status still writes nothing. The texts the system keeps beside the
+  actions (a message, a command to run) are said only where they are there, as text of another party's (W-3).
+
+## Amendment ZA (the Table, 2026-11-27) - the review of M12.4c2b2c (docs/review/2026-11-27-M12.4c2b2c.md) and its field run: status reads what the install sets; lands as 0.17.0
+(Named ZA: the letters AA to AJ already name the items of Amendments A to J in this file.) The builder (b90aa54)
+built Z-1 and Z-2 on Linux; the reviewer read the new reading against the system's documents and found it right
+as text (verdict NEXT, with small fixes and one ruling asked). Measured on real Windows after the build (the
+probe branch dae96b7, of b90aa54; x64 and ARM64, the same), by a user outside the administrators' group: a
+service Raqib's own install made read the three new lines as the install writes them and ACTIVE, 0; then, each
+changed alone by the system's own tool and asked again - the start on demand, the start automatic and delayed,
+the flag taken away, the count forgotten after 60 s, one action only, a third action that runs a command with a
+command kept, the actions taken away - each read `ACTIVE, NOT AS INSTALLED`, 1, with its difference said by what
+was read and what the install writes, and ACTIVE again once put back. One reading showed what the builder's
+fifth decision left open: with the three actions put back and a text left in the place of the command to run,
+the service read ACTIVE. The rig on the branch: X53 (its running service now made by Raqib's own install) and
+X54 MET.
+- ZA-1 (the builder's decisions, as built). The install's numbers are held in the reader as constants tied by a
+  test to the install's own. A level that cannot be read is NOT KNOWN for a service without the mark too: a call
+  failed (V-3), and the mark's line is written above it. The count of actions is bounded at 64 and the array
+  must lie inside the bytes read. The words as built; a count that is no number is said as that.
+- ZA-2 (a text kept beside the actions is a difference; decision 5, the review's view, and the field's reading).
+  The install writes no message and no command to run. Where the system keeps either on Raqib's service, the
+  service was changed after it was installed: the text is said, as another party's, and the service is not as
+  installed. FOR: "as installed" is exact everywhere else - the command whole, the numbers whole - and a command
+  kept to run beside a watch's start-again settings is the kind of change a reader must not miss. MUST NOT
+  TOUCH: a service without the mark, of which the texts are said and nothing is judged.
+- ZA-3 (the texts' pointers; the review's finding 1). The two texts are read through the pointers the system
+  wrote, as the description and the command have been since V; the array alone is placed inside the bytes read.
+  The system is the party trusted here; what is written out of them is bounded and made printable. Recorded, not
+  changed.
+- ZA-4 (what the tests hold; findings 2 and 8). The tie between the reader's structures and the install's
+  compares each class whole, and each structure is its fields and nothing set beside them.
+- ZA-5 (the documents; findings 3, 4, 5 and 9). "Not delayed" is said as what the install leaves, since it
+  writes no delay; what was measured is said of the service manager and not of this command; X54 is named beside
+  X53 as where the rig reads this; the module's own first lines say what has since been asked on real machines.
+- ZA-6 (lands, and next). M12.4c2b2c lands as 0.17.0 after the gate on the tree to be merged and its Windows
+  jobs. Not measured: these settings on a 32-bit Windows; a reset period that is never forgotten; a service
+  marked for removal. Next of the service on Windows, each small: the check-point raised while the check walks
+  (M12.4c2b3, U-4), the record removed with the service (M12.4c2b4). Then the queue.

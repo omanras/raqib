@@ -6,7 +6,8 @@ ARM64, the same): a caller with no rights may connect to the service manager and
 and its making, and reads them - the state with the process's id, the system's exit and the service's own; the type,
 the start, the account and the command (a first ask with no room answers error 122 and the bytes needed); and its
 description, as it was set. A name that is not there answers error 1060; a service never started reads state 1 with
-the exit 1077. This command itself was not measured on a real machine: the rig reads it as X53 (V-5).
+the exit 1077. This command itself was then asked on real machines by an administrator and by a user with no
+rights (Amendments W and ZA), and the rig asks it so at every run (X53; X54 after Raqib's own install).
 
 Raqib's service (V-2) is the one named winservice.SERVICE_NAME (RaqibWatch) whose description begins with MARK, the
 mark the Linux unit carries in its first line (raqib/service.py MARK, without its `# `). A service of that name
@@ -20,21 +21,40 @@ runner's own words (winservice.told; for 15, where its text file is), 0 as stopp
 A text read from the manager (the description, the command, the account) is made printable and cut at SAID_MAX
 characters, the cut marked, before it is written. Nothing is said that was not read.
 
+What it reads more (Amendment Z, Z-1; M12.4c2b2c). Measured before it was ruled (Amendment X's first paragraph, the
+probe 639362e; x64 and ARM64, the same): a user outside the administrators' group, the manager opened with 0x1 and the
+service with 0x5, read back by QueryServiceConfig2W what Raqib's install sets - level 2, 64 bytes: the count forgotten
+after 3600 s and three actions of the kind 1 after 5000, 30000 and 300000 ms; level 4, 4 bytes: True; level 3, 4
+bytes: False. This reading of them was not asked on a real machine before it was built. With the same handle (0x5) and
+by the same two asks as the description: level 2 (the failure actions: each action's kind and delay, read from the
+array the structure points at, which must lie inside the bytes read, its count first bounded by ACTIONS_MAX; the
+seconds after which the count is forgotten; the two texts kept beside them), level 4 (the failure flag) and level 3
+(the delayed start). After the account's line and before the state's, one line each: what the system does after an
+end that was no Stop (each action by its kind's word, ACTION_WORDS, any other by its number, with its seconds; "none"
+where there is none; the seconds after which the count is forgotten), then the texts kept beside it (the message for
+a restart of the machine, the command to run), each on a line of its own and only where it is there, as another
+party's text (W-3); the flag; the delayed start. Of a service without the mark these are said and nothing is judged.
+
 The answers (V-4, as on Linux): 0 `RESULT: ACTIVE`, RUNNING and as installed (the mark, the command's form, a process
-of its own, the system's account), with the line that says ACTIVE is the service running, not the watch writing its
-record. 1 `RESULT: INSTALLED, NOT ACTIVE` (each other state said by its word; a start is said with the reason it may
-be long, T-2), with `, NOT AS INSTALLED` where it is not, and `RESULT: ACTIVE, NOT AS INSTALLED` where it runs and is
-not as installed; each difference said. 3 `RESULT: NOT INSTALLED` (error 1060), `RESULT: NOT INSTALLED BY RAQIB, YET
-A SERVICE OF THE NAME IS <its state>` (no mark), `RESULT: NOT KNOWN` (a call failed - the call and the system's number
-said; error 5 says the caller may not ask - a close included). 2 where the platform is not Windows: nothing asked
+of its own, the system's account; and, Z-2, the start automatic (AUTO_START) and not delayed, started again after each
+of DELAYS, the count forgotten after RESET_PERIOD, the flag set - the numbers raqib/wininstall.py writes, held here
+and tied to its own by a test), with the line that says ACTIVE is the service running, not the watch writing its
+record. 1 `RESULT: INSTALLED, NOT ACTIVE` (each other state said by its word; a start is said with the reason it
+may be long, T-2), with `, NOT AS INSTALLED` where it is not, and `RESULT: ACTIVE, NOT AS INSTALLED` where it runs
+and is not as installed; each difference said, one of Z-2 by what was read and what the install writes. 3 `RESULT:
+NOT INSTALLED` (error 1060), `RESULT: NOT INSTALLED BY RAQIB, YET A SERVICE OF THE NAME IS <its state>` (no mark),
+`RESULT: NOT KNOWN` (a call failed - the call and the system's number said; error 5 says the caller may not ask - a
+close included). 2 where the platform is not Windows: nothing asked
 (raqib/service.py answers on Linux).
 
 Every call of the system goes through one object, System, whose methods are the system's own calls and nothing
 else: connect to the manager (OpenSCManagerW, MANAGER_RIGHTS), open the service (OpenServiceW, SERVICE_RIGHTS), its
 state (QueryServiceStatusEx, STATUS_PROCESS_INFO), its making (QueryServiceConfigW: a first ask with no room, then
 with the bytes it named, those bytes bounded by room()), its description (QueryServiceConfig2W, level 1, the same two
-asks) and close (CloseServiceHandle). Each returns (what was read, 0), or (None, the system's error number), or
-(None, words) where what failed is not the system's number (a bound, an exception); none raises. Every handle opened
+asks), its failure actions, its failure flag and its delayed start (QueryServiceConfig2W, levels 2, 4 and 3, the same
+two asks; every value read out of the bytes before the method returns) and close (CloseServiceHandle). Each returns
+(what was read, 0), or (None, the system's error number), or (None, words) where what failed is not the system's
+number (a bound, an exception); none raises. Every handle opened
 is closed on every road, the service's before the manager's. advapi32 is loaded as raqib/winservice.py loads a
 library (by its name, use_last_error, every call's argument and result types declared), at the first call and never
 at import; no other library, no program started, no file written, no registry read, nothing written to the manager.
@@ -68,6 +88,16 @@ STARTS = {0: "at boot (a driver's)", 1: "at the system's start (a driver's)", 2:
           4: "disabled"}
 TYPES = {0x1: "a kernel driver", 0x2: "a file system driver", 0x10: "a process of its own",
          0x20: "a process shared with other services"}
+CONFIG_FAILURE_ACTIONS = 2      # SERVICE_CONFIG_FAILURE_ACTIONS: level 2 (measured, Z: 64 bytes for three actions)
+CONFIG_DELAYED = 3              # SERVICE_CONFIG_DELAYED_AUTO_START_INFO: level 3 (measured, Z: 4 bytes)
+CONFIG_FAILURE_FLAG = 4         # SERVICE_CONFIG_FAILURE_ACTIONS_FLAG: level 4 (measured, Z: 4 bytes)
+ACTIONS_MAX = 64                # actions read at most; a count past it is said and its array not read (Z-1)
+AUTO_START = 2                  # what Raqib's install writes (raqib/wininstall.py, X-5, X-9; a test ties each to its
+RESTART = 1                     # own): the start automatic and not delayed; SC_ACTION_RESTART after each of DELAYS
+DELAYS = (5000, 30000, 300000)  # (milliseconds); the count forgotten after RESET_PERIOD seconds; the flag set
+RESET_PERIOD = 3600
+NEVER = 0xFFFFFFFF              # INFINITE as the seconds of the count: it is never forgotten
+ACTION_WORDS = {0: "nothing", 1: "start it again", 2: "restart the machine", 3: "run a command"}
 ERROR_WORDS = {DENIED: "access denied: the caller may not ask this of the service manager",
                NO_ROOM: "the room given was not enough", NOT_THERE: "no service of the name"}
 
@@ -109,6 +139,20 @@ class System:
 
         class SERVICE_DESCRIPTIONW(ctypes.Structure):
             _fields_ = [("lpDescription", wintypes.LPWSTR)]
+
+        class SC_ACTION(ctypes.Structure):
+            _fields_ = [("Type", ctypes.c_int), ("Delay", wintypes.DWORD)]
+
+        class SERVICE_FAILURE_ACTIONSW(ctypes.Structure):
+            _fields_ = [("dwResetPeriod", wintypes.DWORD), ("lpRebootMsg", wintypes.LPWSTR),
+                        ("lpCommand", wintypes.LPWSTR), ("cActions", wintypes.DWORD),
+                        ("lpsaActions", ctypes.POINTER(SC_ACTION))]
+
+        class SERVICE_FAILURE_ACTIONS_FLAG(ctypes.Structure):
+            _fields_ = [("fFailureActionsOnNonCrashFailures", wintypes.BOOL)]
+
+        class SERVICE_DELAYED_AUTO_START_INFO(ctypes.Structure):
+            _fields_ = [("fDelayedAutostart", wintypes.BOOL)]
         adv = ctypes.WinDLL("advapi32", use_last_error=True)
         adv.OpenSCManagerW.restype = wintypes.HANDLE
         adv.OpenSCManagerW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
@@ -126,7 +170,9 @@ class System:
         adv.CloseServiceHandle.restype = wintypes.BOOL
         adv.CloseServiceHandle.argtypes = [wintypes.HANDLE]
         self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, status=SERVICE_STATUS_PROCESS,
-                                          config=QUERY_SERVICE_CONFIGW, description=SERVICE_DESCRIPTIONW)
+                                          config=QUERY_SERVICE_CONFIGW, description=SERVICE_DESCRIPTIONW,
+                                          action=SC_ACTION, failure=SERVICE_FAILURE_ACTIONSW,
+                                          flag=SERVICE_FAILURE_ACTIONS_FLAG, delayed=SERVICE_DELAYED_AUTO_START_INFO)
         return self._api
 
     def connect(self):
@@ -197,6 +243,67 @@ class System:
         except Exception as exc:
             return None, _failed(exc)
 
+    def actions(self, service):
+        """QueryServiceConfig2W at level 2, by the same two asks: ({reset, message, command, actions}, 0), each action
+        (its kind, its delay in ms) read out of the bytes at the offset array_at() gives - the count bounded first,
+        the array inside the bytes read - and every value read before the bytes are let go."""
+        try:
+            api = self._win()
+            needed = api.w.DWORD(0)
+            done = api.adv.QueryServiceConfig2W(service, CONFIG_FAILURE_ACTIONS, None, 0, api.ctypes.byref(needed))
+            size, why = room(done, 0 if done else api.ctypes.get_last_error(), needed.value,
+                             api.ctypes.sizeof(api.failure))
+            if why is not None:
+                return None, why
+            raw = api.ctypes.create_string_buffer(size)
+            if not api.adv.QueryServiceConfig2W(service, CONFIG_FAILURE_ACTIONS, raw, size,
+                                                api.ctypes.byref(needed)):
+                return None, _last(api.ctypes.get_last_error())
+            got = api.ctypes.cast(raw, api.ctypes.POINTER(api.failure)).contents
+            count, where = got.cActions, api.ctypes.cast(got.lpsaActions, api.ctypes.c_void_p).value
+            offset, why = array_at(count, where, api.ctypes.addressof(raw), size, api.ctypes.sizeof(api.action))
+            if why is not None:
+                return None, why
+            array = (api.action * count).from_buffer(raw, offset) if count else ()
+            return {"reset": got.dwResetPeriod, "message": got.lpRebootMsg, "command": got.lpCommand,
+                    "actions": [(one.Type, one.Delay) for one in array]}, 0
+        except Exception as exc:
+            return None, _failed(exc)
+
+    def flag(self, service):
+        """QueryServiceConfig2W at level 4, by the same two asks: (the failure flag, the number read, 0)."""
+        try:
+            api = self._win()
+            needed = api.w.DWORD(0)
+            done = api.adv.QueryServiceConfig2W(service, CONFIG_FAILURE_FLAG, None, 0, api.ctypes.byref(needed))
+            size, why = room(done, 0 if done else api.ctypes.get_last_error(), needed.value,
+                             api.ctypes.sizeof(api.flag))
+            if why is not None:
+                return None, why
+            raw = api.ctypes.create_string_buffer(size)
+            if not api.adv.QueryServiceConfig2W(service, CONFIG_FAILURE_FLAG, raw, size, api.ctypes.byref(needed)):
+                return None, _last(api.ctypes.get_last_error())
+            return api.ctypes.cast(raw, api.ctypes.POINTER(api.flag)).contents.fFailureActionsOnNonCrashFailures, 0
+        except Exception as exc:
+            return None, _failed(exc)
+
+    def delayed(self, service):
+        """QueryServiceConfig2W at level 3, by the same two asks: (the delayed start, the number read, 0)."""
+        try:
+            api = self._win()
+            needed = api.w.DWORD(0)
+            done = api.adv.QueryServiceConfig2W(service, CONFIG_DELAYED, None, 0, api.ctypes.byref(needed))
+            size, why = room(done, 0 if done else api.ctypes.get_last_error(), needed.value,
+                             api.ctypes.sizeof(api.delayed))
+            if why is not None:
+                return None, why
+            raw = api.ctypes.create_string_buffer(size)
+            if not api.adv.QueryServiceConfig2W(service, CONFIG_DELAYED, raw, size, api.ctypes.byref(needed)):
+                return None, _last(api.ctypes.get_last_error())
+            return api.ctypes.cast(raw, api.ctypes.POINTER(api.delayed)).contents.fDelayedAutostart, 0
+        except Exception as exc:
+            return None, _failed(exc)
+
     def close(self, handle):
         """CloseServiceHandle: (True, 0)."""
         try:
@@ -217,6 +324,24 @@ def room(done, error, needed, least, bound=ASK_MAX):
     if not isinstance(needed, int) or not least <= needed <= bound:
         return None, "the first ask named %s bytes, not from %d to %d (the bound)" % (_said(needed), least, bound)
     return needed, None
+
+
+def array_at(count, where, base, size, width, bound=ACTIONS_MAX):
+    """Z-1: where the array of `count` actions of `width` bytes each lies in the `size` bytes read at `base`: (its
+    offset, None), or (None, why) - a count outside 0 to `bound` (said before any of the array is read), an array that
+    is NULL with a count, or one that does not lie wholly inside the bytes read. A count of 0 reads nothing."""
+    if isinstance(count, bool) or not isinstance(count, int):
+        return None, "a count of actions that is not a number (%s)" % _said(count)
+    if not 0 <= count <= bound:
+        return None, "%s actions, not from 0 to %d (the bound)" % (_said(count), bound)
+    if count == 0:
+        return 0, None
+    if not where:
+        return None, "%d actions and no array (NULL)" % count
+    offset = where - base
+    if offset < 0 or offset + count * width > size:
+        return None, "%d actions whose array does not lie inside the %d bytes read" % (count, size)
+    return offset, None
 
 
 def _last(number):
@@ -302,7 +427,10 @@ def _making(making, out):
                                 if kind is not None else "%s, not a number" % _said(making.get("type"))))
     if kind != OWN_PROCESS:
         differ.append("the type is not a process of its own (0x%X)" % OWN_PROCESS)
-    out.write("  start: %s\n" % _word(STARTS, making.get("start"), "a start"))
+    start = _word(STARTS, making.get("start"), "a start")
+    out.write("  start: %s\n" % start)
+    if _number(making.get("start")) != AUTO_START:
+        differ.append("start: %s; the install writes %s" % (start, _word(STARTS, AUTO_START, "a start")))
     account = making.get("account")
     system = isinstance(account, str) and account.lower() == SYSTEM_ACCOUNT.lower()
     out.write("  account: %s%s\n" % (_said(account) if account is not None else "none said",
@@ -310,6 +438,64 @@ def _making(making, out):
     if not system:
         differ.append("the account is not the system's (%s)" % SYSTEM_ACCOUNT)
     return differ
+
+
+def _seconds(ms):
+    number = _number(ms)
+    if number is None:
+        return "%s ms, not a number" % _said(ms)
+    return "%d s" % (number // 1000) if number % 1000 == 0 else "%d.%03d s" % divmod(number, 1000)
+
+
+def _action_said(action):
+    """Z-1: one action, by its kind's word (any other kind by its number), and its seconds."""
+    kind, delay = action
+    word = ACTION_WORDS.get(_number(kind))
+    return "%s after %s" % (word if word else "the kind %s, which this command has no word for," % _said(kind),
+                            _seconds(delay))
+
+
+def _failure(got, out):
+    """Z-1, Z-2: the line of what the system does after an end that was no Stop; the texts kept beside the actions,
+    each on a line of its own and only where it is there; what differs from what the install writes, as a list."""
+    actions, reset, differ, texts = [tuple(a) for a in got.get("actions")], got.get("reset"), [], []
+    said = ", ".join(_action_said(a) for a in actions) or "none"
+    number = _number(reset)
+    count = ("the count never forgotten (0x%X, INFINITE)" % NEVER if number == NEVER else
+             "the count forgotten after %s" % ("%d s" % number if number is not None else
+                                               "%s, not a number" % _said(reset)))
+    out.write("  after an end that was no Stop: %s; %s\n" % (said, count))
+    for key, words in (("message", "the message kept for a restart of the machine"),
+                       ("command", "the command kept to run")):
+        text = got.get(key)
+        if text is not None and text != "":
+            out.write("  %s: \"%s\" (another party's text)\n" % (words, _said(text)))
+            texts.append("%s is there; the install writes none" % words)   # ZA-2: said, and judged
+    if [(_number(k), _number(d)) for k, d in actions] != [(RESTART, d) for d in DELAYS]:
+        differ.append("after an end that was no Stop: %s; the install writes %s" % (
+            said, ", ".join(_action_said((RESTART, d)) for d in DELAYS)))
+    if number != RESET_PERIOD:
+        differ.append("%s; the install writes %d s" % (count, RESET_PERIOD))
+    return differ + texts   # in the order of the lines: the actions, the count, then the texts kept beside them
+
+
+def _flag(value, out):
+    """Z-1, Z-2: the line of the failure flag; a list holding the difference where it is not set."""
+    number = _number(value)
+    said = ("%d, %s" % (number, "set (an end the service itself reports with an error is such an end too)" if
+                        number else "not set (an end the service itself reports with an error is not such an end)")
+            if number is not None else "%s, not a number" % _said(value))
+    out.write("  the failure flag: %s\n" % said)
+    return [] if number else ["the failure flag: %s; the install writes 1, set" % said.split(" (")[0]]
+
+
+def _delayed(value, out):
+    """Z-1, Z-2: the line of the delayed start; a list holding the difference where it is delayed."""
+    number = _number(value)
+    said = ("%d, %s" % (number, "delayed" if number else "not delayed") if number is not None else
+            "%s, not a number" % _said(value))
+    out.write("  delayed start: %s\n" % said)
+    return [] if number == 0 else ["delayed start: %s; the install leaves it 0, not delayed" % said]
 
 
 def _exit(got, out, ws, state, ours):
@@ -375,6 +561,9 @@ def _read(system, out, ws, opened):
     reads, ours, differ = {}, False, []
     for key, call, words in (("description", system.description, "QueryServiceConfig2W (level 1)"),
                              ("making", system.making, "QueryServiceConfigW"),
+                             ("failure actions", system.actions, "QueryServiceConfig2W (level 2)"),
+                             ("failure flag", system.flag, "QueryServiceConfig2W (level 4)"),
+                             ("delayed start", system.delayed, "QueryServiceConfig2W (level 3)"),
                              ("state", system.state, "QueryServiceStatusEx")):
         reads[key], error = _call(call, service)
         if error:
@@ -385,6 +574,12 @@ def _read(system, out, ws, opened):
             out.write("  %s\n" % _mark_said(reads[key]))
         elif key == "making":
             differ = _making(reads[key], out)
+        elif key == "failure actions":
+            differ += _failure(reads[key], out)
+        elif key == "failure flag":
+            differ += _flag(reads[key], out)
+        elif key == "delayed start":
+            differ += _delayed(reads[key], out)
     got = reads["state"]
     state = _number(got.get("state"))
     out.write("  state: %s (its process's id: %s)\n" % (_word(STATES, got.get("state"), "a state"),

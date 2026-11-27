@@ -1389,7 +1389,8 @@ CTYPES_BOUND = (
      ' flag=SERVICE_FAILURE_ACTIONS_FLAG)'),
     ('raqib/winmanager.py', 'System._win',
      'self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, status=SERVICE_STATUS_PROCESS, conf'
-     'ig=QUERY_SERVICE_CONFIGW, description=SERVICE_DESCRIPTIONW)'),
+     'ig=QUERY_SERVICE_CONFIGW, description=SERVICE_DESCRIPTIONW, action=SC_ACTION, failure=SERVICE_FAILURE_ACT'
+     'IONSW, flag=SERVICE_FAILURE_ACTIONS_FLAG, delayed=SERVICE_DELAYED_AUTO_START_INFO)'),
     ('raqib/winservice.py', 'System._win',
      'self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, k32=k32, status=SERVICE_STATUS, att'
      'ributes=SECURITY_ATTRIBUTES, entry=SERVICE_TABLE_ENTRY, handler=handler_ex, main=service_main)'),

@@ -189,6 +189,21 @@ class Manager:
         return self._answer("making", {"type": 0x10, "start": 2, "command": self.service["command"],
                                        "account": "LocalSystem"})
 
+    # M12.4c2b2c (ADR-0013 Z-1): the reader's levels 2, 4 and 3, answered as the install makes them (X-5, X-9); not
+    # kept in the log, which holds the install's calls and the reader's of 0.16.0 in the tests here
+    def actions(self, handle):                # the reader's
+        self._held(handle, service=True)
+        return {"reset": wininstall.RESET_PERIOD, "message": None, "command": None,
+                "actions": [(wininstall.RESTART, delay) for delay in wininstall.DELAYS]}, 0
+
+    def flag(self, handle):                   # the reader's
+        self._held(handle, service=True)
+        return 1, 0
+
+    def delayed(self, handle):                # the reader's
+        self._held(handle, service=True)
+        return 0, 0
+
 
 class Code:
     """A made-up check's object (wincode.System's calls), packed: the program's folder and its modules' folder, each
@@ -908,10 +923,23 @@ class Library:
         return 1
 
     def _QueryServiceConfig2W(self, service, level, buffer, size, needed):
-        got = self._ask(self.reader._api.description, buffer, size, needed, 200)
+        import ctypes
+        api = self.reader._api   # M12.4c2b2c (ADR-0013 Z-1): levels 2, 4 and 3 too, as the install makes them
+        kind, more = {1: (api.description, 200), 2: (api.failure, ctypes.sizeof(api.action) * len(wininstall.DELAYS)),
+                      3: (api.delayed, 0), 4: (api.flag, 0)}[level]
+        got = self._ask(kind, buffer, size, needed, more)
         if got == 0:
             return 0
-        got.lpDescription = self.service["description"]
+        if level == 1:
+            got.lpDescription = self.service["description"]
+        elif level == 2:   # the array inside the same bytes, after the structure, as the system lays it
+            at = ctypes.sizeof(kind)
+            for one, delay in zip((api.action * len(wininstall.DELAYS)).from_buffer(buffer, at), wininstall.DELAYS):
+                one.Type, one.Delay = wininstall.RESTART, delay
+            got.dwResetPeriod, got.cActions = wininstall.RESET_PERIOD, len(wininstall.DELAYS)
+            got.lpsaActions = ctypes.cast(ctypes.addressof(buffer) + at, ctypes.POINTER(api.action))
+        elif level == 4:
+            got.fFailureActionsOnNonCrashFailures = 1
         return 1
 
 

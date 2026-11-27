@@ -5,6 +5,38 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.17.0 - 2026-11-27
+
+What is new:
+- `raqib service status` on Windows now reads what the install sets for the system to bring the service back,
+  and judges it (ADR-0013 Amendments Z and ZA): what the system does after an end that was no Stop, whether an
+  end the service itself reports is such an end, and whether the automatic start is delayed. Each is said in a
+  line of its own.
+- Raqib's service is as installed only where its start is automatic and not delayed, the system starts it again
+  after 5 s, 30 s and then 300 s with the count forgotten after 3600 s, and the flag is set - what the install
+  writes. Each difference is said by what was read and what the install writes, and the answer is then not
+  `ACTIVE` but `ACTIVE, NOT AS INSTALLED`, exit 1.
+- A message or a command the system keeps beside those actions is a difference too: the install writes none.
+- So a watch that would not come back after it is ended, or would not start with the machine, no longer reads
+  as the watch that was installed.
+- Measured on GitHub's Windows machines, x64 and ARM64, asked by a user outside the administrators' group: a
+  service Raqib's install made read ACTIVE; with each setting changed alone by the system's own tool it read
+  not as installed, its difference said; put back, ACTIVE again. The rig reads it at every run (X53, X54).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window or the Linux service. On Windows, a service made by hand under Raqib's
+  name and mark, without those settings, read ACTIVE until now and reads not as installed with this version
+  (exit 1, each difference said): remove it by hand and let Raqib's install make it.
+
+Not measured:
+- A count that is never forgotten; these settings on a 32-bit Windows; a service marked for removal.
+- A start at boot, and a machine joined to a domain, as before.
+
 ## 0.16.0 - 2026-11-27
 
 What is new:

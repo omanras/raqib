@@ -1,9 +1,10 @@
 # The rig's `raqib service status` on Windows, asked with no rights (ADR-0013 V-5, W-6; X53). On GitHub's throwaway
 # Windows machine it makes a local user of its own, outside the administrators' group, and has that user ask
-# `python -m raqib service status` at three moments: with no service named RaqibWatch; with one made from a copy
-# of this job's Python under Program Files, carrying Raqib's mark as its description, running; and with one made
-# with the mark from the job's own Python, a tree a user may write, which the runner's own check refuses at its
-# start. It keeps what tools/rig/check.py reads:
+# `python -m raqib service status` at three moments: with no service named RaqibWatch; with one that Raqib's own
+# install made from a copy of this job's Python under Program Files (ADR-0013 Z-3: only a service made as the
+# install makes it reads as installed), running; and with one made by hand with the mark from the job's own Python,
+# a tree a user may write, which the install refuses and the runner's own check refuses at its start. It keeps
+# what tools/rig/check.py reads:
 #
 #     tools\rig\service_status.ps1 -Out FOLDER
 #
@@ -69,13 +70,15 @@ if ($none.Count) {
   $kept += "asked-by-administrator: $(if ($none.groups) { 'no' } else { 'yes, or not read' })"
   $kept += "none-exit: $($none.exit)", "none-result: $($none.result)"
 }
-Made $copy
+if (Test-Path $place) { Remove-Item -Recurse -Force $place }
+"Raqib's own install from the copy: exit $(& $copy -I -m raqib service install | Out-Null; $LASTEXITCODE)"
 $active = Asked "active.txt"
 if ($active.Count) {
   $kept += "active-exit: $($active.exit)", "active-result: $($active.result)"
   $kept += "active-command: $($active.lines | Where-Object { $_ -like 'command: *' } | Select-Object -First 1)"
 }
-Unmade
+"Raqib's own remove: exit $(& $copy -I -m raqib service remove | Out-Null; $LASTEXITCODE)"
+if (Svc) { Unmade }
 Made $own
 $refused = Asked "refused.txt"
 if ($refused.Count) {
