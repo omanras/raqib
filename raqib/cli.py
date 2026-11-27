@@ -306,9 +306,11 @@ no command, raqib prints its usage and exits 2.
       was made said). remove
       stops and removes Raqib's service only (one without the mark is not touched, 1), asks for the name
       again (exit 0 gone or nothing installed, 1 not yet gone) and leaves the record; with --purge it
-      removes the record too, only after the service is gone or none was installed and only where the place reads
+      removes the record too, only after the service is gone or none was installed, only where the place reads
       as the runner makes it (a folder, no reparse point, owned by the system or the administrators, the
-      closed list), bottom up, never through a link (exit 0 removed or not there, 1 left as it is, said).
+      closed list) and no host watch still holds it, bottom up, never through a link nor by a name the system
+      rewrites (exit 0 removed and read again not there, or not there; 1 left as it is, or not all removed,
+      what is left said).
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did

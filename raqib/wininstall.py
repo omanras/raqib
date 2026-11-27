@@ -39,17 +39,26 @@ MARGIN); DeleteService (1072, already marked, is taken); the handles closed; the
 1060 is `removed`, 0; still there is marked for removal and not yet gone, 1. Without --purge the record is never
 touched; its place is said, and that --purge removes it.
 
-remove --purge (Amendment ZE; M12.4c2b4): the service's remove first, as it is; the record is touched only where that
-ended with exit 0 (the service gone, or none installed) - else one line says it is not touched (a service that may
-still run may still write), 1. Then the place is judged by place_judged, the one judgement of the runner, the install
-and the remove: absent is nothing to remove, 0; refused is said in its own words and the name left exactly as it is,
-1; taken alone is removed: bottom up, by System's listed, remove_file and remove_folder, every path handed one inside
-the place; a reparse point inside is neither entered nor removed, counted and said, and the place then stays; each
-error is counted by the system's number and the first one's path said; 0 only where the place is gone. Measured before
-it was ruled (ZE's first paragraph; the probe 91952bf, x64 and ARM64): the place after Raqib's remove read as taken,
-3 folders and 11 files, removed bottom up by an administrator's process with no error; a folder of the name made by
-an administrator's shell read with ProgramData's inherited list (refused); a link of the name read as a reparse
-point, and removing the link removed the link alone. This module's --purge itself was not run on a real machine.
+remove --purge (Amendments ZE and ZF; M12.4c2b4): the service's remove first, as it is; the record is touched only
+where that ended with exit 0 (the service gone, or none installed) - else one line says so (a service that may still
+run may still write), 1. Then the place is judged by place_judged, the install's reading of a place it finds, tied by
+the tests to the runner's own (winservice.prepare): absent is nothing to remove, 0; refused is said in its own words
+and the name left exactly as it is, 1 (a place that could not be read at all is said so in the RESULT). Taken, its
+own state is asked first, as the runner asks it at a start (winservice.System.held): a host watch that still holds it
+fresh leaves it, 1. Else it is removed bottom up by System's listed, remove_file and remove_folder, every path handed
+one inside the place and no name handed that the system would rewrite (ZF-1: one ending in a dot or a space, a
+device's name); a reparse point inside is neither entered nor removed, counted and said, and the place then stays;
+where this command removed the service, a removal inside answering 32 is asked again every IN_USE_EVERY s for at most
+IN_USE_BOUND s by the system object's own clock and sleep (ZF-3); each error is counted by the system's number and
+the first one's path said; 0 only where the place, read again by place_judged, is not there. Between its reading and
+its removing the place and each folder in it are named again by path (ZE-5). Measured of this command on real Windows
+(ZF's first paragraph; the probe a672ab5 of a2c6905, x64 and ARM64): a service Raqib's install made and that watched
+a round, removed with its place in one command, 0; nothing installed and no place, 0; a folder of the name made by an
+administrator's shell, a link of the name, and a link inside the place, each left with its target's file, 1; a
+read-only file inside, error 5, 1; a file held open, error 32, 1, and 0 once let go; a user outside the
+administrators' group, the place not read and nothing touched, 1. Not measured: a name the system rewrites; a service
+of another name still writing the place; a place replaced between its reading and its removal; nor the held state's
+road, the wait on 32 or the words ZF rules, built after that probe.
 
 Every call of the system that writes or removes goes through one object, System, whose methods are the system's own
 calls and nothing else, each returning (what it did or read, 0), (None, the system's error number) or (None, words);
@@ -125,25 +134,44 @@ GONE_NOT_KNOWN = "removed by DeleteService, whether it is gone NOT KNOWN"
 RECORD = ("  the record stays: the place, Raqib under ProgramData (its events in .raqib\\host\\events.jsonl there),"
           " is not touched; --purge removes it where it reads as the runner makes it (ADR-0013 ZE)\n")
 # ZE-3, ZE-4 (M12.4c2b4): --purge, the record's lines and the RESULT's words after the service's own
-RECORD_UNTOUCHED = ("  the record (--purge): not touched: the service is not gone, and a service that may still run"
-                    " may still write; the place, Raqib under ProgramData, is left as it is (ADR-0013 ZE-3)\n")
+RECORD_UNTOUCHED = ("  the record (--purge): not touched: the service's remove did not end with it gone or none"
+                    " installed, and a service that may still run may still write; the place, Raqib under"
+                    " ProgramData, is left as it is (ADR-0013 ZE-3)\n")
 RECORD_ABSENT = "  the record (--purge): %s is not there: nothing to remove\n"
 RECORD_REFUSED = ("  the record (--purge): %s; not the place as Raqib's service makes it, so it is left exactly as it"
                   " is (ADR-0013 ZE-1)\n")
+RECORD_UNREAD = ("  the record (--purge): %s; the place could not be read, so nothing of it is touched (ADR-0013"
+                 " ZF-5)\n")
 RECORD_TAKEN = ("  the record (--purge): %s is there, a folder owned by %s with the closed list, as the runner makes"
-                " it: removed bottom up, no link followed\n")
-RECORD_GONE = "  the record: removed %s and %s inside it, then the place itself: %s is gone\n"
+                " it: to be removed bottom up, no link followed\n")
+RECORD_HELD = ("  the record (--purge): a host watch's state still holds the place (its heartbeat %s, stale after %s"
+               " s): that watch still watches, or was ended without its end; nothing removed: ask for the record"
+               " again when it has ended (ADR-0013 ZF-2)\n")
+RECORD_HELD_FAULT = ("  the record (--purge): whether a host watch still holds the place could not be asked (%s):"
+                     " nothing touched\n")
+RECORD_GONE = "  the record: removed %s and %s inside it, then the place itself: %s, read again, is gone\n"
+RECORD_NOT_GONE = ("  the record: removed %s and %s inside it, then the place itself; read again, it answers: %s\n")
 RECORD_LEFT = "  the record: NOT all removed: %s and %s removed; left: %s; the place stays\n"
 RECORD_FAULT = "  the record: an answer this command cannot read, or a fault of its own (%s)\n"
 SERVICE_GONE = {REMOVED: "the service removed"}   # the RESULT's first words where the record is reached
-PURGED = "%s; the record removed"
+PURGED = "%s; the record removed"   # the rig reads it word for word (X56)
 NO_RECORD = "%s; no record to remove"
 RECORD_KEPT = "%s; the record NOT removed: %s"
-NOT_PLACE = "not the place as Raqib's service makes it"
+NOT_PLACE = "not the place as Raqib's service makes it"   # a place read and refused; the rig reads it (X56)
+NOT_READ = "the place could not be read"
+HELD_SAID = "a watch still holds the place"
+HELD_UNKNOWN = "whether a watch still holds the place NOT KNOWN"
+NOT_ABSENT = "the place, read again, is not absent (said above)"
 PART_LEFT = "part of it is left (said above)"
 NOT_TOUCHED = "not touched"
 FAULT_PURGE = "%s; the record: NOT KNOWN what of it was removed, a fault of its own"
 NOT_ONE_NAME = "a name listed that is not one plain name"
+DEVICES = ("CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$")   # ZF-1: and COM and LPT with a digit
+IN_USE = 32                     # ERROR_SHARING_VIOLATION: a name another process holds open (measured, ZF)
+IN_USE_EVERY = 0.5              # ZF-3: seconds between two asks of a removal answering IN_USE
+IN_USE_BOUND = 20.0             # ZF-3: seconds a removal answering IN_USE is asked again, at most
+INSIDE_WORDS = {DENIED: "access denied: a read-only file, or a name the system holds",   # ZF-4: no administrator
+                IN_USE: "in use by another process"}
 
 
 class Refused(Exception):
@@ -814,14 +842,49 @@ def _many(count, word):
 
 
 def _one_name(name):
-    """ZE-1: a name a folder's listing gave that names one thing in that folder and nothing outside it."""
-    return isinstance(name, str) and name not in ("", ".", "..") and not [c for c in name if c in "\\/:\0"]
+    """ZE-1, ZF-1: a name a folder's listing gave that names one thing in that folder as written, and so nothing that
+    Windows would make another name of: not empty; not ending in a dot or a space (so no dot name either); no
+    separator, colon or NUL; not a device's name (DEVICES, COM and LPT with a digit), with or without an extension,
+    in any case."""
+    if not isinstance(name, str) or not name or name[-1] in ". " or [c for c in name if c in "\\/:\0"]:
+        return False
+    base = name.split(".")[0].rstrip(" ").upper()
+    return base not in DEVICES and not (len(base) == 4 and base[:3] in ("COM", "LPT") and base[3].isdigit())
 
 
-def _purge(system, path):
+def _inside_said(error):
+    """ZF-4: an error of a removal inside a place this caller has just read: 5 and 32 with their words there."""
+    if isinstance(error, int) and not isinstance(error, bool) and error in INSIDE_WORDS:
+        return "error %d (%s)" % (error, INSIDE_WORDS[error])
+    return _error_said(error)
+
+
+def _removal(system, call, path, wait):
+    """ZF-3: one removal inside the place (call: remove_file or remove_folder); where `wait` (this command removed the
+    service) and it answers IN_USE, asked again every IN_USE_EVERY s for at most IN_USE_BOUND s by the system object's
+    own clock and sleep, the ones the remove's waits use: its last error, or 0."""
+    _, error = _call(call, path)
+    if error != IN_USE or not wait:
+        return error
+    first, failed = _call(system.clock)
+    while not failed:
+        _, failed = _call(system.sleep, IN_USE_EVERY)
+        if failed:
+            break
+        _, error = _call(call, path)
+        if error != IN_USE:
+            return error
+        now, failed = _call(system.clock)
+        if not failed and now - first >= IN_USE_BOUND:
+            break
+    return error
+
+
+def _purge(system, path, wait):
     """ZE-2: what is in the place removed bottom up by the system object's calls, every path handed one inside the
     place; a reparse point neither entered nor removed, and every folder above it then left; each error counted by its
-    number, the first one's path kept. (True where the place is gone, the line of the result)."""
+    number, the first one's path kept. (whether the place's own folder was removed, the folders removed, the files
+    removed, what is left)."""
     from raqib import winservice
     done, errors, first, links, left = {"folder": 0, "file": 0}, {}, [], [], set()
     above, order, pending = {path: None}, [], [path]
@@ -850,7 +913,7 @@ def _purge(system, path):
                 above[inner] = folder
                 pending.append(inner)
             else:
-                _, error = _call(system.remove_file, inner)
+                error = _removal(system, system.remove_file, inner, wait)
                 if error:
                     failed(error, inner)
                     left.add(folder)
@@ -859,7 +922,7 @@ def _purge(system, path):
     gone = False
     for folder in reversed(order):   # a folder after every folder inside it: bottom up
         if folder not in left:
-            _, error = _call(system.remove_folder, folder)
+            error = _removal(system, system.remove_folder, folder, wait and folder != path)
             if not error:
                 gone = folder == path
                 done["folder"] += folder != path
@@ -867,41 +930,63 @@ def _purge(system, path):
             failed(error, folder)
         if above[folder] is not None:
             left.add(above[folder])
-    folders, files = _many(done["folder"], "folder"), _many(done["file"], "file")
-    if gone:
-        return True, RECORD_GONE % (folders, files, _error_said(path))
     what = []
     if links:
         what.append("%s, neither entered nor removed (the first: %s, attributes 0x%x)" % (
             _many(len(links), "reparse point"), _error_said(links[0][0]), links[0][1]))
     if errors:
-        counted = ["%s %s" % (_error_said(n), "once" if c == 1 else "%d times" % c) for n, c in errors.items()]
+        counted = ["%s %s" % (_inside_said(n), "once" if c == 1 else "%d times" % c) for n, c in errors.items()]
         what.append("%s; the first at %s" % (", ".join(counted), _error_said(first[0])))
-    return False, RECORD_LEFT % (folders, files, "; ".join(what) or "NOT KNOWN what")
+    return gone, _many(done["folder"], "folder"), _many(done["file"], "file"), "; ".join(what) or "NOT KNOWN what"
 
 
-def _record(system, out, place, service):
-    """ZE-1 to ZE-4: the record, the service gone or none installed, judged by place_judged as the runner judges a
-    place it finds and removed only where that says taken; (the exit, the RESULT's words)."""
+def _record(system, out, place, service, wait):
+    """ZE-1 to ZE-4, ZF-2, ZF-5: the record, the service gone or none installed, judged by place_judged (the
+    install's reading, tied by the tests to the runner's prepare) and removed only where that says taken and no host
+    watch holds it fresh (the runner's own call, held); "is gone" only where it reads absent again. (the exit, the
+    RESULT's words)."""
+    from raqib import winservice
     got = place_judged(place)
     if got[0] == "absent":
         out.write(RECORD_ABSENT % _error_said(got[1]))
         return 0, NO_RECORD % service
     if got[0] != "taken":
+        if got[1] in (winservice.EXIT_UNREAD, winservice.EXIT_NO_PROGRAMDATA):   # ZF-5: nothing of it was read
+            out.write(RECORD_UNREAD % got[2])
+            return 1, RECORD_KEPT % (service, NOT_READ)
         out.write(RECORD_REFUSED % got[2])
         return 1, RECORD_KEPT % (service, NOT_PLACE)
-    out.write(RECORD_TAKEN % (_error_said(got[1]), got[2]))
-    gone, words = _purge(system, got[1])
-    out.write(words)
-    return (0, PURGED % service) if gone else (1, RECORD_KEPT % (service, PART_LEFT))
+    path = got[1]
+    out.write(RECORD_TAKEN % (_error_said(path), got[2]))
+    try:
+        held = place.held(path)
+    except Exception as exc:   # said, nothing touched
+        out.write(RECORD_HELD_FAULT % type(exc).__name__)
+        return 1, RECORD_KEPT % (service, HELD_UNKNOWN)
+    if isinstance(held, dict) and held.get("held") == winservice.HELD_FRESH:   # as the runner's _wait_for reads it
+        out.write(RECORD_HELD % (_error_said(winservice._age_said(held.get("age"))),
+                                 _error_said(winservice._number_said(held.get("stale")))))
+        return 1, RECORD_KEPT % (service, HELD_SAID)
+    gone, folders, files, what = _purge(system, path, wait)
+    if not gone:
+        out.write(RECORD_LEFT % (folders, files, what))
+        return 1, RECORD_KEPT % (service, PART_LEFT)
+    again = place_judged(place)
+    if again[0] == "absent":
+        out.write(RECORD_GONE % (folders, files, _error_said(path)))
+        return 0, PURGED % service
+    out.write(RECORD_NOT_GONE % (folders, files, again[2] if again[0] == "refused" else
+                                 "%s is there, a folder owned by %s with the closed list" % (_error_said(again[1]),
+                                                                                           again[2])))
+    return 1, RECORD_KEPT % (service, NOT_ABSENT)
 
 
 def remove(system, out, reader=None, purge=False, place=None):
     """X-6: Raqib's service stopped and removed, said one line a step; the exit (0 removed or nothing installed; 1
     not Raqib's, refused, failed or not yet gone; 2 not Windows). reader: raqib/winmanager.py's System; place: the
     runner's reader of the place (winservice.System) - each a stand-in in a test. Without purge the record is never
-    touched; with it (ZE), after the service's remove ended 0 alone, the record too where place_judged says taken: 0
-    gone or not there, 1 refused or left."""
+    touched; with it (ZE, ZF), after the service's remove ended 0 alone, the record too where place_judged says taken
+    and no host watch holds it fresh: 0 gone as read again, or not there; 1 not read, refused, held or left."""
     from raqib import winmanager, winservice
     words = _platform(system, "remove")
     if words:
@@ -925,7 +1010,7 @@ def remove(system, out, reader=None, purge=False, place=None):
     else:
         service = SERVICE_GONE.get(result, result)
         try:
-            exit_code, result = _record(system, out, place or winservice.System(), service)
+            exit_code, result = _record(system, out, place or winservice.System(), service, result == REMOVED)
         except Exception as exc:
             out.write(RECORD_FAULT % type(exc).__name__)
             exit_code, result = 1, FAULT_PURGE % service
