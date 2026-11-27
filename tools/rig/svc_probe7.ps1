@@ -2,6 +2,7 @@
 # the service made, read, started, stopped and removed by the system's own calls; whether the name it is made
 # under matters; who owns and who may write the Python it would run. It makes one service, the service's place
 # and one local user of its own and removes them.
+# (Run again: the first run's service calls did not run, by a fault of the probe's own.)
 $ErrorActionPreference = "Continue"
 $py = (Get-Command python).Source
 $script = Join-Path $PSScriptRoot "svc_probe.py"

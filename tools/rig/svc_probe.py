@@ -334,7 +334,7 @@ def _scm():
     return adv
 
 
-def svc(what, name, binpath=None):
+def svc_call(what, name, binpath=None):
     """install | query | start | stop | remove, by the system's own calls; says what each answered."""
     adv = _scm()
     err = ctypes.get_last_error
@@ -410,7 +410,7 @@ def main(argv):
         print("by its handle: %s" % read_handle(argv[2]))
         return 0
     if len(argv) >= 4 and argv[1] == "--svc":
-        return svc(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
+        return svc_call(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
     if len(argv) >= 3 and argv[1] == "--survey":
         return survey(argv[2:])
     if len(argv) == 3 and argv[1] == "--make":
