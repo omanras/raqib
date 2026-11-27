@@ -1152,3 +1152,75 @@ The builder's gate is Linux's; the Windows jobs caught it.
   one marked for removal; a machine joined to a domain. Next: M12.4c2b2b (install and remove), which measures
   first what a caller with no rights reads back of the delayed start, the failure actions and the flag; then
   M12.4c2b3 (U-4).
+
+## Amendment X (the Table, 2026-11-27) - M12.4c2b2b: `raqib service install | remove` on Windows, by the system's own calls
+Measured before this ruling (the probe branch 639362e and dc172b1, Raqib 0.15.0; x64 and ARM64, the same), each
+call by an administrator unless said: the service manager opened to connect and to make a service (rights 0x3);
+CreateServiceW of a process of its own (0x10), automatic start (2), error control 1, no account named, shown as
+`Raqib watch`, its handle asked with the rights 0x17 (to ask its making and its state, to change its making, to
+start it): done, and its account read back as `LocalSystem`. ChangeServiceConfig2W on that handle: level 1, the
+mark as its description; level 2, started again after 5000, 30000 and 300000 ms with the count forgotten after
+3600 s; level 4, the failure flag: each done. Read back by its maker and by a user outside the administrators'
+group (the manager 0x1, the service 0x5): the making, the description (116 bytes), level 2 (64 bytes: 3600 s,
+three actions of the kind 1 with those delays), level 4 (True) and level 3 (False: the start is not delayed) -
+all of them read with no rights. StartServiceW on the handle: done; the state read START_PENDING with a wait of
+5 s, then of 60 s, then RUNNING, 0.6 s and 1.5 s after the call. A service opened with 0x10024 (to ask its
+state, to stop it, to remove it): a Stop done, STOPPED 0.2 s later, DeleteService done, and the name asked for
+again answered 1060. The same service made from a tree the check refuses ended its first start after 0.2 s with
+1066 and its own 0x2000000F, and the system's log said, by the name it is shown as: at 0.2 s event 7031
+("terminated unexpectedly. It has done this 1 time(s). The following corrective action will be taken in 5000
+milliseconds: Restart the service") and 7024 with the number; at 5.4 s the same for the second time, in 30000
+milliseconds; at 35.5 s for the third, in 300000. While it waited for its next start a Stop answered 1062,
+DeleteService was done and the name was gone (1060). And from Amendments T, U and W: a Stop sent while a service
+starts answers 1052 to its caller; a name already there answers 1073 to a making, and one marked for removal
+1072; `raqib service status` reads such a service as ACTIVE where it runs.
+- X-1 (the parts). M12.4c2b2b: install and remove. After it, each a task of its own: status reading the failure
+  actions and the flag as part of "as installed" (M12.4c2b2c; measured above that a caller with no rights reads
+  them), the check-point (M12.4c2b3, U-4), and `--purge` on Windows.
+- X-2 (the calls, and a module of their own). The calls that write to the manager live in a new module,
+  raqib/wininstall.py, behind one system object, each with the rights measured above and no more.
+  raqib/winmanager.py stays the reader that writes nothing, and the install reads its own work back through it.
+  FOR: the claim that status changes nothing stays one a test can hold by the module's words. MUST NOT TOUCH:
+  the reader, the runner, the check.
+- X-3 (install). In this order, and at the first that fails nothing more is made: Windows; the check of this
+  process's own code (`raqib service check`'s, the same function), refused in its own words - so the plain road
+  is asked as the service will run it, with `-I`; a place that is already there, read as the runner reads it at
+  a start and refused where the runner would refuse it (X-8); the manager opened to make (refused: an
+  administrator is needed); no service of the name - one there is never changed: Raqib's by its mark is to be
+  removed first, another's is said and left; the command written for this very process by the path the check
+  judged (a packed program: `"<program>" service run`; a plain interpreter: `"<python>" -I -m raqib service
+  run`); the service made; the mark, the failure actions and the flag set - where one of the three fails, what
+  was made is removed again and that is said. With a start: the system's own call, a wait on the state (X-4),
+  and status's own lines for what it then reads. 0 only where it was made and, with a start, status answers
+  ACTIVE; 1 where anything was refused or failed; 2 not Windows or a flag not its own.
+- X-4 (the wait). The install waits for RUNNING or STOPPED, asking the state every quarter second, for as long
+  as the runner may tell the system it is starting (the 5 s and the 60 s it tells, T-2) and a margin; a service
+  still starting then is said as that, 1, and left as it is. It waits on the state, not on the check-point
+  (U-4).
+- X-5 (what the system is told to do after an end that was no Stop). Start it again after 5 s, then 30 s, then
+  every 300 s, the count forgotten after an hour without such an end; and on an exit of the service's own too
+  (the flag) - so a service ended from outside is back in seconds, and a start the check refuses is asked again
+  and said each time, in the system's log and in the text file, as measured above. FOR: silence is an alarm - a
+  watch that ended is not left ended. MUST NOT TOUCH: a Stop, after which the system starts nothing.
+- X-6 (remove). The service opened to ask its state and making, to stop it and to remove it: not there is
+  nothing installed, 0; one without the mark is not touched, 1. A Stop - 1062 (it does not run) is taken; 1052
+  (it is starting) waits for the start to end, within X-4's bound, and asks again - then a wait for STOPPED, the
+  removal, and the name asked for again: gone is removed, 0; still there is marked for removal and not yet gone,
+  1. The record is never touched and its place is said. `--purge` on Windows is refused, 2, with those words.
+- X-7 (the rig). X54 is MET where the job's install from its own Python makes nothing (the check's refusal, 1,
+  and status NOT INSTALLED), its install from the copy under Program Files ends 0 with status ACTIVE as a user
+  with no rights reads it, and its remove ends 0 with status NOT INSTALLED. The Table's wiring; X48, X52 and X53
+  keep making their services by hand, as an administrator may.
+- X-8 (the place; AG-5 amended). The install makes no place. The runner makes it at its first start, as the
+  system, and in every run measured the place it made was the administrators' with the list ruled (AF-1). AG-5
+  had the install make it with its owner named; that is one more write with an administrator's rights, and
+  nothing needs it. What AG-5 was for is kept another way: a place that is already there is read at the install,
+  by the runner's own reading, and where the runner would refuse it the install says so and makes no service -
+  the administrator hears it then, not from a failed start.
+- X-9 (the start at boot). Automatic, not delayed: the minutes after a start of the machine are not left
+  unwatched. Not measured: a start at boot (the machines measured are not restarted), and what of the system is
+  not yet there for the watch so early; the watch's rounds read what is there when they run.
+- X-10 (what the install gives; U-1). This is where a tree that is not the system's alone is kept from being
+  made a service: the check is asked by an administrator's session before anything is made. It is still run by
+  the code it judges (N-2): an administrator who runs the install from a tree a user has already changed runs
+  that code as himself - as on Linux, and said. An update over a running service is: remove, then install.
