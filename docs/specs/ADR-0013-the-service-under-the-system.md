@@ -1457,3 +1457,142 @@ fixes below, which are asked on real Windows before the merge.
 - ZD-6 (lands). M12.4c2b3 lands as 0.18.0 after the gate on the tree to be merged, its Windows jobs, X55 read as
   met in the rig's Windows log, and the field run of the commit to be merged. Next of the service on Windows:
   the record removed with the service (M12.4c2b4). Then the queue.
+
+## Amendment ZE (the Table, 2026-11-27) - M12.4c2b4: `raqib service remove --purge` on Windows removes the record too (X-1)
+Measured before this ruling (the probe branch 91952bf; Raqib 0.18.0; x64 and ARM64, the same on both). After
+Raqib's own remove, the place - Raqib under ProgramData - read by an administrator through the runner's own
+reader: a folder, no reparse point, owned by the administrators, its list the closed one the runner makes (the
+system and the administrators, whole, protected); in it 3 folders and 11 files, about 109 kB, no reparse point.
+An administrator's process removed its 14 names bottom up, and the place, in under a tenth of a second with no
+error. A folder of that name made by an administrator's shell read with ProgramData's own inherited list, the
+users' entries in it: not the closed list. A link of that name to another folder read as a reparse point, a walk
+of the path listed the target's own file through it, and removing the link removed the link alone. Not measured:
+a file in the place that some process still has open; a plain user asking; a machine whose ProgramData an
+administrator changed; a very large record.
+- ZE-1 (what is removed, and only that). With `--purge`, after the service is removed or where none was
+  installed, the place is removed where raqib/wininstall.py's `place_judged` says "taken" - the reading the
+  runner itself makes of a place it finds: a folder, no reparse point, owned by the system or the
+  administrators, its list the closed one. Any other answer is said in that reading's own words and the name is
+  left exactly as it is: absent - nothing to remove; refused - not the place as Raqib's service makes it. FOR:
+  the one thing this command deletes with an administrator's rights is the thing Raqib made, told by how it
+  reads and never by its name alone. MUST NOT TOUCH: anything outside the place; the judgement itself, which
+  stays one function for the runner, the install and the remove.
+- ZE-2 (never through a link). What is in the place is removed bottom up, by calls of a system object a test can
+  stand in for. Before a folder inside is entered it is asked whether it is a reparse point; one that is, is
+  neither entered nor removed, is counted and said, and the place then stays (measured: a walk goes through a
+  link into its target). A reparse point inside a place only the system and the administrators can write is not
+  expected; it is said as what it is, not judged.
+- ZE-3 (the order, and what stops it). The service's own remove comes first, as it is (X-6). The record is
+  touched only where that ended with the service gone or none installed (exit 0). Where the service is not
+  Raqib's, was refused, failed, or is marked for removal and not yet gone, nothing of the record is touched and
+  the line says so: a service that may still run may still write. `--purge` with any action but remove stays
+  refused.
+- ZE-4 (what it says, and its exit). One line of what was read of the place; then one line of the result: how
+  many folders and files were removed and that the place is gone; or what is left - each error of the system
+  counted by its number, the first one's path said, a reparse point not entered - with `RESULT:` saying the
+  service removed and the record NOT removed, exit 1. A caller who is no administrator is refused by the place's
+  own list, and that is said in the system's words with "an administrator is needed". Without `--purge` the line
+  of the record says that `--purge` removes it. Paths are written as every path here is (printable ASCII).
+- ZE-5 (recorded, not built). Between the reading and the removing the place is named by its path again. Who
+  could change it in between is the system or an administrator - the parties this command already trusts;
+  holding the read's own handle through the removal is not built. A record larger than the one measured is
+  removed name by name with no bound of time; not measured.
+- ZE-6 (the tests, the rig, the documents). Tests on stand-ins for each sentence above, the judgement tied to
+  the runner's as the install's is. The Table wires the rig's claim after the builder: X56 - installed from the
+  copy under Program Files and watched a round, `remove --purge` ends with 0 and the place is gone; with nothing
+  installed and a folder of the name made by a shell, `remove --purge` leaves it and says why. The guide's row,
+  SERVICE.md and the help say `--purge` on Windows as built.
+
+## Amendment ZF (the Table, 2026-11-27) - M12.4c2b4 reviewed (NEXT, eighteen findings) and asked on real Windows at eight moments
+The packet is docs/review/2026-11-27-M12.4c2b4.md. Asked of the builder's commit a2c6905 on real Windows (the
+probe branch a672ab5; x64 and ARM64, the same on both), `raqib service remove --purge` itself. Of a service
+Raqib's install made and that watched a round, in one command: exit 0, the service and the place gone. With
+nothing installed and no place: exit 0, nothing to remove. A folder of the name made by an administrator's
+shell: exit 1, its inherited list said against the closed one, the folder and its file left. A link of the name:
+exit 1, "is a reparse point", the link and its target's file left. The place as the service leaves it with a
+link inside: exit 1, the rest removed, the link neither entered nor removed, its target's file left; the link
+taken away by hand, asked again: exit 0. A read-only file inside: exit 1, error 5 - said as "an administrator is
+needed" to an administrator, which is untrue. A file held open by another process: exit 1, error 32; let go,
+asked again: exit 0. Asked by a user outside the administrators' group: exit 1, the place not read (error 5, "an
+administrator is needed"), nothing touched. The gate's six jobs were green on a2c6905. Not measured: a name
+inside the place that the system rewrites (one ending in a dot or a space, a device's name); a service of
+another name still writing the place; a place replaced between its reading and its removal.
+- ZF-1 (a name the system would rewrite; finding 1, and the builder's second choice). A listed name is handed to
+  the system only where it names one thing in its folder as written: not empty, not a dot name, holding no
+  separator, colon or NUL (as built) - and not ending in a dot or a space, and not a device's name (CON, PRN,
+  AUX, NUL, COM and LPT with a digit, CONIN$, CONOUT$, with or without an extension, in any case). Any other is
+  counted and said, never handed, and the place then stays. FOR: "nothing outside the place" holds for what
+  Windows makes of a path, not only for its letters. Not measured on a real machine: Raqib writes no such name,
+  and this probe makes none.
+- ZF-2 (a watch that may still write; finding 3). ZE-3's reason holds for any runner, whatever name its service
+  has. Before the place is touched its own state is asked, as the runner asks it at a start (AH-2: the same
+  call, `held`): where it says a host watch still holds the place, nothing is removed, the line says how old the
+  state is and that the record is asked for again when the watch has ended, and the exit is 1. A watch that
+  ended with its end, as after the service's own remove, does not hold it (measured: the one command removed
+  both). A killed watch's state holds the place until it is stale, about half a minute. An exception out of that
+  call is said and nothing is touched.
+- ZF-3 (a file the ended service has not let go yet; finding 2). The runner's process may live a little after it
+  says STOPPED, its text file still open. Measured on four starts: the one command removed everything. So that
+  this does not depend on luck: where this same command removed the service and a removal inside the place
+  answers 32 (in use), it is asked again every half second for at most 20 s, then counted as any error. Without
+  a service removed by this command there is no waiting.
+- ZF-4 (error 5 inside the place; finding 4, and the field's sixth moment). Inside a place this caller has just
+  read as an administrator, error 5 does not mean "an administrator is needed". It is said as access denied with
+  what it may be: a read-only file, or a name the system holds. The file is not changed to make it removable:
+  this command removes, it does not set attributes. "An administrator is needed" stays where the place itself
+  could not be read, which is `place_judged`'s own sentence.
+- ZF-5 (words that say what was done and known; findings 5, 12, 13, 14, 16). "Is gone" is said after the place
+  is read again and is not there; else what the system answered. The line of the reading says the place is to be
+  removed, not that it was. Where the service's own remove did not end with it gone or none installed, the line
+  says that, not "is not gone". Where the place could not be read at all, the RESULT says the record NOT removed
+  because the place could not be read. The module's measured sentence claims nothing not measured.
+- ZF-6 (documents and tests; findings 6 to 11 and 15). The documents say `place_judged` as what it is - the
+  install's reading, tied by the tests to the runner's own - and that between its reading and its removing the
+  place and each folder in it are named again by path (ZE-5). The help's exits say a partial removal. Tests:
+  each refused form of a name on its own; the stand-in judging every part of a path under the place; a listing
+  that fails or gives no attributes; a name not ASCII as the first said; the service's remove raising, and
+  "whether it is gone NOT KNOWN"; the old line of the default road kept beside the new; the three calls of `os`
+  held to their own methods by name.
+- ZF-7 (the builder's three choices; recorded: findings 17 and 18). Taken as built: the RESULT's added words
+  where the service is not gone; a reparse point that is a file is left as one that is a folder. Recorded for
+  tasks of their own: a rule that names an AI agent's tree asking for the watcher's removal or its record's
+  (today the removal is an end the service reports and a silence; no rule names the asker); and that everything
+  inside a place that reads as Raqib's is removed, whatever made it - said in the guide.
+- ZF-8 (the rig, and landing). X56 is wired on this branch. M12.4c2b4 lands as 0.19.0 after the fixes' gate, the
+  gate's Windows jobs, X56 read as met in the rig's Windows log, and the eight moments asked again of the commit
+  to be merged.
+
+## Amendment ZG (the Table, 2026-11-27) - M12.4c2b4's fixes reviewed (NEXT, thirteen findings) and asked again on real Windows; lands as 0.19.0
+The packet is docs/review/2026-11-27-M12.4c2b4-fixes.md. Asked of the fixes' commit 04fd853 on real Windows (the
+probe branch c44e3ec; x64 and ARM64, the same on both): the eight moments ended as before - and so with the
+place's state asked first, which the one command of a running service passed (the watch had ended with its end),
+with "read again, is gone", and with error 5 and 32 inside the place in their new words. X56 was met on the rig
+at 56833db and at 04fd853, and the gate's six jobs were green on 04fd853. In those two rig runs other claims of
+the watch's own part were missed - X14 and X32 to X34 once (the stand-in's PowerShell took 60 s and 43 s, so its
+last acts fell after the watch's rounds), X11 once (the watch reported a line of silence in the stand-in's own
+source) - each before any step of the service's ran: not this task's, and recorded below. Not measured: a state
+that cannot be read; a wait on 32 that is needed; a name the system rewrites.
+- ZG-1 (a state that cannot be read is no leave to remove; finding 1). ZF-2 said "fresh" and the builder built
+  that, so a state not parsed or not readable let the place be removed. The watch's own rule for such a state is
+  that it is not clearance, and a state can read as torn at the moment a living watch writes it. So: the place
+  is removed only where its state says no watch holds it, or is stale; fresh is said as ZF-2 rules; every other
+  answer is said as not known, nothing is touched, and the line says such a place is removed by hand where no
+  watch runs.
+- ZG-2 (one bound for the whole removal; finding 2, and the builder's question). ZF-3's reason is one process
+  letting go of its handles at once. The bound is therefore one for the whole removal - 20 s from the first name
+  found in use - and one count of asks, 40, so that a clock that does not move ends it too (finding 8).
+- ZG-3 (a wait that could not be made is said; finding 3). A clock or a pause that fails ends the asking for the
+  rest of the removal, and the line of what is left says that the wait could not be made.
+- ZG-4 (words; findings 5, 6, 7 and 12). On the read again, an error 5 is not said with "an administrator is
+  needed". The held line adds a heartbeat ahead of the clock, as the runner's own does. The module's measured
+  sentence says each moment as it was; its older sentence that the module was never run on a real machine goes.
+- ZG-5 (recorded). Two judgements of a Windows name now exist (the check's and this one's, the stricter);
+  `holder` reads the state through `.raqib\host` by path, following links, and only reads (ZE-5's trust); the
+  test of the three `os` calls can still be passed by a route through another module's name. And for the rig: on
+  2026-11-27 its Windows watch part missed claims twice for reasons of the machine's speed and of a silence the
+  watch itself reported - a task of the rig's own if it comes again: the watch should outlast the stand-in, not
+  run a fixed count of rounds.
+- ZG-6 (lands). M12.4c2b4 lands as 0.19.0 after the gate on the tree to be merged and its Windows jobs, X56 read
+  as met with no claim missed in that run's Windows log, and the eight moments asked of the commit to be merged.
+  With it the service of Windows is whole: run, checked, installed, asked, removed, and its record removed, each
+  by Raqib's own commands.

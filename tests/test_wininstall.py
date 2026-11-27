@@ -11,6 +11,7 @@ fail in every test that waits.
 import ast
 import io
 import ntpath
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +21,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from raqib import cli, service, wincode, wininstall, winmanager, winservice  # noqa: E402
+from raqib import cli, host, service, wincode, wininstall, winmanager, winservice  # noqa: E402
 
 SOURCE = (ROOT / "raqib" / "wininstall.py").read_text(encoding="ascii")
 PROGRAM = "C:\\Program Files\\Raqib\\raqib.exe"
@@ -32,6 +33,22 @@ MAKERS = ("create", "describe", "failure_actions", "failure_flag", "start", "sto
 BASE = {"type": 0x10, "state": 1, "exit": 1077, "own": 0, "pid": 0}
 RUNS = {"state": 4, "exit": 0, "pid": 4321}
 REFUSED_15 = {"state": 1, "exit": winservice.SERVICE_SPECIFIC, "own": winservice.EXIT_NOT_ALONE}
+PLACE = "C:\\ProgramData\\Raqib"
+DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {k + d for k in ("COM", "LPT")
+                                                                     for d in "0123456789\u00b9\u00b2\u00b3"}
+
+
+def rewritten(part):
+    """ZF-1, the tests' own judgement of one part of a path: a form Windows makes another name of, or no name."""
+    return (part in ("", ".", "..") or [c for c in part if c in "/:\0"] != [] or part[-1] in ". "
+            or part.split(".")[0].rstrip(" ").upper() in DEVICE_NAMES)
+
+# M12.4c2b4: a record of the shape ZE measured after Raqib's remove - 3 folders and 11 files, no reparse point
+HOST = PLACE + "\\.raqib\\host"
+TREE = dict([(PLACE + "\\.raqib", 0x10), (HOST, 0x10), (HOST + "\\cases", 0x10)]
+            + [(HOST + "\\" + n, 0x20) for n in ("events.jsonl", "events.jsonl.1", "seen.json", "state.json")]
+            + [(HOST + "\\cases\\case-%d.json" % i, 0x20) for i in range(5)]
+            + [(PLACE + "\\.raqib\\host.lock", 0x20), (PLACE + "\\watch.log", 0x20)])
 
 
 class Manager:
@@ -39,10 +56,15 @@ class Manager:
     read, 0) or (None, an error) - gives each handle a number of its own and records every call in order. there: a
     service of the name before; text: its description; fail: {call: error, or a list of errors, one per call};
     states: the states read one after another once it was started (the last stays); stops: the Stop's answers in
-    turn; lingers: the name still there after DeleteService. The clock moves only by its own sleep."""
+    turn; lingers: the name still there after DeleteService. The clock moves only by its own sleep. M12.4c2b4 (ZE-2):
+    tree, the record made up - {each path under the place: its attributes} - answered by listed, remove_file and
+    remove_folder; refuse: {a path: the error any call naming it answers}; every path handed is kept in `paths`, and
+    one outside the place, a link entered or removed, or a folder removed with names in it is a breach."""
 
     def __init__(self, platform="win32", there=False, text=None, fail=None, raises=(), states=None, stops=None,
-                 lingers=False, before=None):
+                 lingers=False, before=None, tree=None, refuse=None):
+        self.tree, self.refuse, self.paths, self.removed = dict(tree or {}), dict(refuse or {}), [], []
+        self.place_gone = False
         self.os, self.fail, self.raises, self.lingers = platform, dict(fail or {}), set(raises), lingers
         self.states = [dict(BASE, **s) for s in (states or [RUNS])]
         self.stops = list(stops or [0])
@@ -204,6 +226,48 @@ class Manager:
         self._held(handle, service=True)
         return 0, 0
 
+    # M12.4c2b4 (ZE-2): the record's calls, answered from the made-up tree
+    def _path(self, call, path):
+        self.paths.append(path)
+        parts = path[len(PLACE) + 1:].split("\\") if path.startswith(PLACE + "\\") else []
+        if path != PLACE and (not parts or [p for p in parts if rewritten(p)]):   # ZF-1: every part, not the prefix
+            self.breaches.append(("outside the place, or a name the system rewrites", call, path))
+        elif path != PLACE and path not in self.tree:
+            self.breaches.append(("a name not listed", call, path))
+        if path != PLACE and self.tree.get(path, 0) & winservice.ATTRIBUTE_REPARSE:
+            self.breaches.append(("a link entered or removed", call, path))
+        value, error = self._answer(call, True)
+        refused = self.refuse.get(path, 0)
+        if isinstance(refused, list):   # in turn, then let go
+            refused = refused.pop(0) if refused else 0
+        return error or refused
+
+    def listed(self, folder):
+        error = self._path("listed", folder)
+        if error:
+            return None, error
+        return [(ntpath.basename(p), a) for p, a in sorted(self.tree.items()) if ntpath.dirname(p) == folder], 0
+
+    def remove_file(self, path):
+        error = self._path("remove_file", path)
+        if error:
+            return None, error
+        del self.tree[path]
+        self.removed.append(path)
+        return True, 0
+
+    def remove_folder(self, path):
+        error = self._path("remove_folder", path)
+        if error:
+            return None, error
+        if [p for p in self.tree if p.startswith(path + "\\")]:
+            self.breaches.append(("a folder removed with names in it", path))
+            return None, 145
+        self.tree.pop(path, None)
+        self.removed.append(path)
+        self.place_gone = self.place_gone or path == PLACE
+        return True, 0
+
 
 class Code:
     """A made-up check's object (wincode.System's calls), packed: the program's folder and its modules' folder, each
@@ -251,17 +315,24 @@ class Place:
     """A made-up reader of the place (winservice.System's getenv and read_place): `reading` (attributes, text), or
     the error number read_place raises (2: not there). It counts any making asked (prepare's make_closed)."""
 
-    def __init__(self, reading=None, error=2, root="C:\\ProgramData"):
+    def __init__(self, reading=None, error=2, root="C:\\ProgramData", holds=None, gone_with=None):
         self.reading, self.error, self.root, self.read, self.made = reading, error, root, [], []
+        self.holds, self.gone_with, self.held_asked = holds, gone_with, []   # M12.4c2b4 (ZF-2, ZF-5)
 
     def getenv(self, name):
         return self.root if name == "ProgramData" else None
 
     def read_place(self, path):
         self.read.append(path)
-        if self.reading is None:
-            raise OSError(self.error, "made up")
+        if self.reading is None or (self.gone_with is not None and self.gone_with.place_gone):
+            raise OSError(self.error if self.reading is None else 2, "made up")
         return self.reading
+
+    def held(self, place):   # ZF-2: winservice.System.held, the runner's own call; not held unless `holds` says
+        self.held_asked.append(place)
+        if isinstance(self.holds, BaseException):
+            raise self.holds
+        return {"held": "none", "why": "no state"} if self.holds is None else self.holds
 
     def make_closed(self, path, sddl):   # for winservice.prepare in the tie, never asked by the install
         self.made.append(path)
@@ -300,9 +371,9 @@ def install(manager=None, code=None, place=None, start=True):
     return got, lines, manager
 
 
-def remove(manager):
-    out = io.StringIO()
-    got = wininstall.remove(manager, out, reader=manager)
+def remove(manager, purge=False, place=None):
+    out = io.StringIO()   # the system, the reader and the place: each a stand-in, always (never the real objects)
+    got = wininstall.remove(manager, out, reader=manager, purge=purge, place=place or Place())
     lines = out.getvalue().splitlines()
     held_right(manager)
     lines_right(got, lines, "raqib service remove")
@@ -639,6 +710,322 @@ def test_e4_the_name_asked_again_failing_is_not_known():
     assert code == 1 and lines[-1] == "RESULT: removed by DeleteService, whether it is gone NOT KNOWN"
 
 
+# --- M12.4c2b4 (ADR-0013 Amendments ZE and ZF): remove --purge removes the record too ---------------------------
+
+TAKEN = (0x10, CLOSED)
+RECORD_CALLED = ("listed", "remove_file", "remove_folder")
+FRESH = {"held": "fresh", "why": "unfinished, its heartbeat fresh", "age": 3.4, "stale": 30, "run": "run-1",
+         "pid": 4321, "heartbeat": "2026-11-27T10:00:00.000000Z"}
+SERVICE_LINES = [
+    "  a service named RaqibWatch is there and carries Raqib's mark", "  a Stop: sent (ControlService)",
+    "  stopped after 0.25 s (1, stopped)", "  removed (DeleteService)",
+    "  the name asked for again: no service named RaqibWatch (error 1060)"]
+READ_TAKEN = ("  the record (--purge): C:\\ProgramData\\Raqib is there, a folder owned by BA with the closed list, as"
+              " the runner makes it: to be removed bottom up, no link followed")
+
+
+def taken(manager, **kw):
+    """The place read as the runner makes it, and read as not there once the made-up record's place is removed."""
+    return Place(reading=TAKEN, gone_with=manager, **kw)
+
+
+def inside_only(manager):
+    """ZE-1: every path handed to the system object begins with the place's own path (and the stand-in judged each
+    part of it: ZF-1)."""
+    assert manager.paths and all(p == PLACE or p.startswith(PLACE + "\\") for p in manager.paths), manager.paths
+
+
+def bottom_up(manager):
+    """ZE-2: a folder removed only after every name in it was."""
+    for at, path in enumerate(manager.removed):
+        assert not [p for p in manager.removed[at + 1:] if p.startswith(path + "\\")], (path, manager.removed)
+
+
+def listing_with(manager, extra):
+    """The place's own listing with `extra` names after its own."""
+    real = manager.listed
+
+    def listed(folder):
+        got, error = real(folder)
+        return (got + list(extra) if folder == PLACE and not error else got), error
+    manager.listed = listed
+
+
+def test_zE1_zE4_zF5_purge_after_the_service_removed_takes_the_place_bottom_up_and_read_again_it_is_gone_0():
+    manager = ours(before=RUNS, tree=TREE)
+    place = taken(manager)
+    code, lines = remove(manager, purge=True, place=place)
+    assert code == 0 and lines[1:6] == SERVICE_LINES   # the service's own remove first, unchanged (ZE-3, X-6)
+    assert lines[6:] == [
+        READ_TAKEN,
+        "  the record: removed 3 folders and 11 files inside it, then the place itself: C:\\ProgramData\\Raqib, read"
+        " again, is gone",
+        "RESULT: the service removed; the record removed"]   # the rig's words (X56), as they were
+    service = ["platform", "connect", "open_to_remove", "description", "stop", "clock", "state", "clock", "sleep",
+               "state", "clock", "delete", "close", "close", "connect", "open", "close"]
+    assert manager.log[:len(service)] == service and set(manager.log[len(service):]) == set(RECORD_CALLED)
+    assert manager.tree == {} and manager.place_gone and manager.removed[-1] == PLACE and len(manager.removed) == 15
+    assert place.read == [PLACE, PLACE] and place.held_asked == [PLACE] and place.made == []   # read again (ZF-5)
+    inside_only(manager)
+    bottom_up(manager)
+    manager = Manager(tree=TREE)   # ZE-3: none installed is the service's 0 too
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 0 and lines[-1] == "RESULT: nothing installed; the record removed" and manager.place_gone
+
+
+def test_zF5_the_place_read_again_and_still_there_is_said_as_it_answered_not_gone_1():
+    manager = ours(tree=TREE)
+    place = Place(reading=TAKEN)   # it reads as taken whatever was removed
+    code, lines = remove(manager, purge=True, place=place)
+    assert code == 1 and lines[-2] == ("  the record: removed 3 folders and 11 files inside it, then the place"
+                                       " itself; read again, it answers: C:\\ProgramData\\Raqib is there, a folder"
+                                       " owned by BA with the closed list")
+    assert lines[-1] == "RESULT: the service removed; the record NOT removed: the place, read again, is not absent" \
+        " (said above)"
+    assert place.read == [PLACE, PLACE] and "is gone" not in "\n".join(lines)
+
+
+def test_zE1_the_place_not_there_is_nothing_to_remove_0_nothing_asked_of_the_system():
+    manager, place = ours(tree=TREE), Place(error=2)
+    code, lines = remove(manager, purge=True, place=place)
+    assert code == 0 and lines[-2:] == [
+        "  the record (--purge): C:\\ProgramData\\Raqib is not there: nothing to remove",
+        "RESULT: the service removed; no record to remove"]
+    assert not [c for c in manager.log if c in RECORD_CALLED] and manager.paths == [] and place.read == [PLACE]
+    assert place.held_asked == []
+
+
+@pytest.mark.parametrize("reading, number", READINGS)
+def test_zE1_a_place_the_runner_would_refuse_is_left_exactly_as_it_is_in_prepares_own_reading_1(reading, number):
+    with pytest.raises(winservice.Refusal) as caught:
+        winservice.prepare(Place(reading=reading))
+    assert caught.value.number == number   # place_judged, the install's reading, tied to the runner's prepare
+    kind, judged, words = wininstall.place_judged(Place(reading=reading))
+    assert (kind, judged) == ("refused", number)
+    manager, place = ours(tree=TREE), Place(reading=reading)
+    code, lines = remove(manager, purge=True, place=place)
+    assert code == 1 and lines[-2] == ("  the record (--purge): %s; not the place as Raqib's service makes it, so it"
+                                       " is left exactly as it is (ADR-0013 ZE-1)" % words)
+    assert lines[-1] == ("RESULT: the service removed; the record NOT removed: not the place as Raqib's service"
+                         " makes it")   # the rig's words for a place read and refused (X56), as they were
+    assert manager.tree == TREE and manager.paths == [] and place.held_asked == [] and "delete" in manager.log
+
+
+def test_zF5_a_place_that_could_not_be_read_at_all_is_said_so_in_the_result_nothing_touched_1():
+    for place, number in ((Place(error=5), winservice.EXIT_UNREAD), (Place(error=3), None),
+                          (Place(root=None), winservice.EXIT_NO_PROGRAMDATA),
+                          (Place(root="ProgramData"), winservice.EXIT_NO_PROGRAMDATA)):
+        words = wininstall.place_judged(place)[2]
+        if number is not None:   # as the install's test ties them; 3 is Y-3's, judged by place_judged alone
+            with pytest.raises(winservice.Refusal) as caught:
+                winservice.prepare(Place(reading=None, error=place.error, root=place.root))
+            assert caught.value.number == number == wininstall.place_judged(place)[1]
+        manager = Manager(tree=TREE)
+        code, lines = remove(manager, purge=True, place=place)
+        assert code == 1 and lines[-2] == ("  the record (--purge): %s; the place could not be read, so nothing of it"
+                                           " is touched (ADR-0013 ZF-5)" % words)
+        assert lines[-1] == "RESULT: nothing installed; the record NOT removed: the place could not be read"
+        assert manager.tree == TREE and manager.paths == [] and place.held_asked == []
+    # ZE-4: one who is no administrator is refused by the place's own list, in place_judged's own sentence
+    assert "an administrator is needed" in wininstall.place_judged(Place(error=5))[2]
+
+
+def test_zF2_a_host_watch_that_still_holds_the_place_fresh_leaves_it_untouched_its_age_said_1():
+    assert winservice.HELD_FRESH == host.HELD_FRESH == FRESH["held"] and callable(winservice.System.held)
+    manager = Manager(tree=TREE)   # nothing named RaqibWatch; a service of another name may run the runner here
+    place = taken(manager, holds=FRESH)
+    code, lines = remove(manager, purge=True, place=place)
+    assert code == 1 and lines[-2] == (
+        "  the record (--purge): a host watch's state still holds the place (its heartbeat 3 s ago, stale after 30"
+        " s): that watch still watches, or was ended without its end, or its heartbeat is ahead of this clock;"
+        " nothing removed: ask for the record again when it has ended (ADR-0013 ZF-2)")
+    assert lines[-1] == "RESULT: nothing installed; the record NOT removed: a watch still holds the place"
+    assert manager.paths == [] and manager.tree == TREE and place.held_asked == [PLACE] and lines[-3] == READ_TAKEN
+    # stale or none: no watch holds it, and it is removed
+    for answer in (dict(FRESH, held="stale", age=31.0), {"held": "none"}):
+        manager = Manager(tree=TREE)
+        code, lines = remove(manager, purge=True, place=taken(manager, holds=answer))
+        assert code == 0 and manager.place_gone, answer
+    # ZG-1: a state that cannot be read, or an answer not known, is no leave to remove (the watch's own D-6)
+    for answer, why in (({"held": "unparsed", "why": "the heartbeat cannot be parsed"},
+                         "the heartbeat cannot be parsed"),
+                        ({"held": "unreadable", "why": "the state cannot be read (ValueError: made up)"},
+                         "the state cannot be read (ValueError: made up)"),
+                        ({"held": "later"}, "its state gave an answer this command does not know"),
+                        (["fresh"], "its state gave an answer this command does not know")):
+        manager = Manager(tree=TREE)
+        code, lines = remove(manager, purge=True, place=taken(manager, holds=answer))
+        assert code == 1 and manager.paths == [] and manager.tree == TREE, answer
+        assert lines[-2] == ("  the record (--purge): whether a host watch still holds the place is not known: %s; a"
+                             " state that cannot be read is no leave to remove (ADR-0013 ZG-1): nothing touched;"
+                             " where no watch runs there, the place is removed by hand" % why), lines[-2]
+        assert lines[-1] == ("RESULT: nothing installed; the record NOT removed: whether a watch still holds the"
+                             " place NOT KNOWN")
+    assert {host.HELD_NONE, host.HELD_STALE, host.HELD_FRESH, host.HELD_UNPARSED, host.HELD_UNREADABLE} == {
+        "none", "stale", "fresh", "unparsed", "unreadable"}   # the answers this reading was written against
+    assert wininstall.HELD_CLEAR == (host.HELD_NONE, host.HELD_STALE)
+    # an exception out of it: said, nothing touched
+    manager = Manager(tree=TREE)
+    code, lines = remove(manager, purge=True, place=taken(manager, holds=RecursionError("made up")))
+    assert code == 1 and lines[-2] == ("  the record (--purge): whether a host watch still holds the place could not"
+                                       " be asked (RecursionError): nothing touched")
+    assert lines[-1] == ("RESULT: nothing installed; the record NOT removed: whether a watch still holds the place"
+                         " NOT KNOWN")
+    assert manager.paths == [] and manager.tree == TREE
+
+
+def test_zE2_a_reparse_point_inside_is_neither_entered_nor_removed_counted_and_said_and_the_place_stays_1():
+    link = HOST + "\\\u0644ink"   # a link to a folder elsewhere (its name not ASCII; not the first said here)
+    manager = ours(tree=dict(TREE, **{link: 0x410, PLACE + "\\file-link": 0x420}))
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and lines[-2] == (
+        "  the record: NOT all removed: 1 folder and 11 files removed; left: 2 reparse points, neither entered nor"
+        " removed (the first: C:\\ProgramData\\Raqib\\file-link, attributes 0x420); the place stays")
+    assert lines[-1] == "RESULT: the service removed; the record NOT removed: part of it is left (said above)"
+    assert link not in manager.paths and PLACE + "\\file-link" not in manager.paths   # neither entered nor removed
+    assert set(manager.tree) == {link, PLACE + "\\file-link", PLACE + "\\.raqib", HOST} and not manager.place_gone
+    assert "remove_folder" in manager.log and HOST + "\\cases" in manager.removed
+    inside_only(manager)
+    bottom_up(manager)
+
+
+def test_zE4_a_name_not_ascii_is_said_as_its_number_where_it_is_the_first_link_and_the_first_error_1():
+    link, odd = PLACE + "\\\u0644ink", PLACE + "\\\u00e9vents.jsonl"
+    manager = Manager(tree=dict(TREE, **{link: 0x410, odd: 0x20}), refuse={odd: 5})
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and ("1 reparse point, neither entered nor removed (the first:"
+                          " C:\\ProgramData\\Raqib\\\\u0644ink, attributes 0x410)") in lines[-2]
+    assert lines[-2].endswith("once; the first at C:\\ProgramData\\Raqib\\\\u00E9vents.jsonl; the place stays")
+
+
+def test_zE2_zF4_each_error_counted_by_its_number_the_first_ones_path_said_5_as_a_read_only_file_never_an_admin_1():
+    refuse = {HOST + "\\events.jsonl": 5, HOST + "\\seen.json": 5, HOST + "\\cases": 32}
+    manager = Manager(tree=TREE, refuse=refuse)   # none installed: no wait on 32 (ZF-3)
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and lines[-2] == (
+        "  the record: NOT all removed: 0 folders and 4 files removed; left: error 5 (access denied: a read-only"
+        " file, or a name the system holds) 2 times, error 32 (in use by another process) once; the first at"
+        " C:\\ProgramData\\Raqib\\.raqib\\host\\events.jsonl; the place stays")
+    assert "administrator" not in lines[-2] and not manager.place_gone   # ZF-4: the caller has just read the place
+    assert lines[-1] == "RESULT: nothing installed; the record NOT removed: part of it is left (said above)"
+    assert set(manager.tree) == set(refuse) | {PLACE + "\\.raqib", HOST} | {p for p in TREE if "case-" in p}
+    inside_only(manager)
+    # a listing that fails leaves its folder and every one above; one that gives no attributes is such a failure
+    for error, said in ((5, "error 5 (access denied: a read-only file"), ("an exception, AttributeError",
+                                                                          "an exception, AttributeError once")):
+        manager = ours(tree=TREE, refuse={PLACE + "\\.raqib": error})
+        code, lines = remove(manager, purge=True, place=taken(manager))
+        assert code == 1 and "0 folders and 1 file removed; left: " + said in lines[-2] and manager.paths == [
+            PLACE, PLACE + "\\watch.log", PLACE + "\\.raqib"]
+    manager = ours(tree=TREE, fail={"listed": ["an exception, AttributeError"]})   # the place's own listing
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and lines[-2] == ("  the record: NOT all removed: 0 folders and 0 files removed; left: an"
+                                       " exception, AttributeError once; the first at C:\\ProgramData\\Raqib; the"
+                                       " place stays") and manager.paths == [PLACE] and manager.tree == TREE
+
+
+DELAY = 1000.25   # the stand-in clock after the service's own remove (ours, RUNS), before the record
+
+
+def test_zF3_a_removal_answering_32_after_this_command_removed_the_service_is_asked_again_and_lets_go_0():
+    lock = HOST + "\\events.jsonl"
+    manager = ours(before=RUNS, tree=TREE)
+    remove(manager, purge=True, place=taken(manager))
+    assert manager.clock_at == DELAY   # without a 32 the record waits for nothing
+    manager = ours(before=RUNS, tree=TREE, refuse={lock: [32, 32]})   # twice, then let go
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 0 and lines[-1] == "RESULT: the service removed; the record removed" and manager.place_gone
+    assert manager.paths.count(lock) == 3 and manager.clock_at == DELAY + 1.0   # by the system object's own clock
+
+
+def test_zF3_a_removal_that_never_lets_go_is_asked_for_20_s_on_the_stand_in_clock_then_counted_1():
+    lock = HOST + "\\events.jsonl"
+    manager = ours(before=RUNS, tree=TREE, refuse={lock: 32})
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and manager.clock_at == DELAY + wininstall.IN_USE_BOUND == DELAY + 20.0
+    assert manager.paths.count(lock) == 1 + 40 and (wininstall.IN_USE_EVERY, wininstall.IN_USE) == (0.5, 32)
+    assert "left: error 32 (in use by another process) once; the first at %s" % lock in lines[-2]
+    # the place's own removal answering 32 is not inside the place: not asked again
+    manager = ours(before=RUNS, tree=TREE, fail={"remove_folder": [0, 0, 0, 32]})
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and manager.clock_at == DELAY and manager.log.count("remove_folder") == 4
+    assert lines[-2] == ("  the record: NOT all removed: 3 folders and 11 files removed; left: error 32 (in use by"
+                         " another process) once; the first at C:\\ProgramData\\Raqib; the place stays")
+
+
+def test_zF3_with_nothing_installed_by_this_command_there_is_no_waiting_at_all_1():
+    lock = HOST + "\\events.jsonl"
+    manager = Manager(tree=TREE, refuse={lock: [32, 32]})
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and manager.paths.count(lock) == 1 and "sleep" not in manager.log and "clock" not in manager.log
+    assert "left: error 32 (in use by another process) once" in lines[-2]
+
+
+REWRITTEN = ["", "x.", "x ", "...", "a\\b", "a/b", "a:b", "a\0b", "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+             "COM1", "LPT9", "COM\u00b9", "con", "Nul.txt", "aux.tar.gz", "con .txt", 7]
+
+
+@pytest.mark.parametrize("name", REWRITTEN, ids=[ascii(n) for n in REWRITTEN])
+def test_zF1_a_name_the_system_would_rewrite_is_counted_never_handed_and_the_place_stays_1(name):
+    manager = ours(tree=TREE)
+    listing_with(manager, [(name, 0x20)])
+    code, lines = remove(manager, purge=True, place=taken(manager))   # the stand-in judges every part handed
+    said = "left: a name listed that is not one plain name once; the first at C:\\ProgramData\\Raqib\\"
+    assert code == 1 and said in lines[-2] and lines[-2].endswith("; the place stays")
+    assert not manager.place_gone and manager.tree == {} and manager.removed[-1] == PLACE + "\\.raqib"   # the rest
+    inside_only(manager)
+
+
+@pytest.mark.parametrize("name", ["CONSOLE.txt", "COM10", "LPTX", "x.y", ".hidden", "nul_", "a b"])
+def test_zF1_a_name_near_those_forms_is_one_plain_name_and_removed_0(name):
+    manager = ours(tree=dict(TREE, **{PLACE + "\\" + name: 0x20}))
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 0 and PLACE + "\\" + name in manager.removed and manager.place_gone
+
+
+def test_zF1_the_stand_in_judges_every_part_of_a_path_under_the_place_not_its_prefix_alone():
+    for path in (PLACE + "\\..\\x", PLACE + "\\a\\CON", PLACE + "\\x.\\y", "D:\\x", PLACE + "\\", PLACE + "x"):
+        manager = Manager(tree={path: 0x20})
+        manager.remove_file(path)
+        assert manager.breaches, path
+    manager = Manager(tree=TREE)
+    assert manager.remove_file(HOST + "\\seen.json") == (True, 0) and manager.breaches == []
+
+
+@pytest.mark.parametrize("kw, result", [
+    ({"there": True, "text": "Another program's service"}, "nothing touched: a service of the name is not Raqib's"),
+    ({"there": True, "text": wininstall.DESCRIPTION, "fail": {"open_to_remove": 5}}, "NOT REMOVED, nothing touched"),
+    ({"there": True, "text": wininstall.DESCRIPTION, "stops": [1061]}, "NOT REMOVED: the Stop failed; left as it is"),
+    ({"there": True, "text": wininstall.DESCRIPTION, "lingers": True}, "marked for removal, not yet gone"),
+    ({"there": True, "text": wininstall.DESCRIPTION, "fail": {"close": [0, 6]}},
+     "removed" + wininstall.NOT_CLOSED),
+    ({"there": True, "text": wininstall.DESCRIPTION, "odd": True}, "NOT KNOWN what was done: a fault of its own"),
+    ({"there": True, "text": wininstall.DESCRIPTION, "fail": {"connect": [0, 6]}}, wininstall.GONE_NOT_KNOWN),
+])
+def test_zE3_the_services_remove_not_ending_gone_or_none_installed_leaves_the_record_untouched_said_1(kw, result):
+    kw = dict(kw)
+    odd = kw.pop("odd", False)
+    manager = Manager(tree=TREE, **kw)
+    if odd:   # the service's remove raising: a state of a shape it does not read
+        manager.state = lambda handle: (manager.log.append("state"), (["not a state"], 0))[1]
+    place = taken(manager)
+    code, lines = remove(manager, purge=True, place=place)
+    assert code == 1 and lines[-2] == wininstall.RECORD_UNTOUCHED.rstrip("\n") == (
+        "  the record (--purge): not touched: the service's remove did not end with it gone or none installed, and a"
+        " service that may still run may still write; the place, Raqib under ProgramData, is left as it is (ADR-0013"
+        " ZE-3)")
+    assert lines[-1] == "RESULT: %s; the record NOT removed: not touched" % result
+    assert place.read == [] and place.held_asked == [] and manager.paths == [] and manager.tree == TREE
+
+
+def test_zE4_without_purge_the_records_line_says_purge_removes_it_and_the_place_is_not_read():
+    manager, place = ours(tree=TREE), taken(Manager())
+    code, lines = remove(manager, place=place)
+    assert code == 0 and lines[-2] == wininstall.RECORD.rstrip("\n") and lines[-1] == "RESULT: removed"
+    assert "--purge removes it where it reads as the runner makes it" in lines[-2]
+    assert place.read == [] and place.held_asked == [] and manager.paths == [] and manager.tree == TREE
+
+
 # --- E5: the command ----------------------------------------------------------------------------------------------
 
 def args(action, **kw):
@@ -658,23 +1045,28 @@ def test_e5_install_and_remove_on_windows_go_to_the_new_module_on_linux_to_servi
                    ("linux", "remove"), ("linux", "status")]
 
 
-def test_e5_the_flags_not_its_own_and_purge_on_windows_are_refused_2_with_words(monkeypatch):
+def test_e5_the_flags_not_its_own_are_refused_2_with_words_and_purge_goes_to_remove(monkeypatch):
     monkeypatch.setattr(cli.sys, "platform", "win32")
     for a, words in ((args("install", purge=True), "raqib service: --purge is remove's only"),
-                     (args("remove", no_start=True), "raqib service: --no-start is install's only"),
-                     (args("remove", purge=True), wininstall.PURGE_REFUSED)):
+                     (args("remove", no_start=True), "raqib service: --no-start is install's only")):
         with pytest.raises(cli.UsageError) as caught:
             cli.cmd_service(a, io.StringIO())
         assert str(caught.value) == words
-    assert "not built on Windows" in wininstall.PURGE_REFUSED
-    assert "Raqib under ProgramData" in wininstall.PURGE_REFUSED
+    assert not hasattr(wininstall, "PURGE_REFUSED") and "not built" not in SOURCE   # M12.4c2b4: built (ZE)
     with pytest.raises(wininstall.Refused):
         wininstall.cli_run(args("status"), io.StringIO(), system=Manager())
     manager = Manager()
     out = io.StringIO()
     assert wininstall.cli_run(args("install", no_start=True), out, system=manager, code=Code(), place=Place(),
                               reader=manager) == 0 and out.getvalue().endswith("(--no-start)\n")
-    assert wininstall.cli_run(args("remove"), io.StringIO(), system=Manager(), reader=Manager()) == 0
+    assert wininstall.cli_run(args("remove"), io.StringIO(), system=Manager(), reader=Manager(), place=Place()) == 0
+    # M12.4c2b4 (ZE-3): --purge is handed to remove, as given; with install it stays refused (above)
+    for purge, said in ((False, wininstall.RECORD), (True, wininstall.PURGED % "nothing installed")):
+        manager, out = Manager(tree=TREE), io.StringIO()
+        place = Place(reading=(0x10, CLOSED), gone_with=manager)
+        assert wininstall.cli_run(args("remove", purge=purge), out, system=manager, reader=manager, place=place) == 0
+        assert said in out.getvalue() and bool(place.read) == purge and manager.place_gone == purge
+        held_right(manager)
 
 
 def test_e5_the_help_and_the_docstring_say_install_and_remove_on_windows():
@@ -737,6 +1129,7 @@ CALLED = {   # each call as Amendment X measured it, with its rights
     "api.adv.DeleteService(service)": "delete",
     "api.adv.CloseServiceHandle(handle)": "close",
 }
+RECORD_CALLS = {"listed": "os.scandir(folder)", "remove_file": "os.unlink(path)", "remove_folder": "os.rmdir(path)"}
 
 
 def test_e1_one_system_object_whose_methods_are_the_systems_own_calls_each_declared_with_the_rights_measured():
@@ -744,7 +1137,7 @@ def test_e1_one_system_object_whose_methods_are_the_systems_own_calls_each_decla
     assert [n.name for n in tree.body if isinstance(n, ast.ClassDef)] == ["Refused", "System", "_Held"]
     assert set(methods) == {"__init__", "platform", "_win", "make_manager", "connect", "create", "describe",
                             "failure_actions", "failure_flag", "start", "state", "open_to_remove", "stop", "delete",
-                            "close", "sleep", "clock"}
+                            "close", "sleep", "clock"} | set(RECORD_CALLS)
     declared = {}
     for node in ast.walk(methods["_win"]):
         if isinstance(node, ast.Assign) and ast.unparse(node.targets[0]).startswith("adv."):
@@ -773,7 +1166,11 @@ def test_e1_one_system_object_whose_methods_are_the_systems_own_calls_each_decla
     for name in set(methods) - {"__init__", "platform", "_win"}:   # each: errors read at once, never raised
         tries = [n for n in methods[name].body if isinstance(n, ast.Try)]
         assert len(tries) == 1 and [ast.unparse(h.type) for h in tries[0].handlers] == ["Exception"], name
-        if name not in ("sleep", "clock"):
+        if name in RECORD_CALLS:   # M12.4c2b4 (ZE-2): the standard library's one call each, its number read
+            calls = [ast.unparse(n) for n in ast.walk(methods[name]) if isinstance(n, ast.Call)
+                     and ast.unparse(n.func).startswith("os.")]
+            assert calls == [RECORD_CALLS[name]] and "_number(exc)" in ast.unparse(tries[0].handlers[0]), name
+        elif name not in ("sleep", "clock"):
             assert "_last(api.ctypes.get_last_error())" in ast.unparse(methods[name]), name
         assert all(isinstance(r.value, (ast.Tuple, ast.IfExp)) for r in ast.walk(methods[name])
                    if isinstance(r, ast.Return)), name
@@ -790,8 +1187,21 @@ def test_e1_standard_library_only_nothing_at_import_no_program_no_file_no_regist
             assert not [c for c in ast.walk(node.value) if isinstance(c, ast.Call)], ast.unparse(node)
     imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
     tops = sorted(ast.unparse(n) for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)))
-    assert tops == ["from __future__ import annotations", "import ntpath", "import sys", "import time",
+    assert tops == ["from __future__ import annotations", "import ntpath", "import os", "import sys", "import time",
                     "import types"]
+    # M12.4c2b4 (ZE-2): os is named for its three calls alone, each in the one System method that is it
+    assert sorted(set(re.findall(r"\bos\.\w+", SOURCE))) == ["os.rmdir", "os.scandir", "os.unlink"]
+    named = [(fn.name, ast.unparse(n.func)) for fn in ast.walk(tree) if isinstance(fn, ast.FunctionDef)
+             for n in ast.walk(fn) if isinstance(n, ast.Call) and ast.unparse(n.func).startswith("os.")]
+    assert sorted(named) == [("listed", "os.scandir"), ("remove_file", "os.unlink"), ("remove_folder", "os.rmdir")]
+    assert "follow_symlinks=False" in ast.unparse(methods["listed"])
+    # ZF-6 (finding 10): every name os at all is the value of one of those three calls, inside its own method
+    os_names = {id(n) for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "os"}
+    of_os = [(name, c) for name, fn in methods.items() for c in ast.walk(fn) if isinstance(c, ast.Call)
+             and isinstance(c.func, ast.Attribute) and isinstance(c.func.value, ast.Name) and c.func.value.id == "os"]
+    held_to = [(name, ast.unparse(c)) for name, c in of_os]
+    held_ids = {id(c.func.value) for _, c in of_os}
+    assert sorted(held_to) == sorted(RECORD_CALLS.items()) and os_names == held_ids and len(os_names) == 3
     inside = {id(n) for n in ast.walk(methods["_win"])}
     assert [ast.unparse(n) for n in imports if id(n) in inside] == ["import ctypes", "from ctypes import wintypes"]
     others = {ast.unparse(n) for n in imports if id(n) not in inside and n not in tree.body}
@@ -800,7 +1210,8 @@ def test_e1_standard_library_only_nothing_at_import_no_program_no_file_no_regist
                       "from raqib import wincode, winservice as ws", "from raqib import wincode, winservice"}, others
     calls = {ast.unparse(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
     assert not [c for c in calls if c.endswith(("prepare", "make_closed", "begin_text", "own_check"))], calls
-    for words in ("subprocess", "os.", "winreg", "socket", "kernel32", "Popen", "system(", "import service",
+    for words in ("subprocess", "os.walk", "shutil", "rmtree", "chmod", "SetFileAttributes", "winreg", "socket",
+                  "kernel32", "Popen", "system(", "import service",
                   "write_bytes", "write_text", "OpenSCManagerA", "SC_MANAGER_ALL", "ChangeServiceConfigW(",
                   "CreateFile", "ShellExecute", "CreateProcess", "Reg", "os.environ"):
         assert words not in SOURCE, words
@@ -972,7 +1383,7 @@ def test_x2_the_real_objects_own_logic_runs_against_a_made_up_library_install_th
     assert sorted(library.closed) == list(range(21, library.next + 1))   # every handle given was closed
     library.asked, library.closed, first = [], [], library.next
     out = io.StringIO()
-    code = wininstall.remove(real, out, reader=reader)
+    code = wininstall.remove(real, out, reader=reader, place=Place())
     lines = out.getvalue().splitlines()
     assert code == 0 and lines[-1] == "RESULT: removed", lines
     assert library.asked == [("OpenSCManagerW", None, None, 0x1), ("OpenServiceW", "RaqibWatch", 0x10025),
@@ -1002,4 +1413,96 @@ def test_e1_the_real_object_off_windows_never_raises_and_says_what_failed():
         assert value is None and isinstance(error, str) and error.startswith("an exception, "), (name, error)
     out = io.StringIO()
     assert wininstall.install(real, out) == 2 and out.getvalue().startswith("raqib service install: Windows only")
-    assert wininstall.remove(real, io.StringIO()) == 2
+    assert wininstall.remove(real, io.StringIO()) == 2   # the default road, no stand-in (off Windows only)
+    assert wininstall.remove(real, io.StringIO(), reader=Manager(), purge=True, place=Place()) == 2
+
+
+class FakeOs:
+    """M12.4c2b4: a made-up os for the real System's three record calls - a listing of two names, and each call's
+    answer kept; nothing of the file system is called. `error`: what each call raises instead."""
+
+    def __init__(self, error=None, attributes=True):
+        self.error, self.asked, self.attributes = error, [], attributes
+
+    def _ask(self, *what):
+        self.asked.append(what)
+        if self.error:
+            raise self.error
+
+    def scandir(self, folder):
+        self._ask("scandir", folder)
+        fake = self
+
+        class Entry:
+            def __init__(self, name, attributes):
+                self.name, self.attributes = name, attributes
+
+            def stat(self, follow_symlinks=True):
+                fake.asked.append(("stat", self.name, follow_symlinks))
+                if not fake.attributes:   # ZF-6: a stat that gives no attributes
+                    return SimpleNamespace()
+                return SimpleNamespace(st_file_attributes=self.attributes if not follow_symlinks else 0x10)
+
+        class Listing:
+            def __enter__(self):
+                return iter([Entry("events.jsonl", 0x20), Entry("link", 0x410)])
+
+            def __exit__(self, *a):
+                fake.asked.append(("closed", folder))
+        return Listing()
+
+    def unlink(self, path):
+        self._ask("unlink", path)
+
+    def rmdir(self, path):
+        self._ask("rmdir", path)
+
+
+def test_zE2_the_real_systems_record_calls_list_without_following_a_link_and_answer_the_systems_number(monkeypatch):
+    real = wininstall.System()
+    fake = FakeOs()
+    monkeypatch.setattr(wininstall, "os", fake)   # the module's own name for os alone; the real os is not touched
+    assert real.listed(PLACE) == ([("events.jsonl", 0x20), ("link", 0x410)], 0)
+    assert real.remove_file(PLACE + "\\watch.log") == (True, 0)
+    assert real.remove_folder(PLACE + "\\.raqib") == (True, 0)
+    assert fake.asked == [("scandir", PLACE), ("stat", "events.jsonl", False), ("stat", "link", False),
+                          ("closed", PLACE), ("unlink", PLACE + "\\watch.log"), ("rmdir", PLACE + "\\.raqib")]
+    denied = PermissionError(13, "made up")
+    denied.winerror = 5   # as Windows gives it
+    for error, said in ((denied, 5), (FileNotFoundError(2, "made up"), "an exception, FileNotFoundError")):
+        monkeypatch.setattr(wininstall, "os", FakeOs(error))
+        for name, given in (("listed", PLACE), ("remove_file", PLACE + "\\x"), ("remove_folder", PLACE)):
+            assert getattr(real, name)(given) == (None, said), (name, error)
+    fake = FakeOs(attributes=False)   # a listing that gives no attributes fails whole: nothing of it is handed
+    monkeypatch.setattr(wininstall, "os", fake)
+    assert real.listed(PLACE) == (None, "an exception, AttributeError") and ("closed", PLACE) in fake.asked
+
+
+def test_zG2_one_bound_for_the_whole_purge_two_names_in_use_wait_20_s_in_all_not_each():
+    """ADR-0013 ZG-2: two files the ended service has not let go: the whole purge asks again for 20 s in all, 40 asks,
+    not 20 s for each."""
+    first, second = sorted(p for p, attributes in TREE.items() if not attributes & 0x10)[:2]
+    manager = ours(before=RUNS, tree=TREE, refuse={first: 32, second: 32})
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and "error 32 (in use by another process) 2 times" in lines[-2], lines[-2]
+    assert manager.clock_at == DELAY + wininstall.IN_USE_BOUND
+    assert manager.paths.count(first) + manager.paths.count(second) == 2 + wininstall.IN_USE_ASKS == 42
+    assert wininstall.IN_USE_ASKS == wininstall.IN_USE_BOUND / wininstall.IN_USE_EVERY
+
+
+@pytest.mark.parametrize("broken, said", [("sleep", "its pause failed"), ("clock", "its clock failed")])
+def test_zG3_a_pause_or_a_clock_that_fails_ends_the_waiting_and_is_said_never_passed_off_as_made(broken, said):
+    lock = HOST + "\\events.jsonl"
+    manager = ours(before=RUNS, tree=TREE, refuse={lock: 32})
+    real = getattr(manager, broken)
+
+    def failing(*args):
+        if manager.paths.count(lock) and (broken == "clock" or args == (wininstall.IN_USE_EVERY,)):
+            raise OSError("made up")     # only the purge's own wait: the remove's waits before it are as they were
+        return real(*args)
+    setattr(manager, broken, failing)
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and manager.paths.count(lock) == 1, manager.paths.count(lock)
+    assert lines[-2].endswith("left: error 32 (in use by another process) once; the first at %s; the wait for a name in"
+                              " use could not be made (%s): no name was asked again after that; the place stays"
+                              % (lock, said)), lines[-2]

@@ -329,7 +329,7 @@ SERVICE_ROWS = [
     " no unit of the name (LoadState not-found, ActiveState inactive or failed), else exit 1, nothing "
     "touched and nothing purged"
     # M12.4c2b2b (ADR-0013 Amendment X): remove on Windows
-    "; on Windows, as an administrator: stop and remove the service `RaqibWatch` only where it carries Raqib's mark (one without it is not touched: exit 1), then ask for the name again; exit 0 gone or nothing installed, 1 not yet gone, refused or failed; the record in `C:\\ProgramData\\Raqib` stays; `--purge` on Windows is not built (exit 2)"
+    "; on Windows, as an administrator: stop and remove the service `RaqibWatch` only where it carries Raqib's mark (one without it is not touched: exit 1), then ask for the name again; exit 0 gone or nothing installed, 1 not yet gone, refused or failed; the record in `C:\\ProgramData\\Raqib` stays, unless `--purge` removes it too: only after the service is gone or none was installed, only where the place reads as the service's runner makes it (a folder, no reparse point, owned by the system or the administrators, the closed list; anything else is said and left exactly as it is) and no host watch still holds it, bottom up, never through a link and never by a name the system rewrites (a reparse point inside is neither entered nor removed, and the place then stays; a file still in use just after the service's end is asked again for up to 20 s); exit 0 removed and, read again, not there, or not there at all; 1 left, or not all removed, what is left said"
     " |",
     "| `raqib service status` | no rights needed: on Linux, installed, enabled and active by systemctl'"
     "s own words, whether it is as installed (the file's whole text the one Raqib writes, loaded from t"

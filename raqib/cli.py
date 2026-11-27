@@ -305,8 +305,12 @@ no command, raqib prints its usage and exits 2.
       not) and says status's lines; exit 0 made and active or made with --no-start, 1 refused or failed (what
       was made said). remove
       stops and removes Raqib's service only (one without the mark is not touched, 1), asks for the name
-      again (exit 0 gone or nothing installed, 1 not yet gone) and leaves the record; --purge on Windows is
-      not built (exit 2).
+      again (exit 0 gone or nothing installed, 1 not yet gone) and leaves the record; with --purge it
+      removes the record too, only after the service is gone or none was installed, only where the place reads
+      as the runner makes it (a folder, no reparse point, owned by the system or the administrators, the
+      closed list) and no host watch still holds it, bottom up, never through a link nor by a name the system
+      rewrites (exit 0 removed and read again not there, or not there; 1 left as it is, or not all removed,
+      what is left said).
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -758,7 +762,9 @@ def _parser():
     sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
                                                             " started (Windows: make the service; not started)")
     sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"
-                                                         " /var/lib/raqib and nothing else (Linux only)")
+                                                         " /var/lib/raqib and nothing else (Windows: Raqib under"
+                                                         " ProgramData, only where it reads as the runner makes"
+                                                         " it)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p

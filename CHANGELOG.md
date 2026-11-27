@@ -5,6 +5,40 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.19.0 - 2026-11-27
+
+What is new:
+- On Windows `raqib service remove --purge` now removes the service's record too: the place, Raqib under
+  ProgramData (ADR-0013 Amendments ZE to ZG). Until now it was refused there as not built.
+- It removes the place only where it reads as Raqib's service makes it - a folder, no link, owned by the system
+  or the administrators, with the closed list - by the same reading the service and the install make. A folder of
+  that name made any other way, or a link of that name, is left exactly as it is and the command says why.
+- It follows no link. A link inside the place is neither entered nor removed, is said, and the place then stays.
+  A name the system would rewrite to another (one ending in a dot or a space, a device's name) is never handed
+  to the system.
+- It touches the record only after the service is gone, and not while the place's own state says a watch is alive
+  there or cannot be read; then nothing is removed and the command says so.
+- It says "is gone" only after reading the place again. What it could not remove is said by the system's number
+  with the first path, and the exit is 1.
+- Measured on GitHub's Windows machines, x64 and ARM64, at eight moments: a running service and its place removed
+  in one command; a folder and a link of the name left with their files; a link inside left with its target's
+  file; a read-only file and a file held open said and left; a user outside the administrators' group refused
+  with nothing touched. The rig reads it at every run (X56).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window or the Linux service. On Windows the service's remove asked without the
+  purge leaves the record as before, and now says that the purge removes it.
+
+Not measured:
+- A state of the place that cannot be read; a name still in use after the service's own remove (the command then
+  asks again for up to 20 s; in no run was it needed); a name the system rewrites; a very large record.
+- A start at boot, and a machine joined to a domain, as before.
+
 ## 0.18.0 - 2026-11-27
 
 What is new:

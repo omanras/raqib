@@ -938,6 +938,15 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert all("%s: " % key in points for key in check.POINT_KEYS)
     assert "tools\\rig\\service_point.ps1 -Out $env:RUNNER_TEMP\\service-point" in windows
     assert "--service-point $env:RUNNER_TEMP\\service-point\\service-point.txt" in windows
+    # ZE (X56): Raqib's own install and its own remove --purge; a folder of the name made by the shell; no process ended
+    purges = (ROOT / "tools" / "rig" / "service_purge.ps1").read_text(encoding="utf-8")
+    assert purges.isascii() and "pip install" not in purges and "taskkill" not in purges
+    assert "Stop-Process" not in purges and "New-Service" not in purges and "mklink" not in purges
+    assert "-I -m raqib service install" in purges and "-I -m raqib service remove --purge" in purges
+    assert 'Join-Path $env:ProgramFiles "RaqibRigPurge"' in purges and "New-Item -ItemType Directory $place" in purges
+    assert all("%s: " % key in purges for key in check.PURGE_KEYS)
+    assert "tools\\rig\\service_purge.ps1 -Out $env:RUNNER_TEMP\\service-purge" in windows
+    assert "--service-purge $env:RUNNER_TEMP\\service-purge\\service-purge.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1819,4 +1828,72 @@ def test_x55_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
         return line.split()[0]
     assert row(["--service-point", str(tmp_path / "point.txt")]) == check.MET
     assert row(["--service-point", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP
+
+
+# --- X56 (ADR-0013 ZE, M12.4c2b4): remove --purge removes the record too, and only the place as Raqib makes it ------
+KEPT_RESULT = "RESULT: nothing installed; the record NOT removed: not the place as Raqib's service makes it"
+
+
+def purgefile(**kw):
+    keys = {"purge-exit": "0", "purge-result": "RESULT: the service removed; the record removed",
+            "purge-place": "False", "kept-exit": "1", "kept-result": KEPT_RESULT, "kept-place": "True",
+            "kept-file": "True"}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x56(text):
+    ((ident, state, words),) = check.read_service_purge(text)
+    assert ident.startswith("X56 ") and ident == check.SERVICE_PURGE_NAME
+    return state, words
+
+
+def test_x56_met_where_the_service_and_its_record_are_gone_and_a_shells_folder_is_left():
+    state, words = x56(purgefile())
+    assert state == check.MET, words
+    assert words == ("asked of Raqib's own service: 0, RESULT: the service removed; the record removed, the place"
+                     " gone; asked of a folder made as a shell makes one: 1, %s, the folder and its file left"
+                     % KEPT_RESULT)
+    assert x56(purgefile().replace("\n", "\r\n"))[0] == check.MET and x56("\ufeff" + purgefile())[0] == check.MET
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"purge-exit": "1"}, "remove --purge of Raqib's own service ended with 1, not 0"),
+    ({"purge-exit": ""}, "ended with nothing said, not 0"),
+    ({"purge-result": "RESULT: the service removed; the record NOT removed: part of it is left (said above)"},
+     "its RESULT is not `RESULT: the service removed; the record removed`"),
+    ({"purge-result": "RESULT: removed"}, "its RESULT is not `RESULT: the service removed; the record removed`"),
+    ({"purge-place": "True"}, "the place is still there after it (True)"),
+    ({"kept-exit": "0"}, "remove --purge of a folder that is not the place ended with 0, not 1"),
+    ({"kept-result": "RESULT: nothing installed; the record removed"}, "its RESULT does not say `the record NOT"),
+    ({"kept-result": ""}, "its RESULT does not say `the record NOT removed: not the place as Raqib's service makes"),
+    ({"kept-place": "False"}, "the folder that is not the place is not there after it (False)"),
+    ({"kept-file": "False"}, "its file is not there after it (False)"),
+] + [({key: None}, "no %s" % key) for key in check.PURGE_KEYS])
+def test_x56_missed_for_each_thing_not_found(kw, said):
+    state, words = x56(purgefile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x56_missed_where_the_file_is_empty_and_n_a_where_none_was_given():
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x56(text) == (check.MISSED, "missing: the purge file is empty or was not written (silence is a"
+                                           " finding)")
+    assert x56(None) == (check.SKIP, "no remove --purge was given (--service-purge)")
+    assert x56(object())[0] == check.MISSED   # never raises
+
+
+def test_x56_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "purge.txt").write_text(purgefile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X56 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-purge", str(tmp_path / "purge.txt")]) == check.MET
+    assert row(["--service-purge", str(tmp_path / "none.txt")]) == check.MISSED
     assert row([]) == check.SKIP
