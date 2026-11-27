@@ -1,5 +1,5 @@
 name: service-check-field
-# Probe only (never merged): the field's word on a branch's `raqib service check` (ADR-0013 Amendment K).
+# Probe only (never merged): the field's word on a branch's `raqib service check` (ADR-0013 Amendments K, L).
 on:
   push:
     branches: [claude/rig-probe]
