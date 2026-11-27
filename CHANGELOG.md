@@ -5,6 +5,44 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.10.0 - 2026-11-27
+
+What is new:
+- A watch that starts after one that ended without its end says so (ADR-0013 Amendments H to J), on every
+  system. A watcher that was ended from outside, a crash, a power loss: each leaves the watch's state unfinished,
+  and until now the next watch took over in silence. It now says a hole of its own at its start - the run
+  before, its pid, its last heartbeat, and for how many seconds no watch of this home is known to have watched -
+  in its report, in its state and in the events a collector takes. The result of that run is then not clean
+  (exit 3 where nothing else makes it 1).
+- A state file that is there and cannot be read (empty, torn) is said too: whether a watch ended without its end
+  is then not known, and the watch says exactly that instead of nothing.
+- The hole is written to the events before the new watch's state replaces the old one, so a watch ended again
+  in its first seconds still leaves the earlier gap in a record that lasts.
+- The Windows service waits for an old state to go stale instead of stopping: ended from outside and started
+  again by the system, it watches again without a person. Measured on GitHub's Windows machines, x64 and ARM64:
+  a round was read again 31 s after the process was ended, the text file saying the wait before it and after
+  it, the hole in the events naming the ended run.
+- The rig ends the service's process at every run and reads all of this as a claim (X48).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- After this update, the first watch on a machine where a watch was once ended without its end (a machine
+  switched off while it watched is one way) says the new hole once and ends with 3. That is the gap being said, not a fault.
+
+Not measured:
+- The half minute itself: a watch still takes an unfinished state for a living watch until its heartbeat is 30 s
+  old, so about 30 s pass unwatched after a watcher is ended. Taking over at once where the old process is gone
+  is recorded and not built.
+- The hole of a state that cannot be read, and a start ended before its first round, on a real machine; what a
+  power loss leaves of the state file; how systemd reads a unit that ends with 3 after such a start.
+- A state file removed before the next start: the watch before is then said nowhere.
+- There is still no `raqib service install` for Windows: the system is told to start the service again only by
+  whoever made the service.
+
 ## 0.9.0 - 2026-11-27
 
 What is new:

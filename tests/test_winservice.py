@@ -25,7 +25,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from raqib import cli, winservice  # noqa: E402
+from raqib import cli, host, winservice  # noqa: E402
 from raqib.winservice import (CLOSED_AS_MADE, CLOSED_AS_SET, CONTROL_INTERROGATE, CONTROL_STOP,  # noqa: E402
                               RUNNING, SERVICE_SPECIFIC, START_PENDING, STOP_PENDING, STOPPED)
 
@@ -33,6 +33,7 @@ PLACE = "C:\\ProgramData\\Raqib"
 OPEN = "D:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)(A;CIID;DCLCRPCR;;;BU)"
 STRANGER = "S-1-5-21-1004336348-1177238915-682003330-1001"
 FOLDER, FILE, REPARSE = 0x10, 0x20, 0x400
+NOW = 1793707200.0     # the Machine's clocks at its start (2026-11-03T12:00:00Z)
 SAID = "raqib: raqib service run: Windows only (the system's service manager runs it); this is %s\n"
 
 
@@ -73,6 +74,10 @@ class Machine:
         self.register_error, self.connects, self.raw, self.on_setenv = register_error, connects, raw, on_setenv
         self.watch_fn, self.on_text, self.real_interrupt = watch, on_text, real_interrupt
         self.log, self.handler, self.interrupted, self.release = [], None, threading.Event(), threading.Event()
+        # M12.4b (AH-2): the state of the watch before is a made-up file under tmp/place (the place's stand-in for
+        # raqib/host.py's holder()); its waiting clock is `now`, moved by pause() alone; its wall clock is `now` and
+        # wall_ahead (M12.4b REDO, AI-4: two values where a test sets it); held_fn/held_error: a stand-in's answer
+        self.now, self.on_pause, self.wall_ahead, self.held_fn, self.held_error = NOW, None, 0.0, None, None
 
     def platform(self):
         return self.os
@@ -147,6 +152,28 @@ class Machine:
             return self.raw
         return winservice.System().begin_text(str(self.tmp / ntpath.basename(path)),
                                               str(self.tmp / ntpath.basename(before)))
+
+    def held(self, place):
+        assert place == PLACE
+        self.log.append(("held", place))
+        if self.held_error is not None:
+            raise self.held_error
+        if self.held_fn is not None:
+            return self.held_fn(self)
+        return host.holder(home=str(self.tmp / "place"), wall=lambda: self.now + self.wall_ahead)
+
+    def clock(self):
+        return self.now
+
+    def pause(self, seconds, stop):
+        """No real second: a Stop set is returned at once, else the clocks move by `seconds`."""
+        self.log.append(("pause", seconds))
+        if self.on_pause:
+            self.on_pause(self)
+        if stop.is_set():
+            return True
+        self.now += seconds
+        return stop.is_set()
 
     def watch(self, argv, out):
         self.log.append(("watch", tuple(argv)))
@@ -751,3 +778,237 @@ def test_e5_the_real_object_makes_a_folder_closed_in_one_call_and_reads_names_by
                     " judged; admin: %s)" % (owner, bool(ctypes.windll.shell32.IsUserAnAdmin())))
     if not links:
         pytest.skip("neither a link nor a junction could be made here: that part is not read")
+
+
+# --- M12.4b E3 (ADR-0013 AH-2): after RUNNING, the service waits for the state of the watch before to go stale ---
+WAITING = "another host watch's state still holds the place"
+
+
+def before(machine, age, stale=30, **fields):
+    """A made-up state of a watch before, unfinished, its heartbeat `age` s before the Machine's clock."""
+    import datetime
+    import json
+    path = machine.tmp / "place" / ".raqib" / "host" / "rounds.jsonl.watch.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    beat = host.iso(datetime.datetime.fromtimestamp(machine.now + machine.wall_ahead - age, datetime.timezone.utc))
+    state = dict({"mode": "host", "run": "20261103T115950Z-4242", "pid": 4242, "heartbeat": beat,
+                  "stale_after_seconds": stale, "finished": None}, **fields)
+    path.write_text(json.dumps(state), encoding="ascii")
+    return path
+
+
+def returns(result):
+    def stand_in(machine, argv, out):
+        machine.log.append("watch ended")
+        return result
+    return stand_in
+
+
+def pauses(machine):
+    return [e[1] for e in machine.log if isinstance(e, tuple) and e[0] == "pause"]
+
+
+@pytest.mark.parametrize("given", ["none", "finished", "stale", "unparsed", "no host watch's"])
+def test_ah2_not_held_or_stale_or_unparsed_no_wait_and_no_line(given, tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    if given != "none":
+        before(m, 31 if given == "stale" else 2, **{"finished": {"finished": "2026-11-03T11:59:59.000Z"},
+                                                   "unparsed": {"heartbeat": "garbled"},
+                                                   "no host watch's": {"mode": "project"}}.get(given, {}))
+    code, _ = served(m, monkeypatch)
+    assert code == 0 and pauses(m) == [] and WAITING not in m.text()
+    assert kinds(m, "status", "held", "watch") == [("status", START_PENDING), ("status", RUNNING),
+                                                   ("held", PLACE), ("watch", winservice.WATCH_ARGV),
+                                                   ("status", STOP_PENDING), ("status", STOPPED)]
+
+
+def test_ah2_held_and_fresh_one_line_a_wait_asked_every_second_until_stale_then_the_watch(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    before(m, 4)                                  # 4 s old of 30: stale once it is older than 30 s
+    code, _ = served(m, monkeypatch)
+    assert code == 0 and m.statuses()[-1] == (STOPPED, 0, 0)
+    (line,) = [x for x in m.text().splitlines() if WAITING in x]
+    assert line == ("raqib service run: another host watch's state still holds the place (run 20261103T115950Z-4242,"
+                    " pid 4242, heartbeat 4 s ago, stale after 30 s): it was ended without its end, or it still"
+                    " watches; waiting up to 27.0 s for it to go stale, asked again every 1 s, then the watch")
+    assert pauses(m) == [1.0] * 27 and m.now == NOW + 27   # asked again each second; stale at 31 s: the watch
+    assert kinds(m, "status", "watch")[:3] == [("status", START_PENDING), ("status", RUNNING),
+                                               ("watch", winservice.WATCH_ARGV)]
+    first_pause = m.log.index(("pause", 1.0))
+    assert m.log.index(("status", RUNNING, 0, 0)) < m.log.index(("held", PLACE)) < first_pause
+    assert first_pause < m.log.index(("watch", winservice.WATCH_ARGV))   # AF-2's order kept: RUNNING while it waits
+
+
+def test_ah2_a_state_still_fresh_after_the_wait_the_watch_starts_and_its_refusal_stands_20(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, 10)
+    m.on_pause = lambda machine: before(machine, 0.5)   # a living watch: its heartbeat goes on
+    code, _ = served(m, monkeypatch)
+    assert pauses(m) == [1.0] * 21 and m.now == NOW + 21  # 30 - 10 + 1 s, and no longer
+    assert "waiting up to 21.0 s" in m.text() and code == 2
+    assert kinds(m, "watch", "watch ended")[0] == ("watch", winservice.WATCH_ARGV)
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_WATCH_REFUSED)
+
+
+def test_ah2_the_wait_is_bounded_by_60_s_whatever_the_states_staleness(tmp_path, monkeypatch):
+    assert winservice.HELD_WAIT_MAX == 60.0 and winservice.HELD_ASK_EVERY == 1.0
+    assert winservice.HELD_FRESH == host.HELD_FRESH
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, 1, stale=3600)
+    code, _ = served(m, monkeypatch)
+    assert "stale after 3600 s" in m.text() and "waiting up to 60.0 s" in m.text()
+    assert sum(pauses(m)) == 60.0 and m.now == NOW + 60 and code == 2
+    m = Machine(tmp_path / "half", place=thing())
+    (tmp_path / "half").mkdir()
+    before(m, 2.5, stale=5)                       # 5 - 2.5 + 1 = 3.5 s: the last ask waits the half second left
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0, 1.0, 1.0] and "waiting up to 3.5 s" in m.text()   # stale at 5.5 s: the third ask
+
+
+def test_ah2_a_stop_during_the_wait_ends_it_at_once_no_watch_begun_told_0_and_af4s_line(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    before(m, 4)
+    asked = []
+
+    def stop_at_the_third(machine):
+        asked.append(1)
+        if len(asked) == 3:
+            machine.handler(CONTROL_STOP)
+    m.on_pause = stop_at_the_third
+    code, _ = served(m, monkeypatch)
+    assert code == 0 and len(pauses(m)) == 3 and m.now == NOW + 2   # the third pause returned at once
+    assert "interrupt" not in m.log and not kinds(m, "watch")
+    assert m.statuses() == [(START_PENDING, 0, 0), (RUNNING, 0, 0), (STOP_PENDING, 0, 0), (STOPPED, 0, 0)]
+    assert m.text().count(WAITING) == 1
+    assert ("raqib service run: the watch was stopped before it gave a report (it was not begun); the Stop was"
+            " obeyed; the system is told exit 0") in m.text().splitlines()
+
+
+def test_ah2_the_real_objects_wait_returns_at_once_on_a_stop_and_reads_the_watchs_own_state(tmp_path):
+    real = winservice.System()
+    stop = threading.Event()
+    stop.set()
+    began = time.monotonic()
+    assert real.pause(30, stop) is True and time.monotonic() - began < 5   # never a real wait once a Stop is set
+    assert isinstance(real.clock(), float)
+    got = real.held(str(tmp_path))
+    assert got["held"] == host.HELD_NONE and got["path"] == os.path.join(str(tmp_path), ".raqib", "host",
+                                                                         "rounds.jsonl.watch.json")
+
+
+# --- M12.4b REDO (ADR-0013 AI-4): the wait within its bound whatever holder returns; its two lines -----------------
+WAITED = "raqib service run: the wait for the state of the watch before lasted "
+
+
+def waited(machine):
+    (line,) = [x for x in machine.text().splitlines() if x.startswith(WAITED)]
+    return line[len(WAITED):]
+
+
+def fresh(stale, age):
+    return lambda machine: {"held": host.HELD_FRESH, "run": "r", "pid": 7, "heartbeat": "h", "stale": stale,
+                            "age": age, "why": "unfinished, its heartbeat fresh"}
+
+
+@pytest.mark.parametrize("stale, age, up_to", [
+    (10 ** 400, 1.0, 60.0), (0, 0.0, 1.0), (-5, 1.0, 1.0), (float("nan"), 1.0, 60.0), (float("inf"), 1.0, 60.0),
+    (True, 1.0, 60.0), ("30", 1.0, 60.0), (None, 1.0, 60.0), (30, float("nan"), 60.0), (30, None, 60.0),
+    (30, -100.0, 60.0), (30, float("inf"), 1.0), (float("inf"), float("inf"), 60.0),
+])
+def test_ai4_whatever_holder_returns_the_wait_is_within_the_bound_and_ends_by_the_runners_road(
+        tmp_path, monkeypatch, stale, age, up_to):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    m.held_fn = fresh(stale, age)                                 # held fresh at every ask: the whole wait
+    code, _ = served(m, monkeypatch)
+    assert code == 2 and m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_WATCH_REFUSED)
+    assert "waiting up to %.1f s" % up_to in m.text() and sum(pauses(m)) == up_to <= winservice.HELD_WAIT_MAX
+    assert all(0 < x <= winservice.HELD_ASK_EVERY for x in pauses(m))
+    assert waited(m) == "%.1f s and ended: still fresh after the whole wait (a living watch, or a heartbeat ahead" \
+        " of the clock: the watch's own refusal stands)" % up_to
+    assert "watch ended" in m.log
+
+
+def test_ai4_a_staleness_of_10_400_read_from_a_real_state_waits_60_s_and_the_watch_starts(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, 1, stale=10 ** 400)
+    code, _ = served(m, monkeypatch)
+    assert "waiting up to 60.0 s" in m.text() and code == 2
+    assert "stale after %s... s" % ("1" + "0" * 39) in m.text()    # AJ-3: the cut is marked, not said as the number
+    assert winservice._number_said(10 ** 5000) == "a number too long to say"   # past str()'s digits: no exception
+
+
+def test_ai4_the_line_before_gives_the_age_as_read_ahead_of_the_clock_where_it_is(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, -100)                                               # its heartbeat 100 s ahead of the wall clock
+    served(m, monkeypatch)
+    (line,) = [x for x in m.text().splitlines() if WAITING in x]
+    assert "heartbeat 100 s ahead of this clock, stale after 30 s" in line and "0 s ago" not in line
+    assert "waiting up to 60.0 s" in line
+
+
+@pytest.mark.parametrize("change, how", [
+    (lambda m: before(m, 31), "stale (the watch says the watch before as a hole)"),
+    (lambda m: before(m, 1, finished="2026-11-03T12:00:03.000Z"), "finished (the watch before wrote its end)"),
+    (lambda m: before(m, 1).unlink(), "gone (the state was removed; the watch before's end is not known)"),
+    (lambda m: before(m, 1).write_bytes(b""), "the state cannot be read (the watch says so as a hole)"),
+    (lambda m: before(m, 1, heartbeat="garbled"), "its heartbeat cannot be parsed (the watch refuses it)"),
+    (lambda m: before(m, 1, mode="project"), "no longer held (none: the state is no host watch's)"),
+])
+def test_ai4_the_line_after_the_wait_says_how_long_and_how_it_ended_a_state_that_changes_during_it(
+        tmp_path, monkeypatch, change, how):
+    m = Machine(tmp_path, place=thing())
+    before(m, 4)
+    asked = []
+
+    def at_the_third(machine):
+        asked.append(1)
+        if len(asked) == 3:
+            change(machine)
+    m.on_pause = at_the_third
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0] * 3 and waited(m) == "3.0 s and ended: %s" % how
+    text = m.text().splitlines()
+    assert [i for i, x in enumerate(text) if WAITING in x][0] < [i for i, x in enumerate(text) if WAITED in x][0]
+    assert kinds(m, "watch")                                      # then the watch, whatever the ending
+
+
+def test_ai4_the_endings_tied_to_holders_words_and_a_stop_and_still_fresh(tmp_path, monkeypatch):
+    assert set(winservice.ENDED_SAID) == {host.HELD_STALE, host.HELD_UNPARSED, host.HELD_UNREADABLE}
+    gone = host.holder(home=str(tmp_path / "none"))
+    assert winservice._ended_said(gone["held"], gone["why"]).startswith("gone ")
+    m = Machine(tmp_path, place=thing())
+    before(m, 4)
+    m.on_pause = lambda machine: machine.handler(CONTROL_STOP) if len(pauses(machine)) == 2 else None
+    served(m, monkeypatch)
+    assert waited(m) == "1.0 s and ended: a Stop: no watch is begun" and not kinds(m, "watch")
+
+
+def test_ai4_a_wait_whose_last_pause_is_a_fraction_of_a_second(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, 29.5)                                               # 30 - 29.5 + 1 = 1.5 s
+    m.on_pause = lambda machine: before(machine, 0.5)             # a living watch: still fresh at every ask
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0, 0.5] and m.now == NOW + 1.5 and "waiting up to 1.5 s" in m.text()
+    assert waited(m).startswith("1.5 s and ended: still fresh")
+
+
+def test_ai4_an_exception_out_of_system_held_is_stopped_with_the_runners_own_number(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.held_error = RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+    served(m, monkeypatch)
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_RUNNER_FAILED) and not kinds(m, "watch")
+    m = Machine(tmp_path / "later", place=thing())
+    (tmp_path / "later").mkdir()
+    before(m, 4)
+    m.on_pause = lambda machine: setattr(machine, "held_error", OSError(5, "Access is denied"))
+    served(m, monkeypatch)
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_RUNNER_FAILED) and not kinds(m, "watch")
+
+
+def test_ai4_the_wait_is_measured_on_the_waiting_clock_not_the_wall_clock(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.wall_ahead = 10 ** 6                                        # the wall clock and the waiting clock: two values
+    before(m, 4)
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0] * 27 and m.now == NOW + 27 and "heartbeat 4 s ago" in m.text()
+    assert waited(m) == "27.0 s and ended: stale (the watch says the watch before as a hole)"

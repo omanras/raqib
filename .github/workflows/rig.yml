@@ -87,6 +87,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tools\rig\procevents_run.py --out $env:RUNNER_TEMP\procevents.json
+      - name: the watch as a service of Windows, its process ended from outside and started again by the system (X48)
+        if: always()
+        shell: pwsh
+        run: tools\rig\service_again.ps1 -Out $env:RUNNER_TEMP\service-again
       - name: the autostart places read by Raqib itself beside a second run of the stand-in (X37)
         if: always()
         shell: pwsh
@@ -94,7 +98,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -105,6 +109,7 @@ jobs:
           Copy-Item $HOME\.raqib\host\events.jsonl rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\forward.json, $env:RUNNER_TEMP\autostart.json rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\events-check.out rig-out -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\service-again rig-out\service-again -Recurse -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:

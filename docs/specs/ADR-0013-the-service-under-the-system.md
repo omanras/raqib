@@ -390,3 +390,120 @@ machines):
   list; a Stop while the service is START_PENDING; where the Stop's interrupt surfaces after the watch's call on
   a real machine; an owner's own call for the right to change his file's list; a place on a volume that keeps no
   owners; reparse points other than a junction and a link.
+
+## Amendment H (the Table, 2026-11-27) - M12.4b: a watch started after one that ended without its end
+Measured for Amendment E and not yet ruled (the probe branch 02de365; GitHub's Windows machines, x64 and ARM64):
+the service's process ended from outside, with the system told to start it again after 2 s - the system said so
+(event 7031) and started it, and the new watch refused: "another raqib watch --host is watching this home (run
+..., pid ..., heartbeat 3 s ago): one host watch per home; stop it first". It ended with 2, the service read
+Stopped, and the system did not start it again. Read in the code, not measured: a watch refuses an unfinished
+state until its heartbeat is `stale_after_seconds` old (30 s), by the heartbeat alone; a watch that starts over
+a stale unfinished state takes the home and says nothing of the watch before it. The Linux unit meets the same
+refusal and is started again every 5 s until it passes.
+- AH-1 (a watch that ended without its end is said by the next one; every system). A host watch that starts over
+  a state another watch left unfinished says so once, at its start, as a hole of its own run: the run before,
+  its pid, its last heartbeat, and how many seconds lie between that heartbeat and this start, in which nothing
+  was watched from this home. It is a hole and not a blind spot: a watcher that was ended from outside, a crash,
+  a power loss - each is a gap in the record, and the result of the run that found it is not clean (rule 4).
+  FOR: the gap is in the record itself, and in the events a collector takes, not only in the system's own log.
+  MUST NOT TOUCH: the rule by which a second watch is refused (the heartbeat and its staleness, D-6); a state
+  that is finished; a state whose heartbeat cannot be parsed (refused as today).
+- AH-2 (the service waits for a state to go stale). Before it starts the watch, the runner asks the engine
+  whether another watch still holds the home (one function of raqib/host.py, the same test the watch itself
+  makes). Where one does, it says so in its text file and waits until that heartbeat is stale - the state's own
+  staleness and no longer, with a bound - and then starts the watch, which says AH-1's hole. A Stop during the
+  wait is obeyed at once: no watch is begun, the system is told 0. A state still fresh after the wait is a
+  living watch: the watch's own refusal stands (20). The service reads RUNNING while it waits (AF-2's order is
+  kept), and the text file says it is waiting, for what, and for how long. FOR: a service ended from outside
+  watches again without a person. MUST NOT TOUCH: the Linux unit (systemd starts it again until it passes; AH-1
+  gives it the same line).
+- AH-3 (a claim on the rig, the Table's wiring). The rig's Windows job makes the service from the installed
+  Raqib, tells the system to start it again, ends its process, and keeps what it read; X48 is MET where the
+  service ran again with another pid, and the place's events hold two runs, the second with AH-1's hole naming
+  the first, the first with no end. `tools/rig/check.py` reads it from the files the job keeps.
+- Recorded, not ruled: taking over at once where the process the state names is no longer there (the gap would
+  be seconds, not half a minute) - not before it is measured that a pid and its start can be told on every
+  system a home may be shared across; the system told to start the service again on an exit of the service's own
+  (the install's, M12.4c). Not measured: a power loss; a machine's shutdown without a Stop; a clock set back
+  between the heartbeat and the start (the seconds said are then wrong, and said as read).
+
+## Amendment I (the Table, 2026-11-27) - the review of M12.4b (docs/review/2026-11-27-M12.4b.md) and its field run: REDO
+The field's word on 8914d37 (the probe branch 241e04f; GitHub's Windows machines, x64 and ARM64; the branch's
+`raqib service run` as a real service, the system told to start it again after 5 s; its process ended from
+outside): the gate green on six jobs and the rig green; the system said the end (event 7031) and started the
+service; the runner's text said the state still held the place ("heartbeat 5 s ago, stale after 30 s ... waiting
+up to 25.6 s"), waited, and the watch read its first round 31 to 32 s after the end; the place's events held two
+runs, each chain whole, the later with the hole `watch-unended` naming the earlier, which has no end; the rig's
+own check read X48 MET from what was kept; after a Stop and one more start, no second such hole. What the probe
+02de365 ran, which Amendment H cites: the candidate of Amendment E, not the runner. Seen in the field's text:
+the hole is not among the lines the watch says at its start.
+The reviewer's verdict is NEXT with no blocker, and a list to fix before the merge. Ruled:
+- AI-1 (the hole is in the events before the state that named the run before is gone; finding 5). A watch that
+  found an unfinished state writes AH-1's hole to its events file before it writes its own state over that one.
+  FOR: a watch ended again in its first seconds still leaves the earlier gap in a record that lasts. MUST NOT
+  TOUCH: the events' chain (the hole is a line of this run's chain like any other); the order of everything else
+  at the start.
+- AI-2 (a state that cannot be read is said; finding 25). A state file that is there and cannot be read as a
+  state (empty, torn, not text, refused) is taken as it is today - the watch starts - and is said as a hole of
+  its own kind at the start: the state the watch before left cannot be read, and whether a watch ended without
+  its end is not known. D-6's refusals are as they are. A state that is absent says nothing: a first watch is no
+  gap. Not measured: what a power loss leaves of the state on NTFS or ext4.
+- AI-3 (the words say what was read; findings 3, 4, 27, Q3). The run and the pid are cut as the heartbeat is.
+  The hole says what was found - a state left unfinished and its heartbeat stale - and what that is: a watch
+  that ended without its end, or one that stopped writing. A heartbeat ahead of the clock is said as ahead,
+  never as "0 s". The seconds are those the refusal's own reading took, and the spec says so. The hole is said
+  at the start with the other holes the watch says there, and is in the final report.
+- AI-4 (the runner's wait; findings 6, 7, 9, Q6). Whatever numbers the state holds, the wait is within its bound
+  and ends as the runner's own road, never as its exception. The line before the wait gives the age as read,
+  ahead of the clock where it is. One line after the wait: how long it lasted and how it ended - stale,
+  finished, gone, unreadable, still fresh, or a Stop.
+- AI-5 (X48 rests on the end the job made; findings 12, 13, Q1, Q8). `--service-run` and `--service-events` are
+  the names (E4 said otherwise; `--service` was taken). X48 is MET only where the hole's pid is `killed-pid` and
+  the later run is the one `again-pid` wrote; a byte-order mark before the first key is not a missing key.
+- AI-6 (kept, or said). No list of the host watch's holes exists in the specs: none is begun (Q2). A heartbeat
+  that cannot be parsed gets no wait: the watch's refusal stands and the service stays stopped until an
+  administrator acts, said in the spec (Q5). The documents name Amendment H's source as it is (the candidate)
+  and this amendment's field run for what the runner did; the 30 s is read in the code; the runner reads one
+  more name, the state inside its place (findings 18 to 22). On Linux a unit stopped after such a start ends
+  with 3, and systemd may read that as failed: said, not measured. The wiring of the rig's Windows job for X48
+  is the Table's, after the REDO.
+
+## Amendment J (the Table, 2026-11-27) - the review of M12.4b REDO (docs/review/2026-11-27-M12.4b-redo.md) and its field run: lands
+The field's word on 054ef34 (the probe branch 607b75c; GitHub's Windows machines, x64 and ARM64; the branch's
+`raqib service run` as a real service, its process ended from outside): the gate green on six jobs and the rig
+green; the runner's and the hole's 125 tests passing on real Windows; the system started the service again; its
+text said the state still held the place and that it would wait ("heartbeat 5 s ago, stale after 30 s ...
+waiting up to 25.6 s"), then "the wait ... lasted 25.1 s and ended: stale"; the watch said the hole `watch-
+unended` at its start, naming the run before and its pid, its last heartbeat 30 s before the start; the first
+round was read 31 s after the end; the events held the hole in the same words, both chains whole; X48 read MET
+with the hole's pid the ended one and the later run the new process's; after a Stop and one more start, no
+second such hole.
+The second reviewer's verdict is NEXT with no blocker. Ruled, and done by the Table's hand:
+- AJ-1 (a start that said the watch before and then failed; finding 7). Such a start leaves its start line and
+  the hole in the events with no end, and the state still names the run before, so the next watch says the run
+  before again: two holes for one gap, each true to what its run found, and the failed run itself a run with no
+  end in the events. Kept as it is: nothing is taken back from a record, and the service's own road serves no
+  page and cannot fail there. A test holds it and the spec says it.
+- AJ-2 (the early write that fails; finding 6). The watch starts: a watch that cannot write its events still
+  watches, and says so as the hole it already has for that. The earlier gap is then in this run's state and
+  final report only; the spec says the case instead of promising the events.
+- AJ-3 (said as it is; findings 2, 10, 11, 18, 25, R4). The test of a refused start that writes nothing is
+  restored. A value JSON holds is named in JSON's words. A watch over a state it cannot read "starts over it";
+  it is not said to take a home it may not get. A number cut for a line is marked as cut. The fresh refusal's
+  run and pid are cut as the hole's are - its words are otherwise as they were. The rig's check says in its own
+  usage what X48 now asks.
+- AJ-4 (the rig keeps it). The rig's Windows job makes the service from the Raqib it installed, ends its process
+  once and keeps what X48 reads (tools/rig/service_again.ps1), at every run of the rig.
+- AJ-5 (kept, and said in the spec as not said or not measured). A state removed before a start leaves the watch
+  before said nowhere, also where an administrator removes it as the unparsed refusal advises (R8); an object at
+  the state's path that is no host watch's is nothing held (finding 12); a state with a negative or NaN
+  staleness written by a living watch is said as one that ended or stopped writing (14); a state nested past the
+  parser's limit stops every start until an administrator acts, loudly (R3); the wait's asks lie outside its
+  bound by one read of a local file (first review, 8). On such a start only, the start's other holes are written
+  with the early write and the heartbeat counts from the start (R1). Not run on a real machine: the hole of a
+  state that cannot be read; a start ended before its first round; how systemd reads a unit that ends with 3
+  after such a start; what a power loss leaves of the state.
+- AJ-6 (lands). M12.4b lands as 0.10.0 after the gate and the rig, X48 among its claims, on the commit to be
+  merged. Next: M12.4c (install, remove, status; the place's owner named in the call that makes it; a refusal
+  where the code is not the system's alone; the start at boot; the system told to start it again; the event
+  log).
