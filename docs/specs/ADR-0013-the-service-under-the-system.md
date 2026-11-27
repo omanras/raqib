@@ -1502,3 +1502,62 @@ administrator changed; a very large record.
   copy under Program Files and watched a round, `remove --purge` ends with 0 and the place is gone; with nothing
   installed and a folder of the name made by a shell, `remove --purge` leaves it and says why. The guide's row,
   SERVICE.md and the help say `--purge` on Windows as built.
+
+## Amendment ZF (the Table, 2026-11-27) - M12.4c2b4 reviewed (NEXT, eighteen findings) and asked on real Windows at eight moments
+The packet is docs/review/2026-11-27-M12.4c2b4.md. Asked of the builder's commit a2c6905 on real Windows (the
+probe branch a672ab5; x64 and ARM64, the same on both), `raqib service remove --purge` itself. Of a service
+Raqib's install made and that watched a round, in one command: exit 0, the service and the place gone. With
+nothing installed and no place: exit 0, nothing to remove. A folder of the name made by an administrator's
+shell: exit 1, its inherited list said against the closed one, the folder and its file left. A link of the name:
+exit 1, "is a reparse point", the link and its target's file left. The place as the service leaves it with a
+link inside: exit 1, the rest removed, the link neither entered nor removed, its target's file left; the link
+taken away by hand, asked again: exit 0. A read-only file inside: exit 1, error 5 - said as "an administrator is
+needed" to an administrator, which is untrue. A file held open by another process: exit 1, error 32; let go,
+asked again: exit 0. Asked by a user outside the administrators' group: exit 1, the place not read (error 5, "an
+administrator is needed"), nothing touched. The gate's six jobs were green on a2c6905. Not measured: a name
+inside the place that the system rewrites (one ending in a dot or a space, a device's name); a service of
+another name still writing the place; a place replaced between its reading and its removal.
+- ZF-1 (a name the system would rewrite; finding 1, and the builder's second choice). A listed name is handed to
+  the system only where it names one thing in its folder as written: not empty, not a dot name, holding no
+  separator, colon or NUL (as built) - and not ending in a dot or a space, and not a device's name (CON, PRN,
+  AUX, NUL, COM and LPT with a digit, CONIN$, CONOUT$, with or without an extension, in any case). Any other is
+  counted and said, never handed, and the place then stays. FOR: "nothing outside the place" holds for what
+  Windows makes of a path, not only for its letters. Not measured on a real machine: Raqib writes no such name,
+  and this probe makes none.
+- ZF-2 (a watch that may still write; finding 3). ZE-3's reason holds for any runner, whatever name its service
+  has. Before the place is touched its own state is asked, as the runner asks it at a start (AH-2: the same
+  call, `held`): where it says a host watch still holds the place, nothing is removed, the line says how old the
+  state is and that the record is asked for again when the watch has ended, and the exit is 1. A watch that
+  ended with its end, as after the service's own remove, does not hold it (measured: the one command removed
+  both). A killed watch's state holds the place until it is stale, about half a minute. An exception out of that
+  call is said and nothing is touched.
+- ZF-3 (a file the ended service has not let go yet; finding 2). The runner's process may live a little after it
+  says STOPPED, its text file still open. Measured on four starts: the one command removed everything. So that
+  this does not depend on luck: where this same command removed the service and a removal inside the place
+  answers 32 (in use), it is asked again every half second for at most 20 s, then counted as any error. Without
+  a service removed by this command there is no waiting.
+- ZF-4 (error 5 inside the place; finding 4, and the field's sixth moment). Inside a place this caller has just
+  read as an administrator, error 5 does not mean "an administrator is needed". It is said as access denied with
+  what it may be: a read-only file, or a name the system holds. The file is not changed to make it removable:
+  this command removes, it does not set attributes. "An administrator is needed" stays where the place itself
+  could not be read, which is `place_judged`'s own sentence.
+- ZF-5 (words that say what was done and known; findings 5, 12, 13, 14, 16). "Is gone" is said after the place
+  is read again and is not there; else what the system answered. The line of the reading says the place is to be
+  removed, not that it was. Where the service's own remove did not end with it gone or none installed, the line
+  says that, not "is not gone". Where the place could not be read at all, the RESULT says the record NOT removed
+  because the place could not be read. The module's measured sentence claims nothing not measured.
+- ZF-6 (documents and tests; findings 6 to 11 and 15). The documents say `place_judged` as what it is - the
+  install's reading, tied by the tests to the runner's own - and that between its reading and its removing the
+  place and each folder in it are named again by path (ZE-5). The help's exits say a partial removal. Tests:
+  each refused form of a name on its own; the stand-in judging every part of a path under the place; a listing
+  that fails or gives no attributes; a name not ASCII as the first said; the service's remove raising, and
+  "whether it is gone NOT KNOWN"; the old line of the default road kept beside the new; the three calls of `os`
+  held to their own methods by name.
+- ZF-7 (the builder's three choices; recorded: findings 17 and 18). Taken as built: the RESULT's added words
+  where the service is not gone; a reparse point that is a file is left as one that is a folder. Recorded for
+  tasks of their own: a rule that names an AI agent's tree asking for the watcher's removal or its record's
+  (today the removal is an end the service reports and a silence; no rule names the asker); and that everything
+  inside a place that reads as Raqib's is removed, whatever made it - said in the guide.
+- ZF-8 (the rig, and landing). X56 is wired on this branch. M12.4c2b4 lands as 0.19.0 after the fixes' gate, the
+  gate's Windows jobs, X56 read as met in the rig's Windows log, and the eight moments asked again of the commit
+  to be merged.

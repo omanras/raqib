@@ -9,6 +9,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
                               [--service-check-plain FILE] [--service-check-drive FILE] [--service-refused FILE]
                               [--service-status FILE] [--service-install FILE] [--service-point FILE]
+                              [--service-purge FILE]
                               [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
@@ -110,6 +111,13 @@ state after, the runner's line of the check; net-exit, net-seconds, net-state, n
 X55 MET only where a check-point above 0 was read while it started, with the wait the runner tells (60000 ms), the
 service then Running with the pass in its text file, and `net start` ended with 0, the service Running with the
 pass; MISSED with words for each thing not found, a file given and missing included; n/a where none was given.
+--service-purge: what the rig's Windows job kept of `raqib service remove --purge` asked twice (ADR-0013 ZE,
+M12.4c2b4): FILE holds lines `key: value` (purge-exit, purge-result, purge-place: asked of a service Raqib's install
+made and that watched a round; kept-exit, kept-result, kept-place, kept-file: asked with nothing installed and a
+folder of the place's name made as a shell makes one). X56 MET only where the first ended with 0, its RESULT saying
+the service and the record removed, and the place gone; and the second ended with 1, its RESULT saying the record NOT
+removed for not being the place as Raqib's service makes it, the folder and its file still there; MISSED with words
+for each thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1704,6 +1712,54 @@ def read_service_point(text):
         return [(name, MISSED, "the service started over a long check cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_PURGE_NAME = ("X56 `raqib service remove --purge` on Windows removes the service and its record (0, the place"
+                      " gone), and leaves a folder of that name that is not the place as Raqib's service makes it (1,"
+                      " the folder and its file still there)")
+PURGE_KEYS = ("purge-exit", "purge-result", "purge-place", "kept-exit", "kept-result", "kept-place", "kept-file")
+PURGE_DONE = "RESULT: the service removed; the record removed"     # wininstall.PURGED of REMOVED's words (a test ties)
+PURGE_KEPT = "the record NOT removed: not the place as Raqib's service makes it"   # wininstall.RECORD_KEPT's
+
+
+def read_service_purge(text):
+    """X56 (ADR-0013 ZE, M12.4c2b4): what the rig's Windows job kept of `raqib service remove --purge` asked of a
+    service Raqib's install made (purge-*) and then, with nothing installed, of a folder of the place's name made as
+    a shell makes one (kept-*). text: the FILE's text (None: not given). MET where the first ended with 0, its RESULT
+    PURGE_DONE and the place not there; and the second ended with 1, its RESULT holding PURGE_KEPT, the folder and its
+    file there. A byte-order mark before the first key is read past. MISSED with words for each thing not found; n/a
+    where none was given. It never raises."""
+    name = SERVICE_PURGE_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no remove --purge was given (--service-purge)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the purge file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in PURGE_KEYS if key not in got]
+        if "purge-exit" in got and _number(got["purge-exit"]) != 0:
+            missing.append("remove --purge of Raqib's own service ended with %s, not 0" % (
+                got["purge-exit"][:40] or "nothing said"))
+        if "purge-result" in got and got["purge-result"] != PURGE_DONE:
+            missing.append("its RESULT is not `%s` (%s)" % (PURGE_DONE, got["purge-result"][:200] or "nothing said"))
+        if "purge-place" in got and got["purge-place"] != "False":
+            missing.append("the place is still there after it (%s)" % (got["purge-place"][:40] or "not said"))
+        if "kept-exit" in got and _number(got["kept-exit"]) != 1:
+            missing.append("remove --purge of a folder that is not the place ended with %s, not 1" % (
+                got["kept-exit"][:40] or "nothing said"))
+        if "kept-result" in got and not (got["kept-result"].startswith("RESULT: ")
+                                         and PURGE_KEPT in got["kept-result"]):
+            missing.append("its RESULT does not say `%s` (%s)" % (PURGE_KEPT, got["kept-result"][:200]
+                                                                  or "nothing said"))
+        for key, of in (("kept-place", "the folder that is not the place"), ("kept-file", "its file")):
+            if key in got and got[key] != "True":
+                missing.append("%s is not there after it (%s)" % (of, got[key][:40] or "not said"))
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "asked of Raqib's own service: 0, %s, the place gone; asked of a folder made as a shell"
+                 " makes one: 1, %s, the folder and its file left" % (got["purge-result"], got["kept-result"][:200]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the remove --purge kept cannot be read (%s)" % type(exc).__name__)]
+
+
 def read_check(text, name, counts_said, option, second):
     """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
     names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
@@ -1964,6 +2020,7 @@ def main(argv=None):
     p.add_argument("--service-status")
     p.add_argument("--service-install")
     p.add_argument("--service-point")
+    p.add_argument("--service-purge")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -2018,6 +2075,9 @@ def main(argv=None):
     # X55 (ADR-0013 ZB): the same, of one service started twice over a check made long
     pointed = a.service_point
     rows += read_service_point(None if pointed is None else (text(pointed) if os.path.isfile(pointed) else ""))
+    # X56 (ADR-0013 ZE): the same, of `raqib service remove --purge` asked of Raqib's service and of a shell's folder
+    purged = a.service_purge
+    rows += read_service_purge(None if purged is None else (text(purged) if os.path.isfile(purged) else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

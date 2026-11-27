@@ -43,6 +43,9 @@
 # Python under Program Files with 150000 empty files added, so that the check of its own code walks for seconds,
 # and starts it by the system's own call, asking the system what it says while it starts, and then by `net start`;
 # X55 says whether a check-point above 0 was read and `net start` ended with 0. All removed by the run.
+# The record removed (ADR-0013 ZE, M12.4c2b4): tools/rig/service_purge.ps1 asks `raqib service remove --purge` of a
+# service Raqib's install made, and then of a folder of the place's name made as a shell makes one; X56 says whether
+# the first left neither service nor place and the second left the folder and its file. All removed by the run.
 name: rig
 
 on:
@@ -131,6 +134,10 @@ jobs:
         if: always()
         shell: pwsh
         run: tools\rig\service_point.ps1 -Out $env:RUNNER_TEMP\service-point
+      - name: raqib service remove --purge - the service and its record gone, a folder that is not the place left as it is (X56)
+        if: always()
+        shell: pwsh
+        run: tools\rig\service_purge.ps1 -Out $env:RUNNER_TEMP\service-purge
       - name: whose the code a service would run is, asked of a packed Raqib in Program Files and of one in the job's folder (X49; the packer is this job's, never Raqib's)
         if: always()
         shell: pwsh
@@ -152,7 +159,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-check-plain $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt --service-check-drive $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt --service-refused $env:RUNNER_TEMP\service-refused\service-refused.txt --service-status $env:RUNNER_TEMP\service-status\service-status.txt --service-install $env:RUNNER_TEMP\service-install\service-install.txt --service-point $env:RUNNER_TEMP\service-point\service-point.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-check-plain $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt --service-check-drive $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt --service-refused $env:RUNNER_TEMP\service-refused\service-refused.txt --service-status $env:RUNNER_TEMP\service-status\service-status.txt --service-install $env:RUNNER_TEMP\service-install\service-install.txt --service-point $env:RUNNER_TEMP\service-point\service-point.txt --service-purge $env:RUNNER_TEMP\service-purge\service-purge.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -166,6 +173,7 @@ jobs:
           Copy-Item $env:RUNNER_TEMP\service-again rig-out\service-again -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-refused rig-out\service-refused -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-point rig-out\service-point -Recurse -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\service-purge rig-out\service-purge -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-status rig-out\service-status -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-install rig-out\service-install -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-check\service-check.txt rig-out -ErrorAction SilentlyContinue
