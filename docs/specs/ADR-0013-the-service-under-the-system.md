@@ -795,3 +795,38 @@ The second reviewer read the interpreter's source line by line and found N-1's t
   be merged. Next: M12.4c2 (K-9), with: the drive's device (L-3), the test of the libraries loaded by name, the
   packed road judging the venv file's name for 3.14 on (O-2), and the service's command for a plain interpreter
   written with `-I` (M-1).
+
+## Amendment P (the Table, 2026-11-27) - M12.4c2 in two; M12.4c2a: the drive, and the libraries loaded by name
+Before an install rests on the check (M12.4c2b: `raqib service install | remove | status` on Windows), two things
+the check says it does not read are closed, each from what was measured or read.
+Measured (the probe branch cf233f5; x64 and ARM64): the system says a disk's letter is of the fixed kind and
+names its device `\Device\HarddiskVolumeN`; a letter given to a folder (`subst`) is said of the fixed kind too,
+and its device's name is the folder's own path behind `\??\`; a volume that keeps no lists (FAT32, exFAT) is a
+fixed disk whose every name reads with the owner `WD` and a null list; a letter that is not there has no root and
+no device. Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10), not measured: a
+library asked for by a bare name is searched with the system's default folders - the application's own folder,
+System32, and folders the process itself added - and not along the PATH or in the folder the process was started
+in.
+- P-1 (the drive; closes L-3's "what the drive's letter names"). A path is judged only where the system says of
+  its drive: the fixed kind, and a device's name that begins with `\Device\`. A letter given to a folder or to a
+  share, a removable disk, a network drive, a disk in the drive of discs, a letter with no device: refused, with
+  the kind and the device's name as read - what is above such a letter is not what the check reads, or can be
+  changed where the check cannot see. Asked once for each drive met, before any name of it is read; both roads.
+  The reading is one function beside the one reader of a name (K-7), with no second copy of its calls. FOR: "to
+  the drive's letter" in the pass then means a disk. MUST NOT TOUCH: K-2, K-3, L-1, N-1, O-1, O-2.
+- P-2 (the libraries loaded by name; closes K's "the system's PATH"). A test reads every place in raqib/ where a
+  library is loaded and holds: the name is a plain name written in the code (no path, no name worked out, no
+  folder added to the search, no search mode given), and it is on one list; on Windows the test also finds each
+  name of the list in System32. With the reading above, a library Raqib asks for comes from the program's own
+  folder - which the check walks as the code itself - or from System32. FOR: nothing Raqib loads is found along
+  a path a user can write. MUST NOT TOUCH: any loader's behaviour; this is a test and its list.
+- P-3 (a claim on the rig, the Table's wiring after the task lands). The rig's Windows job gives a letter to the
+  folder of its packed copy in Program Files and asks the check through that letter; X51 is MET where the answer
+  is 1 and names the letter's device.
+- Not measured, and said: a network drive, a removable disk and a disc (their kinds are the system's own
+  numbers, read in its documents, not seen); a letter the system's account has and the asker has not; a folder
+  mounted on a volume with no letter; whether a library's own dependencies are searched as the library is.
+- M12.4c2b, after it (K-9, O-5): install, remove and status by the system's own calls, as measured; the install
+  asks the check and refuses unless it is taken; the command quoted, and for a plain interpreter with `-I`; the
+  place made with its owner named (AG-5); the start at boot; the system told to start it again; a refusal's
+  number said with its words.
