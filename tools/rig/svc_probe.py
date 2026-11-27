@@ -195,6 +195,30 @@ def make_closed(path):
     return "made" if ok else "not made: error %d" % ctypes.get_last_error()
 
 
+def make_closed_no_follow(path):
+    """The other way to make a folder: the opening call itself, told to make a new folder and not to follow a
+    link at the name. Says what the system answered."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    sd, size = wintypes.LPVOID(), wintypes.ULONG()
+    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.ULONG)]
+    if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(CLOSED, 1, ctypes.byref(sd), ctypes.byref(size)):
+        return "the text was not taken: error %d" % ctypes.get_last_error()
+    sa = SECURITY_ATTRIBUTES(ctypes.sizeof(SECURITY_ATTRIBUTES), sd, False)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                ctypes.POINTER(SECURITY_ATTRIBUTES), wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    # CREATE_NEW; FILE_ATTRIBUTE_DIRECTORY | BACKUP_SEMANTICS | POSIX_SEMANTICS | OPEN_REPARSE_POINT
+    h = k32.CreateFileW(path, 0x20000 | 0x80, 0x1 | 0x2, ctypes.byref(sa), 1,
+                        0x10 | 0x02000000 | 0x01000000 | 0x00200000, None)
+    if h is None or h == wintypes.HANDLE(-1).value:
+        return "not made: error %d" % ctypes.get_last_error()
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle(h)
+    return "made"
+
+
 def open_folder(path):
     """A handle on the name itself (a link is not followed), that lets nobody take the name away while it is
     held: (handle, None) or (None, why)."""
@@ -243,6 +267,10 @@ def read_handle(path):
 def main(argv):
     if len(argv) == 3 and argv[1] == "--make":
         print("made closed in one call: %s" % make_closed(argv[2]))
+        print("by its handle: %s" % read_handle(argv[2]))
+        return 0
+    if len(argv) == 3 and argv[1] == "--make2":
+        print("made by the opening call, a link not followed: %s" % make_closed_no_follow(argv[2]))
         print("by its handle: %s" % read_handle(argv[2]))
         return 0
     if len(argv) == 3 and argv[1] == "--read":
