@@ -488,10 +488,11 @@ def test_e1_e4_the_module_is_imported_nowhere_but_in_cmd_service():
         assert not [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))
                     and "winmanager" in ast.unparse(n)], path
     assert where[0] == ("cli.py", "cmd_service", "from raqib import winmanager")   # M12.4c2b2b (X-2): and the
-    assert {(f, i) for f, _, i in where[1:]} == {   # install's functions, which read its own work back through it
+    assert sorted({(f, i) for f, _, i in where[1:]}) == [   # install's functions, which read its own work back
+        ("wininstall.py", "from raqib import wincode, winmanager, winservice"),
         ("wininstall.py", "from raqib import winmanager"),
-        ("wininstall.py", "from raqib import winmanager, winservice"),
-        ("wininstall.py", "from raqib import wincode, winmanager, winservice")}
+        ("wininstall.py", "from raqib import winmanager, winservice")]
+    assert all(f == "wininstall.py" for f, _, _ in where[1:]) and len(where) >= 4   # and nowhere else
 
 
 STRUCTURES = {   # as the system documents them (winsvc.h), each field by its name and type, in order

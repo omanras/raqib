@@ -634,16 +634,20 @@ same; the rig's Windows job asks it at every run (X53).
 
 In a prompt opened as administrator, `raqib service install` installs the service on Windows from a
 copy the check takes. It asks the check of its own code first, as `raqib service check` asks it, and
-makes nothing from a tree it refuses; where `C:\ProgramData\Raqib` is there it reads it as the
+makes nothing from a tree it refuses - the check is still run by the code it judges, so install from
+a copy that was never a user's to change: an administrator who installs from a tree a user has
+already changed runs that code as himself; where `C:\ProgramData\Raqib` is there it reads it as the
 service would at its start and makes nothing where the service would refuse it, and it makes no
 folder itself (the service makes it at its first start). It makes the service `RaqibWatch` for the
 program or interpreter that runs the install (a plain interpreter asked with `-I`, as the service
 runs it), starts it, waits for it to run or stop and says `raqib service status`'s lines. A service
 of the name that is there is never changed: remove Raqib's first; to update, remove and then
 install. `raqib service remove` stops and removes Raqib's service only, asks for the name again, and
-leaves the record. What each call needs was measured on real Windows (x64 and ARM64) before this was
-built; the rig reads the install and the remove as X54 once its Windows job runs them. Not measured:
-a start at boot, a machine joined to a domain.
+leaves the record. A path that holds a quote, a percent sign or a character that is not printable is
+not written into the service's command. The system's calls were measured on real Windows (x64 and
+ARM64) before this was built, and the two commands were then asked there by an administrator and by
+a user outside the administrators' group; the rig asks both at every run (X54). Not measured: a
+start at boot, a machine joined to a domain.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

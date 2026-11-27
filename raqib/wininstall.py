@@ -75,6 +75,7 @@ CONTROL_STOP = 1                # SERVICE_CONTROL_STOP
 STATUS_PROCESS_INFO = 0         # SC_STATUS_PROCESS_INFO
 STOPPED, START_PENDING, RUNNING = 1, 2, 4
 DENIED = 5                      # ERROR_ACCESS_DENIED
+ABSENT = 2                      # ERROR_FILE_NOT_FOUND: the place's own name is not there, its folder above is
 STARTING_NOW = 1052             # a Stop while it starts (measured, T, U, W)
 NOT_ACTIVE = 1062               # ERROR_SERVICE_NOT_ACTIVE: a Stop of a service that does not run (measured, X)
 NOT_THERE = 1060                # ERROR_SERVICE_DOES_NOT_EXIST (measured)
@@ -95,7 +96,11 @@ NOT_KNOWN = "installed and started, its state NOT KNOWN; it stays"
 NOTHING = "NOT INSTALLED, nothing made"
 UNDONE = "NOT INSTALLED, what was made was removed again"
 LEFT = "NOT INSTALLED: a service of the name is left, not as installed"
-FAULT = "NOT KNOWN what was made: a fault of its own"
+FAULT = "NOT KNOWN what was made: a fault of its own; raqib service status says what is there"
+NOT_CLOSED = "; NOT KNOWN: a handle was not closed"   # Y-4: no RESULT says done where the exit says 1
+LEFT_MARKED = ("the service left carries Raqib's mark: raqib service remove removes it")
+LEFT_UNMARKED = ("the service left carries no mark, so raqib service remove will not touch it and a second install"
+                 " refuses it: remove it with the system's own tools (the services' console, or sc delete)")
 REMOVED = "removed"
 NONE_INSTALLED = "nothing installed"
 NOT_OURS = "nothing touched: a service of the name is not Raqib's"
@@ -354,6 +359,9 @@ def path_refused(path):
         return "holds a quote, which would end the quoted path in the command"
     if not path.isprintable():
         return "holds a character that is not printable"
+    if "%" in path:   # Y-2: read in the system's documents, not measured, and not to be found out by trying
+        return ("holds a percent sign, which the system may read in a service's command as the name of a variable"
+                " of its environment: the command could then name another path than the one the check judged")
     return None
 
 
@@ -388,22 +396,23 @@ def place_judged(place):
     try:
         attributes, text = place.read_place(path)
     except OSError as exc:
-        if exc.errno in wincode.NOT_THERE:
+        if exc.errno == ABSENT:   # Y-3: 2 alone; a folder above not there (3) is not the runner's to make
             return "absent", path
         return "refused", ws.EXIT_UNREAD, "%s could not be read through one handle on its name: %s%s" % (
-            path, ws._why(exc), "; an administrator is needed" if exc.errno == DENIED else "")
+            _error_said(path), ws._why(exc), "; an administrator is needed" if exc.errno == DENIED else "")
+    said = _error_said(path)   # W-3: a path from this process's environment is written as printable ASCII
     if attributes & ws.ATTRIBUTE_REPARSE:
-        return "refused", ws.EXIT_REPARSE, "%s is a reparse point (attributes 0x%x)" % (path, attributes)
+        return "refused", ws.EXIT_REPARSE, "%s is a reparse point (attributes 0x%x)" % (said, attributes)
     if not attributes & ws.ATTRIBUTE_FOLDER:
-        return "refused", ws.EXIT_NOT_FOLDER, "%s is there and is not a folder (attributes 0x%x)" % (path,
+        return "refused", ws.EXIT_NOT_FOLDER, "%s is there and is not a folder (attributes 0x%x)" % (said,
                                                                                                   attributes)
     owner, dacl = ws.owner_and_list(text)
     if owner not in ws.OWNERS:
         return "refused", ws.EXIT_OWNER, "%s is owned by %s, neither the system (SY) nor the administrators (BA)" % (
-            path, _error_said(owner or "nobody said"))
+            said, _error_said(owner or "nobody said"))
     if dacl != ws.CLOSED_AS_MADE:
         return "refused", ws.EXIT_OPEN, ("%s has the list %s, not the closed one as a folder made closed reads (%s)"
-                                         % (path, _error_said(dacl), ws.CLOSED_AS_MADE))
+                                         % (said, _error_said(dacl), ws.CLOSED_AS_MADE))
     return "taken", path, owner
 
 
@@ -504,10 +513,10 @@ def _install(system, out, start, code, place, reader, held):
         return 1, NOTHING
     if got[0] == "absent":
         out.write("  the place: %s is not there: the runner makes it at its first start, as the system, closed"
-                  " (ADR-0013 X-8); the install makes nothing there\n" % got[1])
+                  " (ADR-0013 X-8); the install makes nothing there\n" % _error_said(got[1]))
     else:
         out.write("  the place: %s is there, a folder owned by %s with the closed list, as the runner takes it at a"
-                  " start; not changed\n" % (got[1], got[2]))
+                  " start; not changed\n" % (_error_said(got[1]), got[2]))
     manager, error = _call(system.make_manager)
     if error:
         out.write("  the service manager: OpenSCManagerW (rights 0x%X, to connect and to make a service) failed: %s;"
@@ -542,7 +551,7 @@ def _install(system, out, start, code, place, reader, held):
         return 1, NOTHING
     command = command_for(program, packed)
     out.write("  its command: %s (%s, by the path the check judged)\n" % (
-        command, winmanager.FORM_WORDS[winmanager.FORMS[0] if packed else winmanager.FORMS[1]]))
+        _error_said(command), winmanager.FORM_WORDS[winmanager.FORMS[0] if packed else winmanager.FORMS[1]]))
     made, error = _call(system.create, manager, name, command)
     if error in (EXISTS, MARKED_FOR_REMOVAL):
         out.write("  CreateServiceW: %s; it is not touched, nothing made\n" % _error_said(error))
@@ -569,13 +578,15 @@ def _install(system, out, start, code, place, reader, held):
             if error:
                 out.write("  what was made could not be removed again: DeleteService failed: %s\n" % _error_said(
                     error))
+                out.write("  %s\n" % (LEFT_MARKED if call != system.describe else LEFT_UNMARKED))   # Y-4
                 return 1, LEFT
-            out.write("  what was made was removed again (DeleteService)\n")
+            out.write("  what was made was removed again: DeleteService done on it; it is gone once every handle on"
+                      " it is closed (raqib service status says what is there)\n")
             return 1, UNDONE
         out.write("  set: %s\n" % words)
     if not start:
-        out.write("  --no-start: not started; the system starts it at the machine's next start (automatic), or"
-                  " start it from the services' console\n")
+        out.write("  --no-start: not started; it is set to start with the machine (automatic; a start at boot is"
+                  " not measured, ADR-0013 X-9), or start it from the services' console\n")
         return 0, NO_START
     _, error = _call(system.start, made)
     if error:
@@ -639,7 +650,7 @@ def install(system, out, start=True, code=None, place=None, reader=None):
         exit_code, result = 1, FAULT
     held.close()
     if held.failed:
-        exit_code = 1
+        exit_code, result = 1, result + NOT_CLOSED
     out.write("RESULT: %s\n" % result)
     return exit_code
 
@@ -753,7 +764,7 @@ def remove(system, out, reader=None):
         exit_code, result = 1, "NOT KNOWN what was done: a fault of its own"
     held.close()
     if held.failed:
-        exit_code = 1
+        exit_code, result = 1, result + NOT_CLOSED
     out.write(RECORD)
     out.write("RESULT: %s\n" % result)
     return exit_code

@@ -50,7 +50,7 @@ class Manager:
                         if there else None)
         self.now = dict(BASE, **(before or {})) if there else dict(BASE)
         self.opened, self.closed, self.log, self.next, self.clock_at = [], [], [], 100, 1000.0
-        self.breaches = []
+        self.breaches, self.services = [], []   # services: the handles given for the service itself
 
     def _answer(self, call, value):
         self.log.append(call)
@@ -69,9 +69,11 @@ class Manager:
         self.opened.append(self.next)
         return self.next
 
-    def _held(self, handle):
+    def _held(self, handle, service=False):
         if handle not in self.opened or handle in self.closed:
             self.breaches.append(("a handle not held", handle))
+        if service and handle not in self.services:   # Y-5: a call on the service given another handle
+            self.breaches.append(("not the service's handle", handle))
 
     def _there(self):
         return self.service is not None and (not self.service["deleted"] or self.lingers)
@@ -95,7 +97,10 @@ class Manager:
         value, error = self._answer(call, None)
         if error:
             return None, error
-        return (self._give(), 0) if self._there() else (None, 1060)
+        if not self._there():
+            return None, 1060
+        self.services.append(self._give())
+        return self.services[-1], 0
 
     def open(self, manager, name):            # the reader's (0x5)
         return self._open("open", manager, name)
@@ -109,32 +114,33 @@ class Manager:
         if error:
             return None, error
         self.service = {"description": None, "command": command, "deleted": False, "name": name}
-        return self._give(), 0
+        self.services.append(self._give())
+        return self.services[-1], 0
 
     def describe(self, handle, text):
-        self._held(handle)
+        self._held(handle, service=True)
         value, error = self._answer("describe", True)
         if not error:
             self.service["description"] = text
         return value, error
 
     def failure_actions(self, handle):
-        self._held(handle)
+        self._held(handle, service=True)
         return self._answer("failure_actions", True)
 
     def failure_flag(self, handle):
-        self._held(handle)
+        self._held(handle, service=True)
         return self._answer("failure_flag", True)
 
     def start(self, handle):
-        self._held(handle)
+        self._held(handle, service=True)
         value, error = self._answer("start", True)
         if not error:
             self.now = self.states.pop(0) if len(self.states) > 1 else self.states[0]
         return value, error
 
     def state(self, handle):
-        self._held(handle)
+        self._held(handle, service=True)
         value, error = self._answer("state", None)
         if error:
             return None, error
@@ -144,7 +150,7 @@ class Manager:
         return got, 0
 
     def stop(self, handle):
-        self._held(handle)
+        self._held(handle, service=True)
         self.log.append("stop")
         if "stop" in self.raises:
             raise RuntimeError("made up")
@@ -156,7 +162,7 @@ class Manager:
         return {"state": 3}, 0
 
     def delete(self, handle):
-        self._held(handle)
+        self._held(handle, service=True)
         value, error = self._answer("delete", True)
         if not error:
             self.service["deleted"] = True
@@ -175,7 +181,7 @@ class Manager:
         return self._answer("clock", self.clock_at)
 
     def description(self, handle):            # the reader's
-        self._held(handle)
+        self._held(handle, service=True)
         return self._answer("description", self.service["description"] if self.service else None)
 
     def making(self, handle):                 # the reader's
@@ -395,8 +401,12 @@ def test_x8_the_place_unread_or_programdata_not_a_drive_refused_as_prepare_and_o
     assert code == 0 and taken.made == [] and taken.read == ["C:\\ProgramData\\Raqib"]
     assert lines[3] == ("  the place: C:\\ProgramData\\Raqib is there, a folder owned by BA with the closed list, as"
                         " the runner takes it at a start; not changed")
-    for error in (2, 3):   # wincode.NOT_THERE: the reader's "not found"
-        assert wininstall.place_judged(Place(error=error)) == ("absent", "C:\\ProgramData\\Raqib")
+    # Y-3: the place's own name not there (2) is the runner's to make; a folder above not there (3) is not
+    assert wininstall.place_judged(Place(error=2)) == ("absent", "C:\\ProgramData\\Raqib")
+    kind, number, words = wininstall.place_judged(Place(error=3))
+    assert (kind, number) == ("refused", winservice.EXIT_UNREAD) and "could not be read" in words
+    code, lines, manager = install(place=Place(error=3))
+    assert code == 1 and manager.log == ["platform"] and lines[-1] == "RESULT: NOT INSTALLED, nothing made"
 
 
 def test_e2_the_manager_refused_5_an_administrator_is_needed_nothing_made():
@@ -444,6 +454,9 @@ def test_e2_the_name_unread_and_the_making_answering_1073_1072_or_5_make_nothing
     ("C:\\Program Files\\R\u200bx\\raqib.exe", "holds a character that is not printable"),
     ("C:\\Program Files\\R\x7fx\\raqib.exe", "holds a character that is not printable"),
     ("", "is not a path"),
+    # Y-2: a percent sign, which the system may read in a service's command as a variable's name
+    ("C:\\Program Files\\R%TEMP%x\\raqib.exe", "holds a percent sign"),
+    ("C:\\Program Files\\100%\\raqib.exe", "holds a percent sign"),
 ])
 def test_e2_the_command_refused_where_the_path_holds_a_quote_or_a_character_not_printable(monkeypatch, path, why):
     monkeypatch.setattr(wincode, "check", lambda system, drives: (None, {"folders": 1, "files": 1, "above": 1}))
@@ -462,13 +475,18 @@ def test_e2_the_command_refused_where_the_path_holds_a_quote_or_a_character_not_
 def test_e3_each_of_the_three_settings_failing_removes_what_was_made_and_says_so(call, words):
     code, lines, manager = install(Manager(fail={call: 87}))
     assert code == 1 and lines[-1] == "RESULT: NOT INSTALLED, what was made was removed again"
-    assert lines[-3].endswith(words) and lines[-2] == "  what was made was removed again (DeleteService)"
+    assert lines[-3].endswith(words) and lines[-2] == (
+        "  what was made was removed again: DeleteService done on it; it is gone once every handle on it is closed"
+        " (raqib service status says what is there)")
     assert manager.log[manager.log.index(call) + 1] == "delete" and "start" not in manager.log
     assert manager.service["deleted"]
     # and a removal that then fails too: a service of the name is left, not as installed
     code, lines, manager = install(Manager(fail={call: 87, "delete": 5}))
     assert code == 1 and lines[-1] == "RESULT: NOT INSTALLED: a service of the name is left, not as installed"
-    assert lines[-2].startswith("  what was made could not be removed again: DeleteService failed: error 5")
+    assert lines[-3].startswith("  what was made could not be removed again: DeleteService failed: error 5")
+    # Y-4: whether what is left carries the mark, and so whether Raqib's own remove reaches it
+    assert lines[-2] == "  " + (wininstall.LEFT_UNMARKED if call == "describe" else wininstall.LEFT_MARKED)
+    assert ("will not touch it" in lines[-2]) == (call == "describe") == (manager.service["description"] is None)
     assert "start" not in manager.log
 
 
@@ -512,6 +530,7 @@ def test_e3_a_call_that_raises_a_state_that_fails_and_a_close_that_fails_are_sai
     assert code == 1 and lines[-1] == "RESULT: installed and started, its state NOT KNOWN; it stays"
     code, lines, manager = install(Manager(fail={"close": [5]}))
     assert code == 1 and [x for x in lines if "CloseServiceHandle failed: error 5" in x]
+    assert lines[-1].startswith("RESULT: ") and lines[-1].endswith(wininstall.NOT_CLOSED)   # Y-4: never "done" with 1
     code, lines, manager = install(Manager(raises={"open"}))
     assert code == 1 and lines[-1] == "RESULT: NOT INSTALLED, nothing made"
 

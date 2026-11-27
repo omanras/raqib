@@ -2341,14 +2341,21 @@ start, the failure actions or the failure flag (not measured as a caller
   (X53).
 - **What the install and the remove of the service on Windows do (`raqib
   service install | remove`; ADR-0013 Amendment X).** On Windows an
-  administrator's `raqib service install` makes the service RaqibWatch by
-  the service manager's own calls, with the rights measured and no more;
-  `raqib service remove` stops and removes it. The install asks the check of
-  its own code before anything is made, and makes nothing from a tree it
+administrator's `raqib service install` makes the service RaqibWatch by the
+  service manager's own calls, with the rights measured before it was built
+  and, on two handles, one right more - to remove again what a failed
+  setting left, and to read the mark on the very handle it then stops and
+  removes - which the field runs showed an administrator is given; `raqib
+  service remove` stops and removes it. The install asks the check of its
+  own code before anything is made, and makes nothing from a tree it
   refuses: that is where a tree that is not the system's alone is kept from
   being made a service at all. It is still run by the code it judges (N-2):
   an administrator who runs it from a tree a user has already changed runs
-  that code as himself, and such a tree may make its own check pass. It
+  that code as himself, and such a tree may make its own check pass. A path
+  that holds a quote, a percent sign (which the system may read in a
+  service's command as a variable's name: read in its documents, not
+  measured) or a character that is not printable is never written into the
+  command. It
   reads the place under ProgramData where it is there and makes nothing
   where the runner would refuse it; it makes no place (the runner makes it,
   closed, at its first start, as the system). It never changes a service of

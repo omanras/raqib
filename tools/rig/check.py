@@ -1576,7 +1576,8 @@ SERVICE_INSTALL_NAME = ("X54 `raqib service install` on Windows makes nothing fr
                         " user with no rights reads it), and `raqib service remove` leaves nothing (0, NOT"
                         " INSTALLED)")
 INSTALL_KEYS = ("asked-by-administrator", "refused-exit", "refused-words", "refused-status", "install-exit",
-                "install-result", "installed-status", "remove-exit", "remove-result", "removed-status")
+                "install-result", "installed-status", "installed-command", "remove-exit", "remove-result",
+                "removed-status")
 CHECK_REFUSED = "raqib service check: NOT the system's alone: "   # winservice.REFUSED_SAID's head (a test ties)
 INSTALL_DONE = "RESULT: installed and started: raqib service status answers ACTIVE"   # wininstall.DONE (a test ties)
 REMOVE_DONE = "RESULT: removed"                                                       # wininstall.REMOVED
@@ -1588,8 +1589,8 @@ def read_service_install(text):
     from the copy under Program Files (install-exit, install-result, installed-status: status asked after it by a user
     with no rights, asked-by-administrator: no), and the remove (remove-exit, remove-result, removed-status). text: the
     FILE's text (None: not given). MET only where refused-exit is 1, refused-words holds CHECK_REFUSED and
-    refused-status is `RESULT: NOT INSTALLED`; install-exit 0, install-result INSTALL_DONE and installed-status
-    `RESULT: ACTIVE`; remove-exit 0, remove-result REMOVE_DONE and removed-status `RESULT: NOT INSTALLED`; a byte-order
+    refused-status is `RESULT: NOT INSTALLED`; install-exit 0, install-result INSTALL_DONE, installed-status
+    `RESULT: ACTIVE` and installed-command status's own line of a command under Program Files (STATUS_COMMAND); remove-exit 0, remove-result REMOVE_DONE and removed-status `RESULT: NOT INSTALLED`; a byte-order
     mark before the first key is read past. MISSED with words for each thing not found; n/a where none was given. It
     never raises."""
     name = SERVICE_INSTALL_NAME
@@ -1616,6 +1617,10 @@ def read_service_install(text):
                               ("removed-status", "RESULT: NOT INSTALLED", "status after the remove")):
             if key in got and got[key] != want:
                 missing.append("%s: %s, not %s" % (of, got[key][:200] or "nothing", want))
+        command = got.get("installed-command", "")
+        if "installed-command" in got and not STATUS_COMMAND.fullmatch(command):   # Y-6: which copy was installed
+            missing.append("the installed service: the line kept is not status's own line of the command, a quoted"
+                           " path under Program Files and then %s (%s)" % (STATUS_PLAIN, command[:200]))
         words = got.get("refused-words", "")
         if "refused-words" in got and CHECK_REFUSED not in words:
             missing.append("the install from the job's own Python: its words do not hold the check's refusal, %s"

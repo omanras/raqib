@@ -1224,3 +1224,58 @@ starts answers 1052 to its caller; a name already there answers 1073 to a making
   made a service: the check is asked by an administrator's session before anything is made. It is still run by
   the code it judges (N-2): an administrator who runs the install from a tree a user has already changed runs
   that code as himself - as on Linux, and said. An update over a running service is: remove, then install.
+
+## Amendment Y (the Table, 2026-11-27) - the review of M12.4c2b2b (docs/review/2026-11-27-M12.4c2b2b.md) and its field run: install and remove land as 0.16.0
+The builder (d03b9c2) built X-2 to X-8 on Linux and said plainly that no call of the new module had run; the
+reviewer read every road by which a service could be made, changed or left (verdict NEXT, with small fixes), and
+found one thing no test would have: a percent sign in the path. Measured on real Windows after the build (the
+probe branch 460cf42 and 2574ed5, of d03b9c2; x64 and ARM64, the same), by an administrator and by a user the
+probe made outside the administrators' group: the install from the job's own Python made nothing (the check's
+refusal, 1); from a copy under Program Files without `-I` nothing, with the command to ask it by; with `-I`, by
+the plain user, nothing (error 5 at the manager); by the administrator the service was made, set, started and
+running 1.75 s later, 0, status ACTIVE as the plain user read it, and the system's log named it as made - the
+same from a packed copy, running after 0.5 s. A second install over it: "remove it first", 1, the service
+untouched. The plain user's remove: error 5 at the service's opening, nothing touched; `--purge`: 2; the
+administrator's remove: a Stop, STOPPED after 0.25 s, removed, the name gone (1060), 0, the record left. A
+service installed with `--no-start` read installed and not active, and its remove took the Stop's 1062. With a
+place an administrator had made by hand the install named the list it read and the runner's number for it, and
+made nothing. Over a service of the name without the mark the install made nothing and the remove touched
+nothing. The gate's Windows jobs were green on d03b9c2, and no service of the name was there after its tests ran
+on those machines.
+- Y-1 (the builder's questions, as built). The made handle is asked with 0x10017 and remove's with 0x10025 - one
+  right more on each than was measured before the build, to remove again what a failed setting left and to read
+  the mark on the very handle then stopped and removed; the field run showed an administrator is given both. Two
+  objects, the writer and the reader (X-2). The name asked before the making. The place read before the manager
+  is opened, so that nothing able to make a service is held while it is read (X-3's order). The bounds: 80 s for
+  a start and 45 s for a stop - the runner's own hints and a margin of 15 s. In remove, a Stop answered
+  otherwise than done, 1062 or 1052, a second 1052 and a service not stopped at its bound each remove nothing
+  and say so. `--no-start` ends 0 with no status lines.
+- Y-2 (a percent sign; the review's finding 1). A path that holds a percent sign is not written into the
+  service's command, and the install makes nothing. The system's documents say a service's command is kept in a
+  form whose variables it expands at a start; the check judges the path as it is written, so the two could name
+  different programs. Read, not measured - and not to be measured by trying which program the system would then
+  run: it is refused whole. FOR: X-10 rests on the command naming what the check judged.
+- Y-3 (absence is one error; finding 6). Only the place's own name not there (error 2) is a place for the runner
+  to make. A folder above it not there (error 3) is refused: the runner could not make the place either.
+- Y-4 (no word that says more than was done; findings 4, 5, 8 and 11). An answer does not say done where the
+  exit says 1: a handle that could not be closed is said in the RESULT. Where a setting failed and what was made
+  could not be removed, the answer says whether it carries the mark - with it Raqib's remove removes it; without
+  it Raqib's remove will not touch it, and the system's own tools do. "Removed again" says that the removal was
+  asked and that the service goes when every handle on it is closed. `--no-start` says the start is set to
+  automatic, and that a start at boot is not measured.
+- Y-5 (texts, and what the tests hold; findings 7, 9 and 10). A path and a command are written out as status
+  writes what it reads, printable ASCII (W-3). The tests' stand-in records a call on the service that is given
+  another handle than the service's; the list of where the reader is imported is exact.
+- Y-6 (X54; the rig). The job asks Raqib's own install and remove as its administrator, and a user it makes
+  outside the administrators' group asks status after each; X54 is MET only where status's own line of the
+  command names a path under Program Files, so that which copy was installed is read and not taken on the job's
+  word.
+- Y-7 (the documents; findings 2 and 3). The rights are said as they are - measured before the build, and one
+  more on two handles, shown by the field run - and the guide says both halves of X-10: the install asks the
+  check first, and the check is run by the code it judges.
+- Y-8 (lands, and next). M12.4c2b2b lands as 0.16.0 after the gate on the tree to be merged, its Windows jobs,
+  and X54 read on the branch. Not measured: a start at boot; a machine joined to a domain; a remove while the
+  service starts or while another program holds it open; a setting that fails on a real machine. With it the
+  watch as a service of Windows is installed, asked and removed by Raqib's own commands. Next, each small:
+  status reading the failure actions and the flag as part of "as installed" (M12.4c2b2c), the check-point raised
+  while the check walks (M12.4c2b3), `--purge` on Windows; then the queue (a live reader for macOS first).

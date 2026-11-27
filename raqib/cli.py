@@ -302,7 +302,8 @@ no command, raqib prints its usage and exits 2.
       ProgramData is one the service would refuse, nor over a service of the name that is there; it makes the
       service for this very program (packed) or interpreter (with -I), its description beginning with
       Raqib's mark, to be started again by the system after an end that was no Stop, starts it (--no-start:
-      not) and says status's lines; exit 0 made and active, 1 refused or failed (what was made said). remove
+      not) and says status's lines; exit 0 made and active or made with --no-start, 1 refused or failed (what
+      was made said). remove
       stops and removes Raqib's service only (one without the mark is not touched, 1), asks for the name
       again (exit 0 gone or nothing installed, 1 not yet gone) and leaves the record; --purge on Windows is
       not built (exit 2).
@@ -740,7 +741,7 @@ def _parser():
                          " installed, not Raqib's or not known; ADR-0013 Amendment V); on Windows, install (an"
                          " administrator) makes the service RaqibWatch by the service manager's own calls - the"
                          " check of its own code first, nothing made from a tree it refuses - starts it and says"
-                         " status's lines (exit 0 made and active, 1 refused or failed), and remove stops and"
+                         " status's lines (exit 0 made and active, or made with --no-start; 1 refused or failed), and remove stops and"
                          " removes Raqib's service only, the record kept (exit 0 gone or nothing installed, 1 not"
                          " Raqib's or not yet gone; ADR-0013 Amendment X); run (Windows, run by the"
                          " system's service"

@@ -689,9 +689,9 @@ past; MISSED with words for each thing not found, a file given and missing inclu
 
 ## Windows: install and remove (`raqib service install | remove`)
 
-ADR-0013 Amendment X (X-2 to X-8), in raqib/wininstall.py. On Windows `raqib service install` makes Raqib's service,
-RaqibWatch, by the system's own calls, and `raqib service remove` removes it; both as an administrator (a prompt
-opened as administrator: neither asks for an elevation). What they rest on was measured before they were ruled
+ADR-0013 Amendments X (X-2 to X-8) and Y, in raqib/wininstall.py. On Windows `raqib service install` makes Raqib's
+service, RaqibWatch, by the system's own calls, and `raqib service remove` removes it; both as an administrator (a
+prompt opened as administrator: neither asks for an elevation). What they rest on was measured before they were ruled
 (Amendment X's first paragraph, the probe branch 639362e and dc172b1; x64 and ARM64, the same), each call by an
 administrator: the manager opened to connect and to make a service (0x3); CreateServiceW of a process of its own
 (0x10), automatic start (2), error control 1, no account named (read back as `LocalSystem`), shown as `Raqib watch`,
@@ -703,9 +703,22 @@ check refuses ended each start with 1066 and its own 15 and was started again by
 system's log saying each; and while it waited for its next start a Stop answered 1062 and it was removed. From
 Amendments T, U and W: a Stop while a service starts answers 1052; a name already there answers 1073 to a making, one
 marked for removal 1072. The two commands themselves were built on Linux, where none of the system's calls can be run:
-every test hands stand-ins, and one runs the real objects' own logic against a made-up library; the rig reads them on
-real Windows as X54 once its Windows job runs them. Not measured: a start at boot (the machines measured are not
-restarted); a machine joined to a domain; the install over a running service (it is refused: remove, then install).
+every test hands stand-ins, and one runs the real objects' own logic against a made-up library. They were then asked
+on real machines (Amendment Y; the probe branch 460cf42 and 2574ed5, of d03b9c2; x64 and ARM64, the same), by an
+administrator and by a user the probe made outside the administrators' group: the install from the job's own Python
+made nothing (the check's refusal, 1); from a copy under Program Files started without `-I` it made nothing and said
+the command to ask it by; with `-I` it made the service, started it and ended 0 with status ACTIVE as the plain user
+read it - the same from a packed copy there; a second install over it changed nothing (1); the plain user's remove was
+refused (error 5 at the service's opening) and nothing was touched; the administrator's remove stopped it, removed it
+and found the name gone (0), the record left where it was; a service installed with `--no-start` read as installed and
+not active and was removed with the Stop answered 1062; with a place that an administrator had made by hand, with the
+list it inherits, the install made nothing; over a service of the name without the mark the install made nothing and
+the remove touched nothing (1); `--purge` ended 2. So the two rights asked beyond those measured before the build -
+the right to remove on the handle CreateServiceW gives (0x10017), the right to ask the making on remove's (0x10025) -
+are given an administrator on those machines. The rig asks both commands at every run (X54). Not measured: a start at
+boot (the machines measured are not restarted); a machine joined to a domain; a remove while the service starts or
+while another program holds it open; one of the three settings failing on a real machine; what the system does with a
+percent sign in a service's command (read in its documents, and refused: below).
 
 **install, in its order.** One line each, and at the first that fails nothing more is made: Windows; the check of this
 process's own code by raqib/wincode.py's own functions, as `raqib service check` asks it (a plain interpreter not
@@ -713,23 +726,30 @@ started with `-I`, or started with `-S`, is refused with the command to run the 
 service install`), refused in that command's own words; the place, `Raqib` under ProgramData, where it is already
 there, read by the runner's one reader and judged by the runner's own numbers as the runner judges a place it finds at
 its start - a reparse point, not a folder, an owner neither the system nor the administrators, a list not the closed
-one, a place that cannot be read, a ProgramData that is not a whole path of a drive are each refused with the runner's
+one, a place that cannot be read (a folder above it not there, error 3, among them: only the place's own name not
+there, error 2, is absence), a ProgramData that is not a whole path of a drive are each refused with the runner's
 number and words for it, and no service is made (X-8); a place not there is the runner's to make, at its first start,
 as the system; the install makes and changes nothing there; the manager opened to connect and to make (0x3; error 5:
 an administrator is needed); no service named RaqibWatch, asked with the reader's rights (0x5) - one there is never
 touched: Raqib's by its mark is to be removed first (a second install is so refused), one without the mark is said as
 not Raqib's, and a making answered 1073 or 1072 (marked for removal) is said; the command for this very process by the
 path the check judged - packed, `"<program>" service run`; a plain interpreter, `"<python>" -I -m raqib service run` -
-refused where the path holds a quote or a character that is not printable; the service made (CreateServiceW: a process
-of its own, automatic start, not delayed, error control 1, the system's account by naming none, shown as `Raqib
-watch`, its handle asked with 0x10017: the rights measured and the right to remove it again); its description,
-`raqib-service/1` and then words; its failure actions (started again after 5 s, 30 s and then every 300 s after an end
-that was no Stop, the count forgotten after an hour; X-5); and the failure flag, so that an exit of the service's own
-is such an end too. Where one of the three settings fails, what was made is removed again (DeleteService) and that is
-said, or that it could not be. `--no-start` ends there. Else StartServiceW and a wait on the state, asked every
-quarter second, until RUNNING or STOPPED, for at most 80 s (the runner's START_PENDING hints of 5 s and 60 s, T-2, and
-15 s more; X-4); then `raqib service status`'s own lines for it, written indented by two, and one RESULT line of the
-install.
+refused where the path holds a quote, a character that is not printable, or a percent sign (the system's documents say
+a service's command is kept in a form whose variables it expands, so the command could name another path than the one
+the check judged: read, not measured, and refused whole - Y-2); the service made (CreateServiceW: a process of its
+own, automatic start, not delayed, error control 1, the system's account by naming none, shown as `Raqib watch`, its
+handle asked with 0x10017: the rights measured before the build and the right to remove it again, which the field run
+showed an administrator is given); its description, `raqib-service/1` and then words; its failure actions (started
+again after 5 s, 30 s and then every 300 s after an end that was no Stop, the count forgotten after an hour; X-5); and
+the failure flag, so that an exit of the service's own is such an end too. Where one of the three settings fails,
+DeleteService is asked of what was made and that is said - it is gone once every handle on it is closed - or that it
+could not be, and then whether what is left carries the mark: with it, `raqib service remove` removes it; without it
+(the description itself failed), Raqib's remove will not touch it and a second install refuses it, so the system's own
+tools remove it (Y-4). `--no-start` ends there. Else StartServiceW and a wait on the state, asked every quarter
+second, until RUNNING or STOPPED, for at most 80 s (the runner's START_PENDING hints of 5 s and 60 s, T-2, and 15 s
+more; X-4); then `raqib service status`'s own lines for it, written indented by two, and one RESULT line of the
+install, the last line and the only one that begins `RESULT:`. A path or a command is written out as printable ASCII,
+as status writes what it reads (W-3).
 
 | Answer of install | Exit | Where |
 |---|---|---|
@@ -742,20 +762,24 @@ install.
 | `RESULT: installed, NOT ACTIVE as raqib service status reads it (<status's result>); it stays` | 1 | It ran or stopped and status does not answer ACTIVE: for a start the check refused, status's words for 15, and the system starts it again after 5 s, 30 s and then every 300 s. |
 | `RESULT: installed, STILL STARTING after 80 s; left as it is` | 1 | Still START_PENDING at the bound. |
 | `RESULT: installed and started, its state NOT KNOWN; it stays` | 1 | A call of the wait failed. |
+| `RESULT: NOT KNOWN what was made: a fault of its own; raqib service status says what is there` | 1 | A fault of the command itself after it began. |
+| any of the above, ending `; NOT KNOWN: a handle was not closed` | 1 | A CloseServiceHandle failed: no answer says done where the exit says 1 (Y-4). |
 | one line, nothing done | 2 | Not Windows; or `--purge` with install (refused by the command, exit 2). |
 
 **remove, in its order.** The manager opened to connect (0x1); the service opened with 0x10025 (to ask its state and
-its making, to stop it, to remove it): not there (1060) is `RESULT: nothing installed`, 0; its description read, and
-one without the mark is not touched: `RESULT: nothing touched: a service of the name is not Raqib's`, 1. Else a Stop:
-1062 (it does not run) is taken; 1052 (it is starting, and the system takes no Stop then) waits for it to leave
-START_PENDING, for at most 80 s, and asks again; then a wait for STOPPED, for at most 45 s (the runner's own 30 s for
-a stop, and 15 s more); DeleteService (1072, marked already, is taken); the handles closed; and the name asked for
-again with the reader's rights - 1060 is `RESULT: removed`, 0; still there is `RESULT: marked for removal, not yet
-gone`, 1 (it goes once every handle on it is closed). A call that fails, a service still starting or not stopped at
-its bound are said, nothing removed after them (`RESULT: NOT REMOVED: ...; left as it is` or `RESULT: NOT REMOVED,
-nothing touched`, 1). The record is never touched, and its place is said on every road: `Raqib` under ProgramData, its
-events in `.raqib\host\events.jsonl` there. `--purge` on Windows is refused, exit 2: not built. An update over a
-running service is: remove, then install (X-10).
+its making, to stop it, to remove it - the making asked on this one handle so that the service whose mark is read is
+the one stopped and removed; given an administrator in the field run): not there (1060) is `RESULT: nothing
+installed`, 0; its description read, and one without the mark is not touched: `RESULT: nothing touched: a service of
+the name is not Raqib's`, 1. Else a Stop: 1062 (it does not run) is taken; 1052 (it is starting, and the system takes
+no Stop then) waits for it to leave START_PENDING, for at most 80 s, and asks again; then a wait for STOPPED, for at
+most 45 s (the runner's own 30 s for a stop, and 15 s more); DeleteService (1072, marked already, is taken); the
+handles closed; and the name asked for again with the reader's rights - 1060 is `RESULT: removed`, 0; still there is
+`RESULT: marked for removal, not yet gone`, 1 (it goes once every handle on it is closed); a name that cannot be asked
+for again is `RESULT: removed by DeleteService, whether it is gone NOT KNOWN`, 1. A call that fails, a service still
+starting or not stopped at its bound are said, nothing removed after them (`RESULT: NOT REMOVED: ...; left as it is`
+or `RESULT: NOT REMOVED, nothing touched`, 1). The record is never touched, and its place is said on every road:
+`Raqib` under ProgramData, its events in `.raqib\host\events.jsonl` there. `--purge` on Windows is refused, exit 2:
+not built. An update over a running service is: remove, then install (X-10).
 
 **What they do not do.** They make and remove exactly one service, RaqibWatch with Raqib's mark, and change none that
 is there; they start no program themselves, write no file and read no registry; the place is read and never made; one
@@ -764,16 +788,16 @@ closed on every road. The install's check is run by the code it judges (N-2): an
 tree a user has already changed runs that code as himself, as on Linux (X-10). The failure actions and the flag are
 set and not yet read back by status (M12.4c2b2c).
 
-X54 (`tools/rig/check.py --service-install FILE`, X-7): FILE holds lines `key: value` - `refused-exit`,
-`refused-words` and `refused-status` of the install from the job's own Python and status asked after it;
-`install-exit`, `install-result` and `installed-status` of the install from the copy under Program Files and status
-asked after it by a user with no rights (`asked-by-administrator: no`); `remove-exit`, `remove-result` and
-`removed-status` of the remove and status after it. MET only where the first made nothing (exit 1, words holding
-`raqib service check: NOT the system's alone: `, status `RESULT: NOT INSTALLED`), the second ran (exit 0, `RESULT:
-installed and started: raqib service status answers ACTIVE`, status `RESULT: ACTIVE`) and the remove left nothing
-(exit 0, `RESULT: removed`, status `RESULT: NOT INSTALLED`). A byte-order mark before the first key is read past;
-MISSED with words for each thing not found, a file given and missing included; n/a where none was given. The job's
-wiring is the Table's.
+X54 (`tools/rig/check.py --service-install FILE`, X-7, Y-6; tools/rig/service_install.ps1): FILE holds lines `key:
+value` - `refused-exit`, `refused-words` and `refused-status` of the install from the job's own Python and status
+asked after it; `install-exit`, `install-result`, `installed-status` and `installed-command` of the install from the
+copy under Program Files and status asked after it by a user with no rights (`asked-by-administrator: no`);
+`remove-exit`, `remove-result` and `removed-status` of the remove and status after it. MET only where the first made
+nothing (exit 1, words holding `raqib service check: NOT the system's alone: `, status `RESULT: NOT INSTALLED`), the
+second ran (exit 0, `RESULT: installed and started: raqib service status answers ACTIVE`, status `RESULT: ACTIVE`, and
+status's own line of the command naming a path under Program Files) and the remove left nothing (exit 0, `RESULT:
+removed`, status `RESULT: NOT INSTALLED`). A byte-order mark before the first key is read past; MISSED with words for
+each thing not found, a file given and missing included; n/a where none was given.
 
 ## Windows: the check (`raqib service check`)
 

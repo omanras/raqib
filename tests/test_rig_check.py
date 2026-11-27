@@ -916,6 +916,16 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert "raqib-service/1 " in asked and "sc.exe description $name $mark" in asked
     assert "tools\\rig\\service_status.ps1 -Out $env:RUNNER_TEMP\\service-status" in windows
     assert "--service-status $env:RUNNER_TEMP\\service-status\\service-status.txt" in windows
+    # X-7, Y-6 (X54): Raqib's own install and remove asked by the job; status after each by a user with no rights
+    installs = (ROOT / "tools" / "rig" / "service_install.ps1").read_text(encoding="utf-8")
+    assert installs.isascii() and "pip install" not in installs and "taskkill" not in installs
+    assert "New-Service" not in installs and "sc.exe description" not in installs   # the install's own making
+    assert "-I -m raqib service $action" in installs and '"install"' in installs and '"remove"' in installs
+    assert "-m raqib service status" in installs and "New-LocalUser -Name $user" in installs
+    assert "Remove-LocalUser -Name $user" in installs and "S-1-5-32-544" in installs
+    assert all("%s: " % key in installs for key in check.INSTALL_KEYS)
+    assert "tools\\rig\\service_install.ps1 -Out $env:RUNNER_TEMP\\service-install" in windows
+    assert "--service-install $env:RUNNER_TEMP\\service-install\\service-install.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1629,7 +1639,9 @@ def installfile(**kw):
     refused = "  " + winservice.REFUSED_SAID % ("C:\\Users\\user\\rig\\python.exe", "as the code itself (K-2): ...")
     keys = {"asked-by-administrator": "no", "refused-exit": "1", "refused-words": refused.strip(),
             "refused-status": "RESULT: NOT INSTALLED", "install-exit": "0", "install-result": "RESULT: %s"
-            % wininstall.DONE, "installed-status": "RESULT: ACTIVE", "remove-exit": "0",
+            % wininstall.DONE, "installed-status": "RESULT: ACTIVE",
+            "installed-command": 'command: "C:\\Program Files\\RaqibRigInstall\\Py\\python.exe" -I -m raqib service'
+                                 ' run (as the service manager holds it)', "remove-exit": "0",
             "remove-result": "RESULT: %s" % wininstall.REMOVED, "removed-status": "RESULT: NOT INSTALLED"}
     keys.update(kw)
     return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
@@ -1674,6 +1686,11 @@ def test_x54_met_where_the_users_tree_made_nothing_the_copy_under_program_files_
                                                                     " gone, not RESULT: removed"),
     ({"removed-status": "RESULT: INSTALLED, NOT ACTIVE"}, "status after the remove: RESULT: INSTALLED, NOT ACTIVE,"
                                                           " not RESULT: NOT INSTALLED"),
+    # Y-6: which copy was installed - status's own line of the command, a path under Program Files
+    ({"installed-command": 'command: "C:\\Users\\user\\rig\\python.exe" -I -m raqib service run (as the service'
+                           ' manager holds it)'}, "the line kept is not status's own line of the command"),
+    ({"installed-command": '"C:\\Program Files\\R\\python.exe" -I -m raqib service run'},
+     "the line kept is not status's own line"),
 ] + [({key: None}, "no %s" % key) for key in check.INSTALL_KEYS])
 def test_x54_missed_for_each_thing_not_found(kw, said):
     state, words = x54(installfile(**kw))

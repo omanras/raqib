@@ -36,6 +36,9 @@
 # administrators' group and has it ask `raqib service status` with no service of the name, with the job's service
 # running and with one refused at its start; X53 says whether it was answered NOT INSTALLED, ACTIVE and installed
 # and not active with 15's words. The user, the services and the copy are removed by the run.
+# The install (ADR-0013 X-7, Y-6, M12.4c2b2b): tools/rig/service_install.ps1 asks Raqib's own install to install
+# from the job's own Python (the check refuses: nothing made), then from a copy under Program Files (made, started,
+# ACTIVE as a user with no rights reads it), then to remove it; X54 says whether each was so. All removed by the run.
 name: rig
 
 on:
@@ -116,6 +119,10 @@ jobs:
         if: always()
         shell: pwsh
         run: tools\rig\service_status.ps1 -Out $env:RUNNER_TEMP\service-status
+      - name: raqib service install and remove - refused from the job's own Python, installed from a copy in Program Files and running, removed (X54)
+        if: always()
+        shell: pwsh
+        run: tools\rig\service_install.ps1 -Out $env:RUNNER_TEMP\service-install
       - name: whose the code a service would run is, asked of a packed Raqib in Program Files and of one in the job's folder (X49; the packer is this job's, never Raqib's)
         if: always()
         shell: pwsh
@@ -137,7 +144,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-check-plain $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt --service-check-drive $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt --service-refused $env:RUNNER_TEMP\service-refused\service-refused.txt --service-status $env:RUNNER_TEMP\service-status\service-status.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-check-plain $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt --service-check-drive $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt --service-refused $env:RUNNER_TEMP\service-refused\service-refused.txt --service-status $env:RUNNER_TEMP\service-status\service-status.txt --service-install $env:RUNNER_TEMP\service-install\service-install.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -151,6 +158,7 @@ jobs:
           Copy-Item $env:RUNNER_TEMP\service-again rig-out\service-again -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-refused rig-out\service-refused -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-status rig-out\service-status -Recurse -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\service-install rig-out\service-install -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-check\service-check.txt rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt rig-out -ErrorAction SilentlyContinue
