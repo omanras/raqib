@@ -880,6 +880,11 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
         assert flag in asked
     assert "service check" in asked and "tools\\rig\\service_check.ps1" in windows
     assert "--service-check $env:RUNNER_TEMP\\service-check\\service-check.txt" in windows
+    # M-6 (X50): the plain interpreter's question needs no packer; it asks each interpreter with -I
+    plain = (ROOT / "tools" / "rig" / "service_check_plain.ps1").read_text(encoding="utf-8")
+    assert plain.isascii() and "pip install" not in plain and "PyInstaller" not in plain
+    assert "-I -m raqib service check" in plain and "tools\\rig\\service_check_plain.ps1" in windows
+    assert ("--service-check-plain $env:RUNNER_TEMP\\service-check-plain\\service-check-plain.txt" in windows)
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
