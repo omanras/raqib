@@ -5,6 +5,45 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.11.0 - 2026-11-27
+
+What is new:
+- `raqib service check` (Windows; ADR-0013 Amendments K and L). A service of Windows runs with the system's rights
+  whatever its command names, so before one is made to run Raqib, this command says whether the code it would run
+  is the system's alone: every file and folder of the packed program, and each folder above it up to the drive,
+  by the owners and access lists Windows gives. It changes nothing and needs no rights. Exit 0 with how many
+  names it checked, exit 1 with the first name refused and why, exit 2 where it cannot say (not Windows, or not
+  packed).
+- The rule is a list of what is allowed, written from what real machines gave. The code itself: owned by the
+  system, the administrators or the system's installer, and no one else given more than reading and executing.
+  A folder above: the same owners, and no one else given more than that and adding a file or a folder beside.
+  A link, a path that is not a plain drive path, a list that cannot be read whole: refused, never guessed.
+- Measured on GitHub's Windows machines, x64 and ARM64: a copy an administrator put under Program Files is
+  taken (about 150 names in under half a second), asked by an administrator or by a plain user; one file opened
+  to users, one file owned by a person's account, a junction inside, a copy at the drive's root, under
+  ProgramData or in the job's own folder, and a one-file packing are each refused with the name said.
+- The rig asks it at every run of a copy in Program Files and of one in the job's folder (X49).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing else changes for a watch, a window or the Linux service. The new check is asked only when a person
+  runs it.
+
+Not measured:
+- A Raqib run by a plain interpreter (installed with pip) is not checked yet: the command says so and exits 2,
+  never a pass. Its road is the next task; python.org's installer for all users was measured for it.
+- Nothing installs a service of Windows yet (`raqib service install` there is still to come), so nothing asks
+  the check before a service runs; a person does.
+- Not read by the check: rights a user holds apart from any list (backup and restore, taking ownership); the
+  packed runtime's own roads outside its folder, if a packer gives it any; the system's PATH; what a drive's
+  letter really names (a letter given to a folder reads as a drive of its own).
+- A machine joined to a domain, a removable or shared drive, Program Files with lists an administrator
+  changed, and a denying entry that still lets the asker read, on a real machine.
+
 ## 0.10.0 - 2026-11-27
 
 What is new:

@@ -712,8 +712,9 @@ def _parser():
                          " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
                          " no state, unreadable, or written more than two beats ago or in the future (silent)")
     sv = sub.add_parser("service", help="the host watch as a unit of the system's, Linux (systemd): install, remove"
-                                        " or say its status (M12.1, ADR-0013)")
-    sv.add_argument("action", choices=("install", "remove", "status", "run"),
+                                        " or say its status (M12.1, ADR-0013); Windows: run it as a service, or"
+                                        " check whose the code a service would run is")
+    sv.add_argument("action", choices=("install", "remove", "status", "run", "check"),
                     help="install (root): write raqib-watch.service, enable and start it, and say whether it is"
                          " active and as installed after 3 s; remove (root): stop, disable and remove it, the"
                          " record kept; with no file, a unit of the name systemd holds is exit 1; status:"
@@ -721,7 +722,12 @@ def _parser():
                          " installed, 3 not installed or not known); run (Windows, run by the system's service"
                          " manager only): the host watch as a service of Windows, its record in Raqib under"
                          " ProgramData, closed to all but the system and the administrators (ADR-0013 Amendment"
-                         " E; docs/specs/SERVICE.md); not started by the service manager, or not Windows: exit 2")
+                         " E; docs/specs/SERVICE.md); not started by the service manager, or not Windows: exit 2;"
+                         " check (Windows, Raqib packed with its own runtime; changes nothing, asks no right):"
+                         " whether the code a service would run is the system's alone, by the owners and lists"
+                         " of its folder, whole, and of each folder above it (exit 0 the system's alone, said by"
+                         " count, 1 not or not read, the name said, 2 not Windows or not packed; ADR-0013"
+                         " Amendment K)")
     sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
                                                             " started")
     sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"
@@ -1634,11 +1640,15 @@ def cmd_forward(args, out):
 
 
 def cmd_service(args, out):
-    """M12.1 (ADR-0013): raqib/service.py, imported here only; the watch does not know it. `run` (Amendment E,
-    M12.4a): raqib/winservice.py, imported here only, the runner of the host watch as a service of Windows."""
+    """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its WALK_MAX) only; the
+    watch does not know it. `run` (Amendment E, M12.4a): raqib/winservice.py, imported here only, the runner of the
+    host watch as a service of Windows."""
     if args.action == "run":
         from raqib import winservice
         return winservice.cli_run(args, out)
+    if args.action == "check":   # Amendment K (M12.4c1): raqib/wincode.py, imported here only
+        from raqib import wincode
+        return wincode.cli_check(args, out)
     from raqib import service
     try:
         return service.cli_run(args, out)

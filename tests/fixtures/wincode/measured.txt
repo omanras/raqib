@@ -1,0 +1,95 @@
+# Owners and access lists read on GitHub's Windows machines, through one handle on each name (CreateFileW with
+# backup semantics and open-reparse-point, GetSecurityInfo owner+list, then the system's own text for it). Every
+# line is WHOLE, as read. A user's own SID is replaced by a made-up one
+# (S-1-5-21-1004336348-1177238915-682003330-1001) and a user's folder name, in its long and its short form, by `user`; nothing else.
+# The long S-1-5-80-956008885-... is TrustedInstaller (the system's own installer). S-1-15-2-2 and the S-1-15-3-...
+# values are app-package and capability names; AC is all app packages. Format: PATH <newline> KIND; OWNER-AND-LIST
+
+## windows-latest (x64)
+
+C:\
+    a folder (attributes 0x16); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:AI(A;;0x1000a1;;;S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176)(A;;LC;;;AU)(A;OICIIO;SDGXGWGR;;;AU)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)
+C:\Program Files
+    a folder (attributes 0x11); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:PAI(A;;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;CIIO;GA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;;0x1301bf;;;SY)(A;OICIIO;GA;;;SY)(A;;0x1301bf;;;BA)(A;OICIIO;GA;;;BA)(A;;0x1200a9;;;BU)(A;OICIIO;GXGR;;;BU)(A;OICIIO;GA;;;CO)(A;;0x1200a9;;;AC)(A;OICIIO;GXGR;;;AC)(A;;0x1200a9;;;S-1-15-2-2)(A;OICIIO;GXGR;;;S-1-15-2-2)
+C:\Program Files\RaqibProbe8
+    a folder (attributes 0x10); O:BAD:AI(A;ID;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;CIIOID;GA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;ID;FA;;;SY)(A;OICIIOID;GA;;;SY)(A;ID;FA;;;BA)(A;OICIIOID;GA;;;BA)(A;ID;0x1200a9;;;BU)(A;OICIIOID;GXGR;;;BU)(A;OICIIOID;GA;;;CO)(A;ID;0x1200a9;;;AC)(A;OICIIOID;GXGR;;;AC)(A;ID;0x1200a9;;;S-1-15-2-2)(A;OICIIOID;GXGR;;;S-1-15-2-2)
+C:\Program Files\RaqibProbe8\raqib.exe
+    a file (attributes 0x20); O:BAD:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)(A;ID;0x1200a9;;;AC)(A;ID;0x1200a9;;;S-1-15-2-2)
+C:\Program Files\RaqibProbe8\_internal
+    a folder (attributes 0x10); O:BAD:AI(A;ID;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;CIIOID;GA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;ID;FA;;;SY)(A;OICIIOID;GA;;;SY)(A;ID;FA;;;BA)(A;OICIIOID;GA;;;BA)(A;ID;0x1200a9;;;BU)(A;OICIIOID;GXGR;;;BU)(A;OICIIOID;GA;;;CO)(A;ID;0x1200a9;;;AC)(A;OICIIOID;GXGR;;;AC)(A;ID;0x1200a9;;;S-1-15-2-2)(A;OICIIOID;GXGR;;;S-1-15-2-2)
+C:\Program Files\RaqibProbe8\_internal\_bz2.pyd
+    a file (attributes 0x20); O:BAD:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)(A;ID;0x1200a9;;;AC)(A;ID;0x1200a9;;;S-1-15-2-2)
+C:\Program Files\RaqibProbe8\_internal\raqib
+    a folder (attributes 0x10); O:BAD:AI(A;ID;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;CIIOID;GA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;ID;FA;;;SY)(A;OICIIOID;GA;;;SY)(A;ID;FA;;;BA)(A;OICIIOID;GA;;;BA)(A;ID;0x1200a9;;;BU)(A;OICIIOID;GXGR;;;BU)(A;OICIIOID;GA;;;CO)(A;ID;0x1200a9;;;AC)(A;OICIIOID;GXGR;;;AC)(A;ID;0x1200a9;;;S-1-15-2-2)(A;OICIIOID;GXGR;;;S-1-15-2-2)
+D:\
+    a folder (attributes 0x16); O:NSD:(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)(A;OICIIO;GA;;;CO)(A;OICI;0x1200a9;;;BU)(A;CI;LC;;;BU)(A;CIIO;DC;;;BU)(A;;0x1200a9;;;WD)
+C:\Users
+    a folder (attributes 0x11); O:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;;0x1200a9;;;BU)(A;OICIIO;GXGR;;;BU)(A;;0x1200a9;;;WD)(A;OICIIO;GXGR;;;WD)(A;;0x100021;;;S-1-15-3-65536-4045685566-1323397456-4055816110-285687253-194181-4019357623-1925838800-191844675)
+C:\Users\user
+    a folder (attributes 0x10); O:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;LA)(A;;0x100020;;;S-1-15-3-65536-599108337-2355189375-1353122160-3480128286-3345335107-485756383-4087318168-230526575)
+C:\Windows
+    a folder (attributes 0x10); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:PAI(A;;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;CIIO;GA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;;0x1301bf;;;SY)(A;OICIIO;GA;;;SY)(A;;0x1301bf;;;BA)(A;OICIIO;GA;;;BA)(A;;0x1200a9;;;BU)(A;OICIIO;GXGR;;;BU)(A;OICIIO;GA;;;CO)(A;;0x1200a9;;;AC)(A;OICIIO;GXGR;;;AC)(A;;0x1200a9;;;S-1-15-2-2)(A;OICIIO;GXGR;;;S-1-15-2-2)
+C:\Windows\System32
+    a folder (attributes 0x10); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:PAI(A;;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;CIIO;GA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;;0x1301bf;;;SY)(A;OICIIO;GA;;;SY)(A;;0x1301bf;;;BA)(A;OICIIO;GA;;;BA)(A;;0x1200a9;;;BU)(A;OICIIO;GXGR;;;BU)(A;OICIIO;GA;;;CO)(A;;0x1200a9;;;AC)(A;OICIIO;GXGR;;;AC)(A;;0x1200a9;;;S-1-15-2-2)(A;OICIIO;GXGR;;;S-1-15-2-2)
+C:\Windows\System32\kernel32.dll
+    a file (attributes 0x20); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:PAI(A;;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;;0x1200a9;;;BA)(A;;0x1200a9;;;SY)(A;;0x1200a9;;;BU)(A;;0x1200a9;;;AC)(A;;0x1200a9;;;S-1-15-2-2)
+C:\Windows\System32\sc.exe
+    a file (attributes 0x20); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:PAI(A;;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;;0x1200a9;;;BA)(A;;0x1200a9;;;SY)(A;;0x1200a9;;;BU)(A;;0x1200a9;;;AC)(A;;0x1200a9;;;S-1-15-2-2)
+C:\ProgramData
+    a folder (attributes 0x2012); O:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICIIO;GA;;;CO)(A;OICI;0x1200a9;;;BU)(A;CI;DCLCRPCR;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\x64\python.exe
+    a file (attributes 0x20); O:SYD:AI(A;ID;0x1301bf;;;AU)(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\x64
+    a folder (attributes 0x10); O:BAD:AI(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10
+    a folder (attributes 0x10); O:BAD:AI(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages
+    a folder (attributes 0x10); O:SYD:AI(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\os.py
+    a file (attributes 0x20); O:SYD:AI(A;ID;0x1301bf;;;AU)(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)
+C:\Users\user\AppData\Local
+    a folder (attributes 0x10); O:BAD:(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;LA)
+C:\Users\user\AppData\Local\Temp
+    a folder (attributes 0x10); O:BAD:(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;LA)
+C:\hostedtoolcache\windows\Python
+    a folder (attributes 0x10); O:BAD:AI(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+D:\a\raqib\raqib\raqib
+    a folder (attributes 0x10); O:BAD:(A;;FA;;;BA)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;SY)(A;OICIIOID;GA;;;CO)(A;OICIID;0x1200a9;;;BU)(A;CIID;LC;;;BU)(A;CIID;DC;;;BU)
+D:\a\raqib\raqib\raqib\cli.py
+    a file (attributes 0x20); O:BAD:(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)
+C:\RaqibProbe8-at-root   (a folder a plain user made at the drive's root)
+    a folder (attributes 0x10); O:S-1-5-21-1004336348-1177238915-682003330-1001D:AI(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\ProgramData\Raqib   (the place `raqib service run` makes closed, 0.9.0; read back in the field)
+    a folder (attributes 0x10); O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)
+
+## windows-11-arm (ARM64): only the lines that differ from x64
+
+C:\
+    a folder (attributes 0x16); O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:(A;;0x1000a1;;;S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176)(A;;LC;;;AU)(A;OICIIO;SDGXGWGR;;;AU)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)
+D:\
+    not opened: error 3
+C:\hostedtoolcache\windows\Python\3.12.10\arm64\python.exe
+    a file (attributes 0x20); O:SYD:(A;ID;0x1301bf;;;AU)(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\arm64
+    a folder (attributes 0x10); O:BAD:(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10
+    a folder (attributes 0x10); O:BAD:(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\arm64\Lib\site-packages
+    a folder (attributes 0x10); O:SYD:(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)
+C:\hostedtoolcache\windows\Python\3.12.10\arm64\Lib\os.py
+    a file (attributes 0x20); O:SYD:(A;ID;0x1301bf;;;AU)(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)
+
+# What a plain user (made for the run, not an administrator, removed after it) could do, the same on both machines:
+#   GitHub's Python (C:\hostedtoolcache\...): write beside the interpreter DONE; into site-packages DONE; into the
+#     raqib folder DONE
+#   C:\Program Files: write REFUSED; give it another name REFUSED
+#   C:\Program Files\RaqibProbe8 (a packed Raqib an administrator copied there): write beside the program REFUSED;
+#     into _internal REFUSED; to raqib.exe REFUSED; give the folder another name REFUSED; run raqib.exe DONE
+#   C:\ : make a folder at the root DONE (it is then his, with the list above)
+#
+# The rights words in these texts, as the file system means them (the letters are the directory service's):
+#   CC 0x1 read/list   DC 0x2 write/add file   LC 0x4 append/add folder   SW 0x8 read ext. attrs
+#   RP 0x10 write ext. attrs   WP 0x20 execute/traverse   DT 0x40 delete child   LO 0x80 read attrs
+#   CR 0x100 write attrs   SD 0x10000 delete   RC 0x20000 read control   WD 0x40000 write list   WO 0x80000 write owner
+#   GA 0x10000000  GX 0x20000000  GW 0x40000000  GR 0x80000000
+#   FA 0x1f01ff  FR 0x120089  FW 0x120116  FX 0x1200a0     (0x1301bf is `modify`; 0x1200a9 is read and execute)

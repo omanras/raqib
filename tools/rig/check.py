@@ -6,7 +6,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
                               [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
                               [--events-check FILE] [--packed FILE]
-                              [--service-run RUNFILE] [--service-events EVENTSFILE]
+                              [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
                               [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
@@ -56,6 +56,12 @@ number above 0 other than killed-pid, again-seconds from 0 to 90) and the events
 later run whose id ends with "-" and again-pid, its words naming an earlier run with no end and the pid killed-pid
 (AI-5: the end this job made, no other); a byte-order mark before the first key is read past; MISSED with words for
 each thing not found, a file given and missing included; n/a where neither file was given.
+--service-check: what the rig's Windows job kept of `raqib service check` (ADR-0013 K-8, M12.4c1): FILE holds lines
+`key: value` (system-exit, system-words: the check of the packed copy an administrator put in Program Files;
+open-exit, open-words: of the copy in the job's own folder). X49 MET only where the first is exit 0, its words the
+counts' sentence (names checked, folders and files under the program's folder, folders above it, adding up), and
+the second exit 1, its words naming a path of a drive and the role it was refused in; MISSED with words for each
+thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1287,6 +1293,57 @@ def read_service_again(runfile, events):
         return [(name, MISSED, "the service's run cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_CHECK_NAME = ("X49 `raqib service check` takes the packed copy in Program Files and refuses the copy in the"
+                      " job's own folder, naming the path and the role it refused")
+CHECK_KEYS = ("system-exit", "system-words", "open-exit", "open-words")
+CHECK_COUNTS = re.compile(r"checked (\d+) names, each the system's alone \(.*?\): under the program's folder, whole,"
+                          r" (\d+) folders and (\d+) files, .*?, and (\d+) folders above it to the drive's letter")
+CHECK_PATH = re.compile(r"[A-Za-z]:\\")
+CHECK_ROLES = ("as the code itself (K-2)", "as a folder above it (K-3)")   # raqib/wincode.py ROLE_CODE, ROLE_ABOVE
+
+
+def read_service_check(text):
+    """X49 (ADR-0013 K-8, M12.4c1): what the rig's Windows job kept of `raqib service check`, asked of the packed
+    copy an administrator put in Program Files (system-exit, system-words) and of the copy in the job's own folder
+    (open-exit, open-words). text: the FILE's text (None: not given). MET where the first is exit 0 with the counts'
+    sentence (CHECK_COUNTS, its numbers adding up) and the second exit 1 with words naming a path of a drive and one
+    of the two roles; a byte-order mark before the first key is read past. MISSED with words for each thing not
+    found; n/a where none was given. It never raises."""
+    name = SERVICE_CHECK_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no service check was given (--service-check)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the check's file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in CHECK_KEYS if key not in got]
+        taken, refused = got.get("system-words", ""), got.get("open-words", "")
+        if "system-exit" in got and _int(got["system-exit"]) != 0:
+            missing.append("the copy in Program Files: exit %s, not 0 (%s)" % (got["system-exit"][:20], taken[:200]))
+        counts = CHECK_COUNTS.search(taken)
+        if "system-words" in got and not counts:
+            missing.append("the copy in Program Files: its words hold no counts' sentence (%s)" % taken[:200])
+        elif counts:
+            total, folders, files, above = (int(n) for n in counts.groups())
+            if total != folders + files + above or total <= 0:
+                missing.append("the copy in Program Files: its counts do not add up (%d names, %d + %d + %d)" % (
+                    total, folders, files, above))
+        if "open-exit" in got and _int(got["open-exit"]) != 1:
+            missing.append("the copy in the job's folder: exit %s, not 1 (%s)" % (got["open-exit"][:20],
+                                                                                  refused[:200]))
+        if "open-words" in got:
+            if not CHECK_PATH.search(refused):
+                missing.append("the copy in the job's folder: its words name no path of a drive (%s)" % refused[:200])
+            if not any(role in refused for role in CHECK_ROLES):
+                missing.append("the copy in the job's folder: its words name no role (%s)" % refused[:200])
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "the copy in Program Files was taken (exit 0; %s names checked: %s folders, %s files,"
+                 " %s folders above); the copy in the job's folder was refused (exit 1): %s" % (
+                     total, folders, files, above, refused[:300]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the service check cannot be read (%s)" % type(exc).__name__)]
+
 SHORT_TOOL_NAME = ("X36 the stand-in's wget, a child that lives under a second, is a NET-TOOL finding of its tree that"
                    " names wget")
 
@@ -1503,6 +1560,7 @@ def main(argv=None):
     p.add_argument("--packed")
     p.add_argument("--service-run")
     p.add_argument("--service-events")
+    p.add_argument("--service-check")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1534,6 +1592,9 @@ def main(argv=None):
     # X48 (ADR-0013 AH-3): a file given and missing is the job's silence, MISSED; neither given, n/a
     given = [None if f is None else (text(f) if os.path.isfile(f) else "") for f in (a.service_run, a.service_events)]
     rows += read_service_again(*given)
+    # X49 (ADR-0013 K-8): a file given and missing is the job's silence, MISSED; not given, n/a
+    checked = a.service_check
+    rows += read_service_check(None if checked is None else (text(checked) if os.path.isfile(checked) else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

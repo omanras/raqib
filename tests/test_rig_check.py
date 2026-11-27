@@ -870,7 +870,16 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert 'cp -r "$RUNNER_TEMP/packed-home/.raqib/host" rig-out/packed-host' in linux           # the review's S3
     assert '--packed "$RUNNER_TEMP/packed.out"' in linux
     windows = rig[rig.index("\n  windows:"):rig.index("\n  linux:")]
-    assert "pyinstaller" not in windows.lower() and "--packed" not in windows
+    assert "--packed" not in windows   # X47's packed watch is Linux's
+    # K-8 (X49): the Windows job packs too, with the same pinned packer and pack.sh's arguments, for the check only
+    assert windows.lower().count("pyinstaller") == 1 and "pyinstaller==6.11.1" in windows
+    asked = (ROOT / "tools" / "rig" / "service_check.ps1").read_text(encoding="utf-8")
+    assert asked.isascii() and "pip install" not in asked and "--onefile" not in asked
+    for flag in ("--onedir", "--name %s " % check.PACKED_NAME, "--collect-all raqib", "--exclude-module tkinter",
+                 "--noconfirm"):
+        assert flag in asked
+    assert "service check" in asked and "tools\\rig\\service_check.ps1" in windows
+    assert "--service-check $env:RUNNER_TEMP\\service-check\\service-check.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1039,3 +1048,87 @@ def test_x48_main_reads_a_utf8_runfile_with_its_byte_order_mark(tmp_path, capsys
                 "--service-run", str(tmp_path / "run.txt"), "--service-events", str(tmp_path / "events.jsonl")])
     (line,) = [x for x in capsys.readouterr().out.splitlines() if "X48 " in x and not x.startswith("::")]
     assert line.split()[0] == check.MET
+
+
+# --- X49 (ADR-0013 K-8, M12.4c1): `raqib service check` takes the copy in Program Files, refuses the job's own -----
+def checked_line():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    return ("raqib service check: the code a service would run is the system's alone: %s"
+            % wincode.checked_words({"folders": 41, "files": 1180, "above": 2}))
+
+
+REFUSED_LINE = ("raqib service check: NOT the system's alone: D:\\, as a folder above it (K-3): owned by NS, not the"
+                " system (SY), the administrators (BA) or the system's installer")
+
+
+def checkfile(**kw):
+    keys = {"system-exit": "0", "system-words": checked_line(), "open-exit": "1", "open-words": REFUSED_LINE}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x49(text):
+    ((ident, state, words),) = check.read_service_check(text)
+    assert ident.startswith("X49 ") and ident == check.SERVICE_CHECK_NAME
+    return state, words
+
+
+def test_x49_met_where_program_files_was_taken_by_count_and_the_jobs_copy_refused_with_a_path_and_a_role():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    assert check.CHECK_ROLES == (wincode.ROLE_CODE, wincode.ROLE_ABOVE)   # the words are the check's own
+    state, words = x49(checkfile())
+    assert state == check.MET, words
+    assert "(exit 0; 1223 names checked: 41 folders, 1180 files, 2 folders above)" in words and REFUSED_LINE in words
+    assert x49(checkfile().replace("\n", "\r\n"))[0] == check.MET
+    assert x49("\ufeff" + checkfile())[0] == check.MET
+    code_role = REFUSED_LINE.replace("as a folder above it (K-3)", "as the code itself (K-2)")
+    assert x49(checkfile(**{"open-words": code_role}))[0] == check.MET
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"system-exit": "1"}, "the copy in Program Files: exit 1, not 0"),
+    ({"system-exit": "two"}, "the copy in Program Files: exit two, not 0"),
+    ({"system-words": "raqib service check: the code a service would run is the system's alone"},
+     "its words hold no counts' sentence"),
+    ({"open-exit": "0"}, "the copy in the job's folder: exit 0, not 1"),
+    ({"open-exit": "2"}, "the copy in the job's folder: exit 2, not 1"),
+    ({"open-words": "raqib service check: NOT the system's alone: somewhere, as a folder above it (K-3): no"},
+     "its words name no path of a drive"),
+    ({"open-words": "raqib service check: NOT the system's alone: D:\\, owned by NS"}, "its words name no role"),
+    ({"system-exit": None}, "no system-exit"), ({"system-words": None}, "no system-words"),
+    ({"open-exit": None}, "no open-exit"), ({"open-words": None}, "no open-words"),
+])
+def test_x49_missed_for_each_thing_not_found(kw, said):
+    state, words = x49(checkfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x49_missed_where_the_counts_do_not_add_up_or_the_file_is_empty():
+    state, words = x49(checkfile(**{"system-words": checked_line().replace("checked 1223 names", "checked 9 names")}))
+    assert state == check.MISSED and "its counts do not add up (9 names, 41 + 1180 + 2)" in words
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x49(text) == (check.MISSED, "missing: the check's file is empty or was not written (silence is a"
+                                           " finding)")
+
+
+def test_x49_n_a_where_none_was_given():
+    assert x49(None) == (check.SKIP, "no service check was given (--service-check)")
+
+
+def test_x49_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "check.txt").write_text(checkfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X49 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-check", str(tmp_path / "check.txt")]) == check.MET
+    assert row(["--service-check", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP

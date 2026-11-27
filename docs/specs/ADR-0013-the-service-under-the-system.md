@@ -507,3 +507,139 @@ The second reviewer's verdict is NEXT with no blocker. Ruled, and done by the Ta
   merged. Next: M12.4c (install, remove, status; the place's owner named in the call that makes it; a refusal
   where the code is not the system's alone; the start at boot; the system told to start it again; the event
   log).
+
+## Amendment K (the Table, 2026-11-27) - measured before M12.4c: whose the code is on Windows; the task in two
+A service of Windows runs as the system what its command names, so A-3's question stands there too: is the code
+it would run the system's alone? Measured before any ruling (the probe branch a42f5a6 and the two runs before
+it; GitHub's Windows machines, x64 and ARM64, the same on both unless said). Every owner and list was read
+through one handle on the name, whole; the texts are the fixtures of this task.
+- A service made, read, started, stopped and removed by the system's own calls, from a standard-library
+  process: done on both machines; a killed one was started again by the system after 5 to 6 s. Kept for M12.4c2.
+- The Python GitHub installs: every file and folder of it gives all signed-in users modify
+  (`(A;ID;0x1301bf;;;AU)`). A plain user wrote beside the interpreter, into its site folder and into the raqib
+  package there: DONE, all three.
+- A Raqib packed with its own runtime, copied into `C:\Program Files` by an administrator: owner BA, its list
+  inherited from Program Files (the system, the administrators and the system's installer hold everything;
+  users and app packages read and execute; the creator's entry is inherit-only). A plain user: write beside the
+  program, into its folder of modules, to the program itself, give its folder another name, give Program Files
+  another name - REFUSED, all five. The service ran from there.
+- `C:\` itself: owner the system's installer; signed-in users may add a folder to it (`(A;;LC;;;AU)`), and a
+  folder so added is the user's own, open to all users. A plain user made one: DONE. So the Linux rule (no folder
+  on the way writable by another) cannot be carried over word for word: it would refuse every path of Windows.
+- `C:\ProgramData`: users may add files and folders. `D:\` (x64 only): owner the network service. A user's own
+  folders: the user or the administrators as owner, and the user's own account holding everything.
+- K-1 (who the system is). Three names and no other: the system (SY), the administrators (BA), and the system's
+  installer (TrustedInstaller, by its whole SID). An administrator's own account, a domain's group, any other
+  service's name: not the system. FOR: one small set, each measured as the owner of what Windows itself runs.
+  MUST NOT TOUCH: OWNERS of the place (AG-1: SY or BA; the installer never makes the place).
+- K-2 (the code itself). Every file and folder the service would load from - the root and everything below it,
+  whole - is taken only where: it is no reparse point; its owner is of K-1; its list is there (no null list); and
+  every allowing entry for a name outside K-1 holds nothing but reading and executing (the bits 0x1, 0x8, 0x20,
+  0x80, 0x20000, 0x100000, and GR, GX). This is a list of what is allowed, not of what is refused: a bit not on
+  it refuses. An inherit-only entry counts as any other - what the folder would give to what is made in it later
+  is judged now - but for the creator's own (CO), which is taken only where it is inherit-only. Denying entries
+  give nothing and are not counted. An entry of any other kind, one with more than its six fields, an object or
+  inherited-object field that is not empty, a rights word this Raqib does not know: refused, with the entry
+  said. FOR: nobody but the system can change, add to, or take from what runs as the system.
+- K-3 (the folders above, up to the drive). Each folder above a root, the drive's own included, is taken only
+  where: it is a folder and no reparse point; its owner is of K-1; its list is there; and every allowing entry
+  for a name outside K-1 that is not inherit-only holds nothing but K-2's bits and these four: add a file (0x2),
+  add a folder (0x4), write extended attributes (0x10), write attributes (0x100). So nobody but the system may
+  delete or rename what the folder holds (0x40), delete or rename the folder (0x10000), or change its list or
+  owner (0x40000, 0x80000, GA); GW is refused too, not measured. Inherit-only entries are not read here: what a
+  folder on the way gives to new things beside the code is not the code. FOR: adding a thing beside does not
+  replace what is there, and that is what lets `C:\` and Program Files pass and refuses GitHub's Python, a
+  user's folders and `D:\`. MUST NOT TOUCH: the Linux rule and its walk (raqib/service.py), which stay.
+- K-4 (the path). A root is judged only where its whole path begins with a drive's letter (`X:\`) and holds no
+  `..`; any other form (a share, a device path) is refused. A name longer than the system opens plainly, a name
+  that cannot be opened or read, a folder that cannot be listed: refused as not read - what was not read is
+  never the system's. A walk past WALK_MAX names is refused (the Linux number).
+- K-5 (what is walked: the packed road only, now). Packed with its own runtime (`sys.frozen`): the root is the
+  folder the program file is in, whole. Where the runtime says its modules are unpacked somewhere outside that
+  folder (a one-file packing unpacks into a temporary folder at each start), refused: what would run is not
+  there to be read. A plain interpreter (not packed) is refused for now with its own words: its roads (the
+  interpreter's folder, a venv's base, every entry of sys.path, the lines of *.pth files) are not ruled before
+  an install for all users is measured - GitHub's own Python can only ever be refused.
+- K-6 (one command that changes nothing). `raqib service check` (Windows): says whether the code a service
+  would run is the system's alone - what it walked, by count, or the first name refused, in which of the two
+  roles (K-2, K-3), and why, with the owner or the entry as read. Exit 0 the system's alone; 1 not, or not
+  read; 2 not Windows, or not packed. It asks for no rights: a plain user can read these lists (measured). FOR:
+  an administrator, a package and the rig can ask before anything is installed, and M12.4c2's install asks the
+  same function.
+- K-7 (one reader). The name is read by the function that reads the place (one handle: its kind, owner and
+  list); there is no second copy of those calls in the tree.
+- K-8 (a claim on the rig, the Table's wiring after the task lands). The rig's Windows job packs Raqib, asks the
+  check of the copy an administrator put in Program Files and of the copy in the job's own folder, and keeps
+  both answers; X49 is MET where the first is 0 and the second is 1 with the name refused said.
+- K-9 (the task in two). M12.4c1: K-1 to K-7 and X49's reading. M12.4c2, after it: `raqib service install |
+  remove | status` on Windows by the system's own calls, the place made with its owner named (AG-5), the start
+  at boot, the system told to start it again, the command quoted, a refusal's number said with its words.
+- Not read by this check, and said so in the spec: rights a user holds apart from any list (backup and restore,
+  taking ownership, debugging programs); the system's PATH (this Raqib loads no library by a bare name that
+  System32 does not hold - to be pinned by a test in M12.4c2); the labels of a system list; what changes after
+  the check (it is a reading at one moment, as the Linux one is). Not measured: the kind of the drive (a
+  removable or shared drive, a volume with no lists - being measured, ruled with M12.4c2); a machine joined to a
+  domain; Program Files on a machine whose lists an administrator changed; an install of Python for all users.
+
+## Amendment L (the Table, 2026-11-27) - the review of M12.4c1 (docs/review/2026-11-27-M12.4c1.md) and its field run: lands
+The builder ended with STOP (bb5aa89): the work whole and inside its scope, the gate red on one test - the scan of
+tests/fixtures for a person's home folder refused the made-up name the Table had put in the measured file. The
+fault was the Table's; the name is now the placeholder that scan allows (ce2eac8), and the gate is green.
+The field's word on the branch (the probe branch 0a59bbc; GitHub's Windows machines, x64 and ARM64, the same on
+both; the branch's Raqib packed by the rig's packer): the check's tests passed there, the one real reading among
+them. A copy an administrator put under Program Files: taken, about 150 names and 2 folders above in under half a
+second; a plain user who asked got the same sentence and exit 0 (K-6's "measured" rests on this run, not on the
+runs before K). In that copy, one thing changed at a time and undone: a file users were let modify - refused, the
+file and the entry said; the same file, users given reading and executing by an entry of its own - taken; the file
+owned by the administrator's own account - refused; a junction inside - refused; a folder and a file an
+administrator added - taken, two names more. A copy in a folder an administrator made at the drive's root: refused
+(it inherits modify for signed-in users); under ProgramData: refused; in the job's own folder: refused (x64 `D:\`,
+its owner; ARM64 the job's folder on `C:\`, which signed-in users may delete); three folders deep under Program
+Files with a space in a name: taken, 5 folders above; packed as one file: refused, its modules under the user's
+temporary folder (K-5's sentence rests on this run); a plain interpreter: exit 2. X49 read MET on both.
+Measured since K (the probe branch cf233f5, 4de9aec): a volume that keeps no lists (FAT32, exFAT) reads as a fixed
+drive and gives every name the owner `WD` and a null list - refused by K-2 and K-3 as they are; a letter given to
+a folder (`subst`) reads as a fixed drive too, and only its device's name tells it apart (`\??\...` where a disk's
+is `\Device\...`); python.org's installer for all users put an interpreter under Program Files, owned by the
+system (the interpreter, its library, its site folder) and the administrators (its Scripts folder), Program
+Files' list inherited, no reparse point, its `-I` path wholly inside its folder; an administrator's copy of a
+Python there refused a plain user's six writes and one renaming, and the watch ran as a service from it by
+`python -I -m raqib service run`.
+The reviewer's verdict is NEXT: no text, path or listing found that is taken where K says refuse. Ruled, and done by
+the Table's hand:
+- L-1 (K-3 narrower; the review's reading of K against the fixture, b). K-3 allowed a name outside the system's to
+  write a folder's own extended attributes and attributes (0x10, 0x100) on a folder above. Nothing measured what
+  the two give, K's own reason covers adding a thing beside only, and K-2 says a bit not on the list refuses. They
+  are taken out: a folder above may give another name K-2's bits, add a file (0x2), add a folder (0x4), and no
+  other bit. `C:\ProgramData` is then refused as a folder above (it gives users both); `C:\` and Program Files
+  pass as before. FOR: no bit is allowed that was not measured as harmless. MUST NOT TOUCH: K-2.
+- L-2 (the words say what was judged; findings 1, 3, 4, 5, 9). The pass says that the creator's own inherit-only
+  entry was left apart, that above only the entries that apply to the folder itself were read, and "to the
+  drive's letter". The spec says the program's folder is judged as code and the folders above it begin above it;
+  the guide says what the field run gave and no more; K's sentence on a user's folders is corrected in the spec
+  (the profile read was the built-in administrator's, owned by the system; a plain user's profile was not read),
+  and K-1's "each measured as the owner of what Windows itself runs" is true of the system's installer only: the
+  system and the administrators were measured as owners of the system's folders and of what an administrator or
+  an installer put. A name or text said is cut at 200 (the entry that decides is said whole); the spec says the
+  shorter cuts inside.
+- L-3 (said as not read or not measured; findings 2, 12, 13, Q2, Q8). The packed runtime's own roads outside the
+  program's folder; what a drive's letter names (refused with the install: the device's name must be a disk's -
+  M12.4c2); the order below the root is the file system's; a file the system itself marks as a reparse point; a
+  denying entry that still lets the asker read (the one tried took reading from the asker, and was refused as
+  not read).
+- L-4 (small, by hand; findings 6, 7, 10, Q11). An error's number said is the system's own where there is one; the
+  test of "nothing at import" takes only a docstring as a bare expression and reads every call inside an
+  assignment; the command's help and docstring say the Windows actions and who imports the Linux module.
+- L-5 (the builder's questions, kept as built). A packed runtime that does not say where its modules are: refused
+  (Q1). Two names of one folder that differ only in case, a name ending in a dot or a space, a device's name, a
+  path past 259 characters, a flag, a rights form or a list flag not known, a short form of the modules' folder:
+  each refused, none repaired (Q3, Q4, Q5, Q7, Q9). Breadth first below the root (Q8). Three sentences left as
+  they were stay true (Q11). E5 ran on both machines in the field run, and on x64 at every gate (Q12).
+- L-6 (the rig, K-8; Q10). The rig's Windows job packs with the same pinned packer and pack.sh's arguments
+  (tools/rig/service_check.ps1), for the check only; the test that held "no packer in the Windows job" now holds
+  one pinned packer there and no packed watch. X49 asks only for a path of a drive and a role in the refusal: on
+  x64 it is `D:\`, on ARM64 the job's own folder.
+- L-7 (lands, and next). M12.4c1 lands as 0.11.0 after the gate and the rig on the commit to be merged. Next:
+  M12.4c1b, a plain interpreter's road (its folder whole, a venv's base and the venv, every entry of the `-I`
+  path, the lines of *.pth files as on Linux), on the measurements above; then M12.4c2 (K-9), with the drive's
+  device and the test of the libraries loaded by name.
