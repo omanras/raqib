@@ -1164,13 +1164,14 @@ SERVICE_AGAIN_NAME = ("X48 a service of Windows ended from outside runs again wi
                       " the one before ended without its end")
 AGAIN_SECONDS_MAX = 90     # AH-3: the seconds from the end from outside to the service running again, at most
 UNENDED_KIND = "watch-unended"   # raqib/host.py UNENDED: the hole of a watch started over a state left unfinished
-UNENDED_RUN = re.compile(r"the host watch before this one, run (\S+) \(pid ")
+UNENDED_RUN = re.compile(r"the host watch before this one, run (\S+) \(pid ([^\s)]+)\)")   # AI-5: the run, its pid
+BOM = "\ufeff"   # AI-5: a byte-order mark (Windows PowerShell 5.1's -Encoding UTF8) before the first key
 
 
 def _run_lines(text):
     """The `key: value` lines of a RUNFILE, as a dict (the last of a key wins); other lines are not read."""
     got = {}
-    for line in str(text).replace("\r\n", "\n").splitlines():
+    for line in str(text).lstrip(BOM).replace("\r\n", "\n").splitlines():
         key, sep, value = line.partition(":")
         if sep and key.strip():
             got[key.strip().lower()] = value.strip()
@@ -1188,15 +1189,17 @@ def read_service_again(runfile, events):
     """X48 (ADR-0013 AH-3, M12.4b): what the rig's Windows job kept of the service it ended from outside. runfile:
     the RUNFILE's text (None: not given); events: the place's events.jsonl (None: not given). MET where the RUNFILE
     says the service ran again (state Running, again-pid a number other than killed-pid, again-seconds at most
-    AGAIN_SECONDS_MAX) and the events hold two runs of a host watch, the later with the hole UNENDED_KIND whose words
-    name the earlier run's id, the earlier with no end. MISSED with words for each thing not found; n/a where neither
+    AGAIN_SECONDS_MAX, not negative; again-pid above 0) and the events hold two runs of a host watch, the later with
+    the hole UNENDED_KIND whose words name the earlier run's id, the earlier with no end, tied to the end the job
+    made (AI-5): the hole's pid is killed-pid and the later run's id ends with "-" and again-pid. A byte-order mark
+    before the first key of either file is read past. MISSED with words for each thing not found; n/a where neither
     was given. It never raises."""
     name = SERVICE_AGAIN_NAME
     try:
         if runfile is None and events is None:
             return [(name, SKIP, "no service run was given (--service-run, --service-events)")]
-        missing = []
-        if runfile is None or not str(runfile).strip():
+        missing, killed, again = [], None, None
+        if runfile is None or not str(runfile).lstrip(BOM).strip():
             missing.append("the run's file is %s (silence is a finding)" % ("not given" if runfile is None else "empty"))
         else:
             run = _run_lines(runfile)
@@ -1207,6 +1210,8 @@ def read_service_again(runfile, events):
                 missing.append("no killed-pid that is a number (%s)" % (run.get("killed-pid") or "not said"))
             if again is None:
                 missing.append("no again-pid that is a number (%s)" % (run.get("again-pid") or "not said"))
+            elif again <= 0:
+                missing.append("again-pid %d is no process's" % again)
             elif again == killed:
                 missing.append("again-pid %d is killed-pid: the service did not run again with another pid" % again)
             try:
@@ -1217,13 +1222,15 @@ def read_service_again(runfile, events):
                 missing.append("no again-seconds that is a number (%s)" % (seconds or "not said"))
             elif secs > AGAIN_SECONDS_MAX:
                 missing.append("again-seconds %g is over %d" % (secs, AGAIN_SECONDS_MAX))
+            elif secs < 0:
+                missing.append("again-seconds %g is before the end from outside" % secs)
         found = None
         if events is None or not str(events).strip():
             missing.append("the place's events are %s (silence is a finding)" % (
                 "not given" if events is None else "empty"))
         else:
             runs, order = {}, []
-            for line in str(events).replace("\r\n", "\n").splitlines():
+            for line in str(events).lstrip(BOM).replace("\r\n", "\n").splitlines():
                 try:
                     e = json.loads(line)
                 except ValueError:
@@ -1239,28 +1246,37 @@ def read_service_again(runfile, events):
                 hole = e.get("hole")
                 if e.get("kind") == "hole" and isinstance(hole, dict) and hole.get("kind") == UNENDED_KIND:
                     m = UNENDED_RUN.search(str(e.get("summary") or ""))
-                    runs[w["run"]]["named"].append(m.group(1) if m else None)
+                    runs[w["run"]]["named"].append((m.group(1), m.group(2)) if m else (None, None))
             if len(order) < 2:
                 missing.append("the events hold %d run(s) of a host watch, not two" % len(order))
             saying = [r for r in order if runs[r]["named"]]
             if not saying:
                 missing.append("no run's events hold the hole %s" % UNENDED_KIND)
+            def kill(later, pid):   # AI-5: the pair the job's end made: the hole's pid killed, the later run again's
+                return pid == str(killed) and str(later).endswith("-%s" % again)
             for later in saying:
-                for earlier in runs[later]["named"]:
-                    if earlier in runs and order.index(earlier) < order.index(later) and not runs[earlier]["end"]:
+                for earlier, pid in runs[later]["named"]:
+                    if earlier in runs and order.index(earlier) < order.index(later) and not runs[earlier]["end"] \
+                            and kill(later, pid) and found is None:
                         found = (earlier, later)
             if saying and found is None:
                 why = []
                 for later in saying:
-                    for earlier in runs[later]["named"]:
+                    for earlier, pid in runs[later]["named"]:
                         if earlier is None:
                             why.append("the hole of run %s names no run" % later)
                         elif earlier not in runs or order.index(earlier) > order.index(later):
                             why.append("the hole of run %s names run %s, which is not an earlier run of the events"
                                        % (later, earlier))
-                        else:
+                        elif runs[earlier]["end"]:
                             why.append("the hole of run %s names run %s, which has an end" % (later, earlier))
-                missing.append("; ".join(why))
+                        else:   # the RUNFILE's own words say a killed-pid or an again-pid that is not there
+                            if killed is not None and pid != str(killed):
+                                why.append("the hole of run %s names pid %s, not killed-pid %s" % (later, pid, killed))
+                            if again is not None and not str(later).endswith("-%s" % again):
+                                why.append("run %s is not the one again-pid %s wrote" % (later, again))
+                if why:
+                    missing.append("; ".join(why))
         if missing:
             return [(name, MISSED, "missing: %s" % "; ".join(missing))]
         return [(name, MET, "the service ran again: pid %d, not %d, Running %g s after its end from outside; run %s"

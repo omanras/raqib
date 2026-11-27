@@ -474,34 +474,56 @@ def host_dir(home=None):
 
 
 HELD_NONE, HELD_FRESH, HELD_STALE, HELD_UNPARSED = "none", "fresh", "stale", "unparsed"   # holder()'s answers
+HELD_UNREADABLE = "unreadable"   # ADR-0013 AI-2: holder()'s answer for a state that is there and cannot be read
 UNENDED = "watch-unended"   # ADR-0013 AH-1: the hole of a watch started over a state another watch left unfinished
+UNREADABLE_BEFORE = "watch-state-unreadable"   # AI-2: the hole of a watch started over a state it cannot read
+HELD_SAID_MAX = 40   # AI-3: a run, a pid or a heartbeat read from a state is said cut to this many characters
+WHY_SAID_MAX = 80    # AI-2: why a state cannot be read, said cut to this many characters
+
+
+def _held_said(value):
+    """AI-3: a value another process wrote into a state, as printable text cut to HELD_SAID_MAX (marked "...")."""
+    text = str(value)
+    return _safe(text[:HELD_SAID_MAX]) + ("..." if len(text) > HELD_SAID_MAX else "")
 
 
 def holder(home=None, wall=None, path=None):
-    """ADR-0013 AH-1, AH-2 (M12.4b): whether another host watch holds a
-    home, read from the state it writes (path, or the state file of home's
-    host folder) at wall() (default time.time), by the test every watch
-    makes at its start (D-6). It never raises and writes nothing. A dict:
-    held HELD_NONE where there is no state that can be read, where the
-    state is finished, or where it is no host watch's (why says which);
-    HELD_UNPARSED where it is unfinished and its heartbeat cannot be
-    parsed; else HELD_FRESH where the heartbeat's age is at most the
-    state's own stale_after_seconds (STALE_SECONDS where it holds no
-    number) and HELD_STALE where it is older. run, pid and heartbeat are
-    as the state holds them (None where there is no state's); beat is the
-    heartbeat in seconds of the wall clock, age the seconds from it to
-    wall(), stale the staleness read."""
+    """ADR-0013 AH-1, AH-2, AI-2 (M12.4b): whether another host watch holds
+    a home, read from the state it writes (path, or the state file of
+    home's host folder) at wall() (default time.time), by the test every
+    watch makes at its start (D-6). It writes nothing. A dict: held
+    HELD_NONE where there is no state (why "no state"), where the state is
+    finished, or where it is an object of no host watch's (why says
+    which); HELD_UNREADABLE where the file is there and cannot be read as
+    a state (an open refused, not ASCII, not JSON - empty or torn - or a
+    JSON that is no object; why and error say which); HELD_UNPARSED where
+    it is unfinished and its heartbeat cannot be parsed; else HELD_FRESH
+    where the heartbeat's age is at most the state's own
+    stale_after_seconds (STALE_SECONDS where it holds no number; a number
+    is taken as read: zero, negative, NaN or Infinity, or an integer too
+    large for a float) and HELD_STALE where it is older. run, pid and
+    heartbeat are as the state holds them (None where there is no state's);
+    beat is the heartbeat in seconds of the wall clock, age the seconds
+    from it to wall() (negative for a heartbeat ahead of that clock),
+    stale the staleness read. What it raises (finding 2): what json.load
+    raises past ValueError - RecursionError for a state nested deeper than
+    the parser's limit, MemoryError - and what wall() raises; nothing
+    else. Those are not caught: the refusal is D-6's as it was."""
     path = path or os.path.join(host_dir(home), ROUNDS_NAME) + STATE_SUFFIX
-    got = {"held": HELD_NONE, "why": None, "path": path, "run": None, "pid": None, "heartbeat": None, "beat": None,
-           "age": None, "stale": None}
+    got = {"held": HELD_NONE, "why": None, "error": None, "path": path, "run": None, "pid": None, "heartbeat": None,
+           "beat": None, "age": None, "stale": None}
     try:
         with open(path, encoding="ascii") as f:
             other = json.load(f)
     except FileNotFoundError:
         return dict(got, why="no state")
     except (OSError, ValueError) as exc:
-        return dict(got, why="the state cannot be read (%s)" % type(exc).__name__)
-    if not (isinstance(other, dict) and other.get("mode") == HOST):
+        error = "%s: %s" % (type(exc).__name__, _safe(getattr(exc, "strerror", None) or exc)[:WHY_SAID_MAX])
+        return dict(got, held=HELD_UNREADABLE, error=error, why="the state cannot be read (%s)" % error)
+    if not isinstance(other, dict):
+        error = "it holds a JSON %s, not an object" % type(other).__name__
+        return dict(got, held=HELD_UNREADABLE, error=error, why="the state cannot be read (%s)" % error)
+    if other.get("mode") != HOST:
         return dict(got, why="the state is no host watch's")
     got.update(run=other.get("run"), pid=other.get("pid"), heartbeat=other.get("heartbeat"))
     if other.get("finished"):
@@ -517,6 +539,31 @@ def holder(home=None, wall=None, path=None):
     fresh = age <= stale
     return dict(got, held=HELD_FRESH if fresh else HELD_STALE, beat=beat, age=age, stale=stale,
                 why="unfinished, its heartbeat %s" % ("fresh" if fresh else "stale"))
+
+
+def before_hole(held, state_path):
+    """ADR-0013 AH-1, AI-2, AI-3: what a watch says at its start of the state the watch before left, from what
+    holder() read at the refusal (_refuse_second): (kind, detail) of one hole, or None (no state, a finished one,
+    one of no host watch's; a fresh or unparsed one is refused before). The run, the pid and the heartbeat are cut
+    to HELD_SAID_MAX; the seconds are the age the refusal's own reading took: before this start, or ahead of its
+    clock (never said as 0 s)."""
+    if held.get("held") == HELD_UNREADABLE:
+        return (UNREADABLE_BEFORE, "the state %s is there and cannot be read as a state (%s): whether the host watch"
+                " before this one ended without its end, and how long no watch of this home watched, is not known;"
+                " this watch takes the home" % (state_path, held.get("error")))
+    if held.get("held") != HELD_STALE:
+        return None
+    age = held["age"]
+    if age >= 0:
+        when, gap = "%d s before this start" % int(age), "for those %d s no watch of this home is known to have" \
+            " watched" % int(age)
+    else:
+        when, gap = "%g s ahead of this start's clock" % -age, "how long no watch of this home watched is not known"
+    return (UNENDED, "the host watch before this one, run %s (pid %s), left its state %s unfinished with its heartbeat"
+            " stale: its last heartbeat %s, %s; a watch that ended without its end (ended from outside, a crash or a"
+            " power loss) or one that stopped writing its state: %s" % (
+                _held_said(held["run"]), _held_said(held["pid"]), state_path, _held_said(held["heartbeat"]), when,
+                gap))
 
 
 def iso(moment):
@@ -2440,12 +2487,22 @@ class HostWatch:
         except OSError as exc:
             raise HostError("cannot create %s: %s" % (self.dir, exc.strerror or exc))
         self.seq = self.first_seq = self._resume()
-        if held["held"] == HELD_STALE:   # ADR-0013 AH-1: the watch before ended without its end; once, at the start
-            self._hole(self.t0, UNENDED, "the host watch before this one, run %s (pid %s), ended without its end:"
-                       " its state %s was left unfinished, its last heartbeat %s; nothing was watched from this home"
-                       " for %d s, from that heartbeat to this start (a watch ended from outside, a crash or a power"
-                       " loss)" % (_safe(held["run"]), _safe(held["pid"]), self.state_path,
-                                   _safe(str(held["heartbeat"])[:40]), int(max(held["age"], 0))))
+        before = before_hole(held, self.state_path)   # ADR-0013 AH-1, AI-2, AI-3: once, at the start
+        if before is not None:
+            self._hole(self.t0, *before)
+            self._before_said()
+
+    def _before_said(self):
+        """ADR-0013 AI-1: the hole of the watch before (and the holes made before it at this start) written to the
+        events file now, before register() writes this watch's state over the one that named the run before: the
+        watch's start line first, then the holes, lines of this run's chain as any other (eventlog's own start and
+        ledgers; a later pass finds them said and writes them no more). Only on a start that found such a state."""
+        log, now = self.events, self.t0
+        if log is None:
+            return
+        self._events_guard(now, lambda: self._events_problems(now, self._first(log.start(self.at(self.t0), now))))
+        self._events_guard(now, lambda: self._events_problems(now, log.ledgers(
+            iso(self.wall()), holes=self.holes, record=self.rounds_path)))
 
     # --- one host watch per home; seqs continue (C-2) ----------------------------
 
@@ -2462,7 +2519,7 @@ class HostWatch:
             raise HostError("the host watch state %s holds a heartbeat that cannot be parsed (%s) and is not"
                             " finished: another raqib watch --host may be watching this home; one host watch per"
                             " home; stop it, or remove that file once no host watch runs" % (
-                                self.state_path, _safe(str(held["heartbeat"])[:40])))
+                                self.state_path, _safe(str(held["heartbeat"])[:HELD_SAID_MAX])))
         if held["held"] == HELD_FRESH:
             raise HostError("another raqib watch --host is watching this home (run %s, pid %s, heartbeat %.0f s"
                             " ago): one host watch per home; stop it first (%s)" % (
@@ -6200,6 +6257,9 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
         out.write("raqib watch --host: %s\n" % _safe(line))
     for note in watcher.notes:
         out.write("raqib watch --host: hole: %s\n" % _safe(note))
+    for h in watcher.holes:   # ADR-0013 AI-3: the state the watch before left, said with the start's holes
+        if h.get("kind") in (UNENDED, UNREADABLE_BEFORE):
+            out.write("raqib watch --host: hole: %s: %s\n" % (h["kind"], _safe(h["detail"])))
     if no_page:   # M12.1p (ADR-0013 AC-1): no listener; the state and the registry row say null, not a port
         server = None
         watcher.url = None

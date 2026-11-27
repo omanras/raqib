@@ -75,8 +75,9 @@ class Machine:
         self.watch_fn, self.on_text, self.real_interrupt = watch, on_text, real_interrupt
         self.log, self.handler, self.interrupted, self.release = [], None, threading.Event(), threading.Event()
         # M12.4b (AH-2): the state of the watch before is a made-up file under tmp/place (the place's stand-in for
-        # raqib/host.py's holder()); its wall clock and its monotonic one are `now`, moved by pause() alone
-        self.now, self.on_pause = NOW, None
+        # raqib/host.py's holder()); its waiting clock is `now`, moved by pause() alone; its wall clock is `now` and
+        # wall_ahead (M12.4b REDO, AI-4: two values where a test sets it); held_fn/held_error: a stand-in's answer
+        self.now, self.on_pause, self.wall_ahead, self.held_fn, self.held_error = NOW, None, 0.0, None, None
 
     def platform(self):
         return self.os
@@ -155,7 +156,11 @@ class Machine:
     def held(self, place):
         assert place == PLACE
         self.log.append(("held", place))
-        return host.holder(home=str(self.tmp / "place"), wall=lambda: self.now)
+        if self.held_error is not None:
+            raise self.held_error
+        if self.held_fn is not None:
+            return self.held_fn(self)
+        return host.holder(home=str(self.tmp / "place"), wall=lambda: self.now + self.wall_ahead)
 
     def clock(self):
         return self.now
@@ -785,7 +790,7 @@ def before(machine, age, stale=30, **fields):
     import json
     path = machine.tmp / "place" / ".raqib" / "host" / "rounds.jsonl.watch.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    beat = host.iso(datetime.datetime.fromtimestamp(machine.now - age, datetime.timezone.utc))
+    beat = host.iso(datetime.datetime.fromtimestamp(machine.now + machine.wall_ahead - age, datetime.timezone.utc))
     state = dict({"mode": "host", "run": "20261103T115950Z-4242", "pid": 4242, "heartbeat": beat,
                   "stale_after_seconds": stale, "finished": None}, **fields)
     path.write_text(json.dumps(state), encoding="ascii")
@@ -889,3 +894,120 @@ def test_ah2_the_real_objects_wait_returns_at_once_on_a_stop_and_reads_the_watch
     got = real.held(str(tmp_path))
     assert got["held"] == host.HELD_NONE and got["path"] == os.path.join(str(tmp_path), ".raqib", "host",
                                                                          "rounds.jsonl.watch.json")
+
+
+# --- M12.4b REDO (ADR-0013 AI-4): the wait within its bound whatever holder returns; its two lines -----------------
+WAITED = "raqib service run: the wait for the state of the watch before lasted "
+
+
+def waited(machine):
+    (line,) = [x for x in machine.text().splitlines() if x.startswith(WAITED)]
+    return line[len(WAITED):]
+
+
+def fresh(stale, age):
+    return lambda machine: {"held": host.HELD_FRESH, "run": "r", "pid": 7, "heartbeat": "h", "stale": stale,
+                            "age": age, "why": "unfinished, its heartbeat fresh"}
+
+
+@pytest.mark.parametrize("stale, age, up_to", [
+    (10 ** 400, 1.0, 60.0), (0, 0.0, 1.0), (-5, 1.0, 1.0), (float("nan"), 1.0, 60.0), (float("inf"), 1.0, 60.0),
+    (True, 1.0, 60.0), ("30", 1.0, 60.0), (None, 1.0, 60.0), (30, float("nan"), 60.0), (30, None, 60.0),
+    (30, -100.0, 60.0), (30, float("inf"), 1.0), (float("inf"), float("inf"), 60.0),
+])
+def test_ai4_whatever_holder_returns_the_wait_is_within_the_bound_and_ends_by_the_runners_road(
+        tmp_path, monkeypatch, stale, age, up_to):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    m.held_fn = fresh(stale, age)                                 # held fresh at every ask: the whole wait
+    code, _ = served(m, monkeypatch)
+    assert code == 2 and m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_WATCH_REFUSED)
+    assert "waiting up to %.1f s" % up_to in m.text() and sum(pauses(m)) == up_to <= winservice.HELD_WAIT_MAX
+    assert all(0 < x <= winservice.HELD_ASK_EVERY for x in pauses(m))
+    assert waited(m) == "%.1f s and ended: still fresh after the whole wait (a living watch, or a heartbeat ahead" \
+        " of the clock: the watch's own refusal stands)" % up_to
+    assert "watch ended" in m.log
+
+
+def test_ai4_a_staleness_of_10_400_read_from_a_real_state_waits_60_s_and_the_watch_starts(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, 1, stale=10 ** 400)
+    code, _ = served(m, monkeypatch)
+    assert "waiting up to 60.0 s" in m.text() and "stale after %s s" % ("1" + "0" * 39) in m.text() and code == 2
+    assert winservice._number_said(10 ** 5000) == "a number too long to say"   # past str()'s digits: no exception
+
+
+def test_ai4_the_line_before_gives_the_age_as_read_ahead_of_the_clock_where_it_is(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, -100)                                               # its heartbeat 100 s ahead of the wall clock
+    served(m, monkeypatch)
+    (line,) = [x for x in m.text().splitlines() if WAITING in x]
+    assert "heartbeat 100 s ahead of this clock, stale after 30 s" in line and "0 s ago" not in line
+    assert "waiting up to 60.0 s" in line
+
+
+@pytest.mark.parametrize("change, how", [
+    (lambda m: before(m, 31), "stale (the watch says the watch before as a hole)"),
+    (lambda m: before(m, 1, finished="2026-11-03T12:00:03.000Z"), "finished (the watch before wrote its end)"),
+    (lambda m: before(m, 1).unlink(), "gone (the state was removed; the watch before's end is not known)"),
+    (lambda m: before(m, 1).write_bytes(b""), "the state cannot be read (the watch says so as a hole)"),
+    (lambda m: before(m, 1, heartbeat="garbled"), "its heartbeat cannot be parsed (the watch refuses it)"),
+    (lambda m: before(m, 1, mode="project"), "no longer held (none: the state is no host watch's)"),
+])
+def test_ai4_the_line_after_the_wait_says_how_long_and_how_it_ended_a_state_that_changes_during_it(
+        tmp_path, monkeypatch, change, how):
+    m = Machine(tmp_path, place=thing())
+    before(m, 4)
+    asked = []
+
+    def at_the_third(machine):
+        asked.append(1)
+        if len(asked) == 3:
+            change(machine)
+    m.on_pause = at_the_third
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0] * 3 and waited(m) == "3.0 s and ended: %s" % how
+    text = m.text().splitlines()
+    assert [i for i, x in enumerate(text) if WAITING in x][0] < [i for i, x in enumerate(text) if WAITED in x][0]
+    assert kinds(m, "watch")                                      # then the watch, whatever the ending
+
+
+def test_ai4_the_endings_tied_to_holders_words_and_a_stop_and_still_fresh(tmp_path, monkeypatch):
+    assert set(winservice.ENDED_SAID) == {host.HELD_STALE, host.HELD_UNPARSED, host.HELD_UNREADABLE}
+    gone = host.holder(home=str(tmp_path / "none"))
+    assert winservice._ended_said(gone["held"], gone["why"]).startswith("gone ")
+    m = Machine(tmp_path, place=thing())
+    before(m, 4)
+    m.on_pause = lambda machine: machine.handler(CONTROL_STOP) if len(pauses(machine)) == 2 else None
+    served(m, monkeypatch)
+    assert waited(m) == "1.0 s and ended: a Stop: no watch is begun" and not kinds(m, "watch")
+
+
+def test_ai4_a_wait_whose_last_pause_is_a_fraction_of_a_second(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
+    before(m, 29.5)                                               # 30 - 29.5 + 1 = 1.5 s
+    m.on_pause = lambda machine: before(machine, 0.5)             # a living watch: still fresh at every ask
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0, 0.5] and m.now == NOW + 1.5 and "waiting up to 1.5 s" in m.text()
+    assert waited(m).startswith("1.5 s and ended: still fresh")
+
+
+def test_ai4_an_exception_out_of_system_held_is_stopped_with_the_runners_own_number(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.held_error = RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+    served(m, monkeypatch)
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_RUNNER_FAILED) and not kinds(m, "watch")
+    m = Machine(tmp_path / "later", place=thing())
+    (tmp_path / "later").mkdir()
+    before(m, 4)
+    m.on_pause = lambda machine: setattr(machine, "held_error", OSError(5, "Access is denied"))
+    served(m, monkeypatch)
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_RUNNER_FAILED) and not kinds(m, "watch")
+
+
+def test_ai4_the_wait_is_measured_on_the_waiting_clock_not_the_wall_clock(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    m.wall_ahead = 10 ** 6                                        # the wall clock and the waiting clock: two values
+    before(m, 4)
+    served(m, monkeypatch)
+    assert pauses(m) == [1.0] * 27 and m.now == NOW + 27 and "heartbeat 4 s ago" in m.text()
+    assert waited(m) == "27.0 s and ended: stale (the watch says the watch before as a hole)"

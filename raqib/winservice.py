@@ -36,21 +36,25 @@ text file. Each refusal, a watch that ended without being asked, an exception ou
 runner's own is STOPPED with the system's service-specific exit and a number of its own, EXIT_BASE + n (AF-3; the
 list: EXIT_WORDS, docs/specs/SERVICE.md).
 
-The watch before (ADR-0013 AH-2, M12.4b): after RUNNING and before the watch, the runner asks raqib/host.py's
-holder() whether another host watch's state still holds the place (unfinished, its heartbeat fresh: a watch ended
-from outside leaves such a state). Where it does, one line of the text file says so and the runner waits for that
-heartbeat to go stale - the state's own staleness less its age, plus one second, never more than HELD_WAIT_MAX -
-asking again every HELD_ASK_EVERY; then it starts the watch, which says the watch before as a hole of its own
-(AH-1). A Stop during the wait ends it at once: no watch is begun, the system is told 0. A state still fresh after
-the wait is a living watch: the watch's own refusal stands (20). Not held, stale, or a heartbeat that cannot be
-parsed: no wait and no line (the watch refuses the last itself, D-6).
+The watch before (ADR-0013 AH-2, AI-4, M12.4b): after RUNNING and before the watch, the runner asks
+raqib/host.py's holder() whether another host watch's state still holds the place (unfinished, its heartbeat
+fresh: a watch ended from outside leaves such a state). Where it does, one line of the text file says so, with the
+heartbeat's age as read (ahead of the clock where it is), and the runner waits for that heartbeat to go stale - the
+state's own staleness less its age, plus one second, never more than HELD_WAIT_MAX whatever numbers the state holds
+- asking again every HELD_ASK_EVERY, on the system's waiting clock; then one line says how long the wait lasted and
+how it ended (stale, finished, gone, cannot be read, its heartbeat unparsed, still fresh, or a Stop), and it starts
+the watch, which says the watch before as a hole of its own (AH-1). A Stop during the wait ends it at once: no watch
+is begun, the system is told 0. A state still fresh after the wait is a living watch: the watch's own refusal stands
+(20). Not held, stale, one that cannot be read, or a heartbeat that cannot be parsed: no wait and no line (the watch
+says the first two as holes and refuses the last itself, D-6).
 
 Every call of the system (the platform, the environment, the dispatcher, the handler's registration, the status,
 the interrupt, the place's making and its one read, the text file's beginning, the state of the watch before, the
-clock and the wait, and the watch's own entry) goes through one object, System; a test hands its own, so no test needs Windows, a service manager or ProgramData.
-ctypes is imported inside System, at its first call of Windows, never at the module's import. Nothing runs at
-import. The standard library only; no program is started; no network. One folder is made, the place; one name is
-read, the place's.
+clock and the wait, and the watch's own entry) goes through one object, System; a test hands its own, so no test
+needs Windows, a service manager or ProgramData. ctypes is imported inside System, at its first call of Windows,
+never at the module's import. Nothing runs at import. The standard library only; no program is started; no network.
+One folder is made, the place; two names are read: the place's, and the state of the watch before inside it (its
+host folder's rounds.jsonl.watch.json, through holder(), which writes nothing).
 """
 from __future__ import annotations
 
@@ -347,6 +351,58 @@ def _say(text):
 def _printable(value):
     """A value read from a state, as one short line of printable text."""
     return "".join(c if c.isprintable() else "?" for c in str(value))[:80]
+
+
+def _seconds(value):
+    """AI-4: a number read from a state as a float the wait can use, or None: a boolean, a text, NaN, or an integer
+    too large for a float (10**400) is no such number. Infinity is kept (the bound holds it)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        value = float(value)
+    except (OverflowError, ValueError):
+        return None
+    return value if value == value else None
+
+
+def _number_said(value):
+    """A number read from a state as it was read: %g where it is a float the wait can use, else printable, cut."""
+    got = _seconds(value)
+    return "%g" % got if got is not None else _read_said(value)
+
+
+def _read_said(value):
+    try:
+        return _printable(value)[:40]
+    except ValueError:   # an integer past str()'s digits
+        return "a number too long to say"
+
+
+def _age_said(value):
+    """AI-4: the heartbeat's age as read: so many s ago, or so many s ahead of the clock (never 0 s ago for it)."""
+    got = _seconds(value)
+    if got is None:
+        return "of an age that is no number (%s)" % _read_said(value)
+    if got < 0:
+        return "%g s ahead of this clock" % -got
+    return "%.0f s ago" % got if got < 1e15 else "%g s ago" % got
+
+
+ENDED_SAID = {"stale": "stale (the watch says the watch before as a hole)",
+              "unparsed": "its heartbeat cannot be parsed (the watch refuses it)",
+              "unreadable": "the state cannot be read (the watch says so as a hole)"}
+
+
+def _ended_said(held, why):
+    """AI-4: how a wait ended that was no longer held fresh, from holder()'s answer: stale, finished, gone, cannot
+    be read; else what holder said (raqib/host.py's words, "no state" and "the state is finished", tied by a test)."""
+    if held in ENDED_SAID:
+        return ENDED_SAID[held]
+    if why == "no state":
+        return "gone (the state was removed; the watch before's end is not known)"
+    if why == "the state is finished":
+        return "finished (the watch before wrote its end)"
+    return "no longer held (%s: %s)" % (_printable(held)[:20], _printable(why)[:80])
 
 
 def _drive_path(text):
@@ -674,29 +730,43 @@ class Runner:
         self._finish()
 
     def _wait_for(self, place):
-        """AH-2: where the state of another host watch still holds the place, one line, then a wait of the state's
-        own staleness less its age plus one second (at most HELD_WAIT_MAX), asked again every HELD_ASK_EVERY, until
-        it is no longer held fresh, the wait is over, or a Stop comes (at once: the watch is then not begun)."""
+        """AH-2, AI-4: where the state of another host watch still holds the place, one line (the age as read,
+        ahead of the clock where it is), then a wait of the state's own staleness less its age plus one second, at
+        most HELD_WAIT_MAX whatever numbers the state holds, asked again every HELD_ASK_EVERY (the last pause the
+        part of a second left), measured on the system's waiting clock, until it is no longer held fresh, the wait
+        is over, or a Stop comes (at once: the watch is then not begun); then one line: how long it lasted and how
+        it ended. An exception out of System.held is the runner's own (23)."""
         if self.stop_asked.is_set():
             return
         held = self.system.held(place)
-        if held.get("held") != HELD_FRESH:
+        if not isinstance(held, dict) or held.get("held") != HELD_FRESH:
             return
-        wait = min(max(held["stale"] - held["age"], 0) + 1.0, HELD_WAIT_MAX)
-        self._note("another host watch's state still holds the place (run %s, pid %s, heartbeat %.0f s ago, stale"
-                   " after %g s): it was ended without its end, or it still watches; waiting up to %.1f s for it to"
-                   " go stale, asked again every %g s, then the watch" % (
-                       _printable(held.get("run")), _printable(held.get("pid")), max(held["age"], 0), held["stale"],
-                       wait, HELD_ASK_EVERY))
+        stale, age = _seconds(held.get("stale")), _seconds(held.get("age"))
+        rest = None if stale is None or age is None else stale - age
+        wait = HELD_WAIT_MAX if rest is None or rest != rest else min(max(rest, 0.0) + 1.0, HELD_WAIT_MAX)
+        self._note("another host watch's state still holds the place (run %s, pid %s, heartbeat %s, stale after %s"
+                   " s): it was ended without its end, or it still watches; waiting up to %.1f s for it to go stale,"
+                   " asked again every %g s, then the watch" % (
+                       _printable(held.get("run")), _printable(held.get("pid")), _age_said(held.get("age")),
+                       _number_said(held.get("stale")), wait, HELD_ASK_EVERY))
         began = self.system.clock()
+        how = "still fresh after the whole wait (a living watch, or a heartbeat ahead of the clock: the watch's own" \
+              " refusal stands)"
         while True:
             left = wait - (self.system.clock() - began)
-            if left <= 0:
-                return
+            if not left > 0:
+                break
             if self.system.pause(min(HELD_ASK_EVERY, left), self.stop_asked):
-                return          # a Stop: _watch() begins nothing
-            if self.system.held(place).get("held") != HELD_FRESH:
-                return
+                how = "a Stop: no watch is begun"
+                break
+            held = self.system.held(place)
+            got = held.get("held") if isinstance(held, dict) else None
+            if got != HELD_FRESH:
+                how = _ended_said(got, held.get("why") if isinstance(held, dict) else None)
+                break
+        lasted = self.system.clock() - began
+        self._note("the wait for the state of the watch before lasted %.1f s and ended: %s" % (
+            lasted if lasted == lasted else 0.0, how))
 
     def _finish(self):
         """The end of the watch's call: its exit decided, its trace and the runner's last line written. Once -
