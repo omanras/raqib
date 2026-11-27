@@ -92,6 +92,7 @@ RAQIB_LOADS = {
     ("raqib/tray.py", "_BoxApi.__init__", "WinDLL"),
     ("raqib/tray.py", "_Api.__init__", "WinDLL"),
     ("raqib/ui.py", "Kernel32.__init__", "WinDLL"),
+    ("raqib/wininstall.py", "System._win", "WinDLL"),
     ("raqib/winmanager.py", "System._win", "WinDLL"),
     ("raqib/winservice.py", "System._win", "WinDLL"),
 }
@@ -1185,6 +1186,7 @@ raqib/tray.py _BoxApi.__init__ WinDLL 1
 raqib/ui.py Kernel32.__init__ WinDLL 1
 raqib/wincode.py _plain exec 6
 raqib/wincode.py plain_words exec 4
+raqib/wininstall.py System._win WinDLL 1
 raqib/winmanager.py System._win WinDLL 1
 raqib/winservice.py System._win WinDLL 2
 """)
@@ -1284,6 +1286,8 @@ STATEMENTS = (
      "user32 = ctypes.WinDLL('user32', use_last_error=True)"),
     ('raqib/ui.py', 'Kernel32.__init__',
      "k = ctypes.WinDLL('kernel32', use_last_error=True)"),
+    ('raqib/wininstall.py', 'System._win',
+     "adv = ctypes.WinDLL('advapi32', use_last_error=True)"),
     ('raqib/winmanager.py', 'System._win',
      "adv = ctypes.WinDLL('advapi32', use_last_error=True)"),
     ('raqib/winservice.py', 'System._win',
@@ -1359,6 +1363,10 @@ CTYPES_IMPORTS = (
      'from ctypes import wintypes'),
     ('raqib/ui.py', 'Kernel32.__init__',
      'import ctypes'),
+    ('raqib/wininstall.py', 'System._win',
+     'from ctypes import wintypes'),
+    ('raqib/wininstall.py', 'System._win',
+     'import ctypes'),
     ('raqib/winmanager.py', 'System._win',
      'from ctypes import wintypes'),
     ('raqib/winmanager.py', 'System._win',
@@ -1375,6 +1383,10 @@ CTYPES_BOUND = (
      'self.ctypes, self.w = (ctypes, w)'),
     ('raqib/ui.py', 'Kernel32.__init__',
      'self.ctypes, self.wintypes = (ctypes, wintypes)'),
+    ('raqib/wininstall.py', 'System._win',
+     'self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, status=SERVICE_STATUS_PROCESS, cont'
+     'rol=SERVICE_STATUS, description=SERVICE_DESCRIPTIONW, action=SC_ACTION, failure=SERVICE_FAILURE_ACTIONSW,'
+     ' flag=SERVICE_FAILURE_ACTIONS_FLAG)'),
     ('raqib/winmanager.py', 'System._win',
      'self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, status=SERVICE_STATUS_PROCESS, conf'
      'ig=QUERY_SERVICE_CONFIGW, description=SERVICE_DESCRIPTIONW)'),
@@ -1429,6 +1441,7 @@ raqib/hostwin.py Api.__init__ fn 12
 raqib/hostwin.py probe hasattr 1
 raqib/tray.py _Api.__init__ fn 23
 raqib/ui.py Kernel32.__init__ self.k= 1
+raqib/wininstall.py System._win types.SimpleNamespace(adv=) 1
 raqib/winmanager.py System._win types.SimpleNamespace(adv=) 1
 raqib/winservice.py System._win types.SimpleNamespace(adv=) 1
 raqib/winservice.py System._win types.SimpleNamespace(k32=) 1

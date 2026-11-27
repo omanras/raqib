@@ -318,13 +318,19 @@ SERVICE_ROWS = [
     "aded from any place, or running) or gives no answer; it says how many paths of which kinds it che"
     "cked; after the reload, a unit not as installed is not started (exit 1); over Raqib's own unit it"
     " restarts it; 3 s after the start it asks systemctl, and a unit not active or not as installed th"
-    "en is exit 1; `--no-start`: neither enabled nor started; exit 1 where systemctl failed |",
+    "en is exit 1; `--no-start`: neither enabled nor started; exit 1 where systemctl failed"
+    # M12.4c2b2b (ADR-0013 Amendment X): install on Windows, by the service manager's own calls
+    "; on Windows, as an administrator (a prompt opened as administrator), by the service manager's own calls (ADR-0013 Amendment X): it asks `raqib service check`'s check of its own code first and makes nothing from a tree it refuses, nor where `C:\\ProgramData\\Raqib` is there and the service would refuse it at its start, nor over a service named `RaqibWatch` that is there (Raqib's own: remove it first); it makes `RaqibWatch` for the program or interpreter that runs it (a plain interpreter with `-I`), its description beginning with `raqib-service/1`, started again by the system after 5 s, 30 s and then every 300 s after an end that was no Stop, starts it, waits at most 80 s for it to run or stop, and says `raqib service status`'s lines; exit 0 made and ACTIVE (`--no-start`: made, not started), 1 refused or failed, what was made said"
+    " |",
     "| `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one w"
     "ithout Raqib's mark is not touched: exit 2), and have systemd forget a failed state of it (`syste"
     "mctl reset-failed`, said); the record under `/var/lib/raqib` stays and its path is said, unless `"
     "--purge` removes that folder too, and only it; with no unit file, exit 0 only where systemd holds"
     " no unit of the name (LoadState not-found, ActiveState inactive or failed), else exit 1, nothing "
-    "touched and nothing purged |",
+    "touched and nothing purged"
+    # M12.4c2b2b (ADR-0013 Amendment X): remove on Windows
+    "; on Windows, as an administrator: stop and remove the service `RaqibWatch` only where it carries Raqib's mark (one without it is not touched: exit 1), then ask for the name again; exit 0 gone or nothing installed, 1 not yet gone, refused or failed; the record in `C:\\ProgramData\\Raqib` stays; `--purge` on Windows is not built (exit 2)"
+    " |",
     "| `raqib service status` | no rights needed: on Linux, installed, enabled and active by systemctl'"
     "s own words, whether it is as installed (the file's whole text the one Raqib writes, loaded from t"
     "hat file, no drop-in, not changed since it was loaded), the restarts, and the last result where no"
@@ -420,8 +426,7 @@ SERVICE_STATUS_WINDOWS = [
     "It asks the system's service manager, by its own calls, about the service named `RaqibWatch`, and"
     " takes it as Raqib's only where its description begins with `raqib-service/1`; a service of the name"
     " without that mark is said as not Raqib's (exit 3).",
-    "Raqib does not install a service of Windows yet, so a service an administrator made with that mark"
-    " is read as Raqib's: make it from a copy the check takes.",
+    "A service an administrator made with that mark is read as Raqib's, whether `raqib service install` made it or he did by hand.",   # M12.4c2b2b: Raqib's install is built
     "Where the service stopped with the runner's own number, status says the number in the runner's"
     " words, and for 15 that what was refused is in `service.txt` in `C:\\ProgramData\\Raqib`.",
     "A start may be long: the runner checks its own code before the watch and tells the system to wait up"
@@ -433,6 +438,17 @@ SERVICE_STATUS_WINDOWS = [
     " Windows job asks it at every run (X53).",
 ]
 GUIDE_NEW += SERVICE_STATUS_WINDOWS
+# ADR-0013 Amendment X (M12.4c2b2b): the paragraph of `raqib service install | remove` on Windows, after status's
+SERVICE_INSTALL_WINDOWS = [
+    'In a prompt opened as administrator, `raqib service install` installs the service on Windows from a copy the check takes.',
+    'It asks the check of its own code first, as `raqib service check` asks it, and makes nothing from a tree it refuses; where `C:\\ProgramData\\Raqib` is there it reads it as the service would at its start and makes nothing where the service would refuse it, and it makes no folder itself (the service makes it at its first start).',
+    "It makes the service `RaqibWatch` for the program or interpreter that runs the install (a plain interpreter asked with `-I`, as the service runs it), starts it, waits for it to run or stop and says `raqib service status`'s lines.",
+    "A service of the name that is there is never changed: remove Raqib's first; to update, remove and then install.",
+    "`raqib service remove` stops and removes Raqib's service only, asks for the name again, and leaves the record.",
+    'What each call needs was measured on real Windows (x64 and ARM64) before this was built; the rig reads the install and the remove as X54 once its Windows job runs them.',
+    'Not measured: a start at boot, a machine joined to a domain.',
+]
+GUIDE_NEW += SERVICE_INSTALL_WINDOWS
 # M17.1 (ADR-0015 V-1 to V-3, Amendment A): the number, what a move of it means, the changelog and the update
 # steps, in the guide's Install and watch
 VERSION_NUMBER = [

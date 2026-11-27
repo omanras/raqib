@@ -2193,7 +2193,9 @@ collector that is slow, down or refusing never delays or loses a capture
   change is refused before it watches, not before it runs - and it is a
   reading of the tree as its own code tells it (N-2): a tree a user already
   changed may make its own check pass, and is then watched. Keeping such a
-  tree from running as the system at all is the install's, not built yet. A
+  tree from being made a service at all is the install's (Amendment X,
+  X-10): it asks the check before it makes anything, though it too is run
+  by the code it judges. A
   service made by hand from such a tree, which watched until now, stops
   watching with this version and says why. The service's own code runs with
   the system's rights, so a defect in it is the system's. Measured
@@ -2337,6 +2339,32 @@ start, the failure actions or the failure flag (not measured as a caller
   by an administrator and by a user outside the administrators' group, who
   were answered the same (the probe 23d544f); the rig asks it at every run
   (X53).
+- **What the install and the remove of the service on Windows do (`raqib
+  service install | remove`; ADR-0013 Amendment X).** On Windows an
+  administrator's `raqib service install` makes the service RaqibWatch by
+  the service manager's own calls, with the rights measured and no more;
+  `raqib service remove` stops and removes it. The install asks the check of
+  its own code before anything is made, and makes nothing from a tree it
+  refuses: that is where a tree that is not the system's alone is kept from
+  being made a service at all. It is still run by the code it judges (N-2):
+  an administrator who runs it from a tree a user has already changed runs
+  that code as himself, and such a tree may make its own check pass. It
+  reads the place under ProgramData where it is there and makes nothing
+  where the runner would refuse it; it makes no place (the runner makes it,
+  closed, at its first start, as the system). It never changes a service of
+  the name that is there - Raqib's is to be removed first, another's is not
+  touched - and remove touches only a service that carries Raqib's mark; the
+  mark is a word anybody who may make a service can write, so remove removes
+  a service so marked whoever made it, as an administrator may with the
+  system's own tools. The service is told to be started again by the system
+  after an end that was no Stop, and after an exit of its own, so a watch
+  ended from outside is back in seconds and a start the check refuses is
+  asked again and said each time (silence is an alarm); a Stop is not such
+  an end. Neither command starts a program itself, writes a file or reads
+  the registry. Measured before it was built: each call by an administrator,
+  and what a user with no rights reads back (x64 and ARM64). Not measured: a
+  start at boot, a machine joined to a domain; the commands themselves are
+  read on real Windows by the rig as X54 once its job runs them.
 
 ## 7. Platform
 

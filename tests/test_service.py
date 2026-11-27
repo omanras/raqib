@@ -203,9 +203,10 @@ def run(fake, *argv):
     old = sys.stderr
     sys.stderr = err
     platform = sys.platform
-    if platform == "win32" and "status" in argv:
-        # The made-up machine is Linux's. On a Windows test machine `status` would else go to the real service
-        # manager (ADR-0013 V-4, W-5): the command is turned by sys.platform, so the test says which it asks.
+    if platform == "win32" and {"install", "remove", "status"} & set(argv):
+        # The made-up machine is Linux's. On a Windows test machine `install`, `remove` and `status` would else go
+        # to the real service manager (ADR-0013 V-4, W-5, X-2): the command is turned by sys.platform, so the test
+        # says which it asks.
         sys.platform = "linux"
     try:
         saved = service.System
