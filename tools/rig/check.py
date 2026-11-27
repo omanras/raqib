@@ -8,7 +8,8 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--events-check FILE] [--packed FILE]
                               [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
                               [--service-check-plain FILE] [--service-check-drive FILE] [--service-refused FILE]
-                              [--service-status FILE] [--service-install FILE] [--summary FILE] [--strict]
+                              [--service-status FILE] [--service-install FILE] [--service-point FILE]
+                              [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
@@ -102,6 +103,13 @@ holding the check's refusal, status `RESULT: NOT INSTALLED`), the second ran (ex
 a service made and ACTIVE, status `RESULT: ACTIVE` asked by no administrator) and the remove left nothing (exit 0,
 `RESULT: removed`, status `RESULT: NOT INSTALLED`); a byte-order mark before the first key is read past; MISSED with
 words for each thing not found, a file given and missing included; n/a where none was given.
+--service-point: what the rig's Windows job kept of a service started twice over a check made long (ADR-0013 ZB,
+M12.4c2b3): FILE holds lines `key: value` (names-added; point-highest, point-wait, point-state, point-text: the start
+by the system's own call - the highest check-point the system said while it started and the wait said with it, the
+state after, the runner's line of the check; net-exit, net-seconds, net-state, net-text: the start by `net start`).
+X55 MET only where a check-point above 0 was read while it started, with the wait the runner tells (60000 ms), the
+service then Running with the pass in its text file, and `net start` ended with 0, the service Running with the
+pass; MISSED with words for each thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1635,6 +1643,67 @@ def read_service_install(text):
         return [(name, MISSED, "the service install cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_POINT_NAME = ("X55 a service of Windows whose check of its own code walks for seconds raises its check-point"
+                      " while it starts, and `net start`, which waits for the start, ends with 0 and the service"
+                      " running")
+POINT_KEYS = ("names-added", "point-highest", "point-wait", "point-state", "point-text", "net-exit", "net-seconds",
+              "net-state", "net-text")
+POINT_WAIT = 60000              # raqib/winservice.py CHECK_WAIT_HINT, told with every raising (ADR-0013 ZB-1)
+POINT_SECONDS = re.compile(r"\(ADR-0013 T-1\), in (\d+\.\d+) s: ")   # the check's seconds in the runner's line
+
+
+def read_service_point(text):
+    """X55 (ADR-0013 ZB, M12.4c2b3): what the rig's Windows job kept of one service, made from a Python copied under
+    Program Files with empty files added so that its check walks for seconds, started by the system's own call
+    (point-*) and then by `net start` (net-*). text: the FILE's text (None: not given). MET where the system said a
+    check-point above 0 while it started, with the wait POINT_WAIT, and the service then ran with the pass in its text
+    file (the runner's own line, RUNNER_SAID with TAKEN_SAID and its counts); and `net start` ended with 0, the
+    service Running, its text file's line the pass. A check shorter than it takes to raise once is said as that. A
+    byte-order mark before the first key is read past. MISSED with words for each thing not found; n/a where none was
+    given. It never raises."""
+    name = SERVICE_POINT_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no service started over a long check was given (--service-point)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the service's file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in POINT_KEYS if key not in got]
+        first, second = got.get("point-text", ""), got.get("net-text", "")
+        for key, value, of in (("point-text", first, "the system's own call"), ("net-text", second, "net start")):
+            if key not in got:
+                continue
+            if RUNNER_SAID not in value:
+                missing.append("started by %s: its text file's line is not the runner's own (it does not say %s)" % (
+                    of, RUNNER_SAID))
+            elif not (TAKEN_SAID in value and (CHECK_COUNTS.search(value) or CHECK_PLAIN_COUNTS.search(value))):
+                missing.append("started by %s: its text file's line holds no pass's sentence with its counts (%s)" % (
+                    of, value[:200]))
+        for key, of in (("point-state", "the system's own call"), ("net-state", "net start")):
+            if key in got and got[key] != "Running":
+                missing.append("started by %s: its state is %s, not Running" % (of, got[key][:40] or "not said"))
+        high = _number(got.get("point-highest"))
+        if "point-highest" in got and (high is None or high < 1):
+            lasted = POINT_SECONDS.search(first)
+            missing.append("no check-point above 0 was read while it started (read: %s; the check's line says it"
+                           " lasted %s s - a check shorter than the time between two raisings raises none)" % (
+                               got["point-highest"][:40] or "nothing", lasted.group(1) if lasted else "not said"))
+        if "point-wait" in got and high is not None and high >= 1 and _number(got["point-wait"]) != POINT_WAIT:
+            missing.append("the wait the system said with the raised check-point is %s, not %d ms" % (
+                got["point-wait"][:40] or "not said", POINT_WAIT))
+        if "net-exit" in got and _number(got["net-exit"]) != 0:
+            missing.append("net start ended with %s, not 0" % (got["net-exit"][:40] or "nothing said"))
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        lasted = POINT_SECONDS.search(first)
+        return [(name, MET, "while it started the system said a check-point up to %d with a wait of %d ms (the check"
+                 " lasted %s s over %s names added); net start ended with 0 after %s s, the service running: %s" % (
+                     high, POINT_WAIT, lasted.group(1) if lasted else "not said", got["names-added"][:20],
+                     got["net-seconds"][:20], second[:200]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the service started over a long check cannot be read (%s)" % type(exc).__name__)]
+
+
 def read_check(text, name, counts_said, option, second):
     """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
     names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
@@ -1894,6 +1963,7 @@ def main(argv=None):
     p.add_argument("--service-refused")
     p.add_argument("--service-status")
     p.add_argument("--service-install")
+    p.add_argument("--service-point")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1945,6 +2015,9 @@ def main(argv=None):
     # X54 (ADR-0013 X-7): the same, of `raqib service install | remove` and status asked after each
     made = a.service_install
     rows += read_service_install(None if made is None else (text(made) if os.path.isfile(made) else ""))
+    # X55 (ADR-0013 ZB): the same, of one service started twice over a check made long
+    pointed = a.service_point
+    rows += read_service_point(None if pointed is None else (text(pointed) if os.path.isfile(pointed) else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

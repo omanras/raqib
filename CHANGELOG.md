@@ -5,6 +5,36 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.18.0 - 2026-11-27
+
+What is new:
+- On Windows, while the service checks whose its own code is at a start, it now tells the system every 2 s that
+  it is still starting, with a check-point one higher each time (ADR-0013 Amendments ZB to ZD). A command that
+  waits for a start by that check-point no longer gives up on a long check: `net start`, which said after 18 to
+  20 s that the service could not be started though it then ran, now waits the whole check and says it started.
+- This matters only where the check is long - a Python with a very large library tree. A packed Raqib's check
+  takes hundredths of a second and raises nothing.
+- When the check is over the service's text file says how many times the check-point was raised and the last
+  one. After 300 s no more is raised, and the text file says so at that moment: a check that hung is not told to
+  the system as progress for ever. A raising that fails is said once and counted; it never changes the check's
+  answer or the service's exit.
+- Measured on GitHub's Windows machines, x64 and ARM64, over a tree of about 157000 names: the system read the
+  check-point 1, 2, 3 and on about every 2 s with the wait of 60 s; `net start` ended with 0 after the whole
+  walk, 15 to 42 s. The rig reads it at every run (X55).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window, the Linux service, or a Windows service whose check is short.
+
+Not measured:
+- A raising the system does not take; a check that never ends, and what a command that waits does once the
+  check-point stops; a check longer than 42 s.
+- A start at boot, and a machine joined to a domain, as before.
+
 ## 0.17.0 - 2026-11-27
 
 What is new:

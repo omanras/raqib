@@ -1343,3 +1343,117 @@ X54 MET.
   jobs. Not measured: these settings on a 32-bit Windows; a reset period that is never forgotten; a service
   marked for removal. Next of the service on Windows, each small: the check-point raised while the check walks
   (M12.4c2b3, U-4), the record removed with the service (M12.4c2b4). Then the queue.
+
+## Amendment ZB (the Table, 2026-11-27) - M12.4c2b3: the check-point raised while the check walks (U-4)
+Measured before this ruling (the probe branch e727d8e; x64 and ARM64; a service made by hand from a Python
+copied under Program Files with 150000 empty files added, about 157000 names). Raqib 0.17.0 as it is: through
+the walk the system said START_PENDING with the check-point 0 and the wait of 60 s; Start-Service waited to the
+end (50 s and 33 s) and took the start; `net start` gave up after 17.7 s and 19.8 s with exit 2 and "could not
+be started", and the service ran 30 s and 14 s later. A candidate, never merged (b6058c5), that told
+START_PENDING again every 2 s with the check-point one higher and the same wait: the system said the check-point
+1, 2, 3 and on about every 2 s; Start-Service took the start after 25 s and 32 s; `net start` waited the whole
+walk and ended with exit 0 and "was started successfully" after 25.2 s and 32.4 s. Not measured: `net start`
+against a moving check-point on a walk longer than 32.4 s; a time between two raisings other than 2 s; what `net
+start`'s own rule is; a walk longer than the wait told; a raising the system does not take. The walk's seconds
+differ between the two x64 runs because they were two machines; the raising makes no walk faster.
+- ZB-1 (what is raised). While `System.own_check()` runs, the runner tells the system START_PENDING again every
+  CHECK_BEAT (2 s, the time measured) with a check-point one higher than the last (1, 2, 3 and on) and the wait
+  CHECK_WAIT_HINT as before. Every other status is told with the check-point 0, as until now. FOR: a command
+  that waits for a start by the check-point (`net start`, measured) no longer says of a service that is starting
+  that it could not be started. MUST NOT TOUCH: T-1 and T-2 - nothing is told RUNNING before the check passed,
+  the wait told stays 60 s, the check itself (raqib/wincode.py) and its line in the text file are as they are;
+  and no raising is told after a Stop was asked or after STOPPED.
+- ZB-2 (how, and its end). A thread of the runner's own, begun just before the check and ended by it: it tells
+  through the same road and under the same lock as the second START_PENDING (`self.lock`, then `_status`), and
+  it is over - ended and waited for - before `_own_code` writes its line or returns, whether the check passed,
+  refused or ended by an exception. The wait for it is bounded (CHECK_BEAT and 5 s more); a thread that did not
+  end in that time is said in one line and the start goes on. FOR: after `_own_code` nothing of the raising is
+  left that could tell START_PENDING over a RUNNING or a STOPPED.
+- ZB-3 (a raising that fails changes nothing). The raising is a courtesy to whoever waits; it is no part of the
+  verdict. A raising the system does not take, or that raises an exception, is said once in the text file - the
+  first - and counted; the count of those after it is said in one line when the check is over, never a line
+  every 2 s. A thread that cannot be begun is said in one line, and the check runs without it. In none of these
+  does the service's exit or the check's answer change.
+- ZB-4 (the tests). The made-up system records each status with its check-point. Shown: a check that lasts
+  several beats is told START_PENDING with 1, 2, 3 in order, each with the wait of 60 s, and then RUNNING with 0
+  (passed) or STOPPED with 15 and no RUNNING (refused, and ended by an exception); a check shorter than a beat
+  tells no raising; nothing is told between the check's end and its line; a Stop asked ends the raisings; ZB-3's
+  three cases with their lines. The tests wait on events, not on the clock: the beat is the runner's own value
+  that a test makes small.
+- ZB-5 (the rig and the documents). The Table wires the claim after the builder: X55 - a service from the copy
+  under Program Files made large is started by `net start`, the system is read with a check-point above 0 while
+  it starts, and `net start` ends with 0. docs/specs/SERVICE.md and docs/THREAT_MODEL.md, which say since U-4
+  that the check-point is not raised, are righted by the Table with what the field read of the branch.
+
+## Amendment ZC (the Table, 2026-11-27) - M12.4c2b3 reviewed (NEXT, thirteen findings) and asked on real Windows
+The packet is docs/review/2026-11-27-M12.4c2b3.md. Asked of the builder's commit 67ad291 on real Windows (the
+probe branch fe36a7e; x64 and ARM64; the same service over about 157000 names): the system said the check-point
+1 at 2.4 to 2.5 s, 2 at 4.2 to 4.4 s and on, each with the wait of 60 s, then RUNNING with 0; the walk took 15 s
+(x64) and 32 s (ARM64); Start-Service took the start after 15.5 s and 33.4 s; `net start` ended with exit 0 and
+"was started successfully" after 15.3 s and 32.4 s. Not measured: a raising the system does not take; `net
+start` over a walk longer than 32.4 s; a check that never ends.
+- ZC-1 (the order at the check's end; findings 1 and 13). U-3's "the number is set before anything is written"
+  holds for every line, the raising's included. So: at the check's end the raising is closed at once (no raising
+  begins after it); the answer is worked out with nothing written; on a refusal the number 15 is set; only then
+  is the raising waited for and are its lines written; then the check's own line. Nothing raised out of the
+  raising's end replaces the check's answer: it is said in one line where a line can be written, and the answer
+  stands. The check's seconds are the check's own: the clock is read after the thread is begun.
+- ZC-2 (what is promised, said as it is; findings 2 and 4). ZB-2 and ZB-4 are read so: a raising already in the
+  system's call when the check ends finishes; none begins after; RUNNING and STOPPED are told under the lock a
+  raising holds, so always after it. Where the wait's bound passes, the start goes on only once that call
+  returns, and the line says that. After the bound has passed, a late failure writes no line: the count's line
+  then says "at least".
+- ZC-3 (a check that does not end, and the evidence; finding 3). The raising runs on a clock, not on the walk's
+  progress, so a check that hung would be told as progress for ever. It is therefore bounded: after
+  CHECK_RAISE_MAX (300 s - seven times the longest walk measured at the check's own bound) no more is raised,
+  said in one line at that moment; whoever waits then sees a check-point that has stopped. And where at least
+  one raising was taken, one line when the check is over says how many and the last check-point: the text file
+  alone then shows that the raising happened (A5). Not measured: a check that hangs.
+- ZC-4 (small; findings 9, 10 and 12). The words say what is so: "one higher than the last tried"; a failed
+  raising "failed", and the thread goes on to its next beat; the numbers of the measurement named as whose they
+  are. A failure's words are cut and made printable as every exception's are. A thread that ended by an
+  exception outside a beat is said in one line.
+- ZC-5 (the tests; findings 5 to 8 and 11). The bound's test uses a small bound that is not 0 and reads the sum
+  in the line; STOPPED told while a raising is held, and nothing after it; exactly one failed raising, its
+  count's line saying 0; a wait for the thread before it is said to be over; the structure's order tied to its
+  own fields.
+- ZC-6 (the builder's three choices). Taken as built: the count's line is written whenever a first failure was
+  said; the check-point goes up at each beat whether the last was taken or not; the bound after the check is a
+  value of the module's.
+- ZC-7 (the rig, and landing). X55 is wired (a094b15). M12.4c2b3 lands as 0.18.0 after the fixes' gate, the
+  gate's Windows jobs on the commit to be merged, and X55 read as met in the rig's Windows log.
+
+## Amendment ZD (the Table, 2026-11-27) - M12.4c2b3's fixes reviewed (NEXT, eight findings, all low) and asked on real Windows; lands as 0.18.0
+The packet is docs/review/2026-11-27-M12.4c2b3-fixes.md. Asked of the fixes' commit 41c0a35 on real Windows (the
+probe branch 075b909; x64 and ARM64; about 157000 names): `net start` ended with exit 0 and "was started
+successfully" after 42.3 s on x64 - that run's machine walked for 40 s, the longest yet - and after 32.3 s on
+ARM64; Start-Service took the start after 42.0 s and 31.9 s. On the rig (41c0a35, x64, 100000 files added): the
+walk took 6 s, the highest check-point read while it started was 2 with the wait of 60 s, and `net start` ended
+with 0 after 7.6 s - X55 met, 38 claims met and none missed. Not measured: a raising the system does not take; a
+check that never ends, and what a command that waits does once the check-point stops; the Table's own small
+fixes below, which are asked on real Windows before the merge.
+- ZD-1 (no line of the raising's before the number; finding 1, and the builder's first reading). The builder
+  read ZC-1 as the lines the raising's end writes, and that reading is taken for a failure said while the check
+  still walks: no answer exists then, so no number can come before it. For a raising in the system's call when
+  the check ends it is not enough, so the window is closed: at the check's end the runner first takes the lock
+  the raising's thread writes under - waiting at most the beat and 5 s, so that a write that never returns holds
+  nothing up - then closes the raising, works out the answer, sets a refusal's number, and only then lets the
+  lock go. On the road where the check ended by an exception this is done before that exception's words are made
+  (finding 5).
+- ZD-2 (nothing unread makes a pass; finding 2). The clock is read inside what closes the raising, so a clock
+  that fails is the check's refusal; a clock that fails after the check leaves the seconds unsaid and the answer
+  as it is; an answer whose reading raises is a refusal that says so; and on every road out of those lines that
+  is not a pass the number is 15. A repr that raises anything at all is said as that.
+- ZD-3 (counted and said in one hold; findings 3 and 6). A failure is counted, and its line written or not,
+  under one hold of the lock, so the count's line never speaks of a first that is not in the file; and where the
+  raising's end itself failed, the thread writes no line after the check's.
+- ZD-4 (words; findings 4, 7 and 8). The line at the bound says the check-point told stops there, and no more
+  than that. The test that named an order it did not show says what it shows. ZC-4's "as every exception's are"
+  is narrowed to the raising's road: `_status`'s own line, the control's, the runner's last words and the text
+  file's lost write keep an exception's words as they come - recorded for a small task of its own, not changed
+  here.
+- ZD-5 (the rig's margin). X55's copy is made with 150000 files, not 100000: the rig's machine walked 100000 in
+  6 s, and a walk shorter than two beats would read as a claim missed for a reason that is no fault.
+- ZD-6 (lands). M12.4c2b3 lands as 0.18.0 after the gate on the tree to be merged, its Windows jobs, X55 read as
+  met in the rig's Windows log, and the field run of the commit to be merged. Next of the service on Windows:
+  the record removed with the service (M12.4c2b4). Then the queue.

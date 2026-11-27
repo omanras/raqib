@@ -396,18 +396,23 @@ reached the runner - so the service is not stopped through the manager while its
 takes, which the check's bound bounds; a start command that waits on the state (`Start-Service`) waited the 10 s and
 the 32 s and took the start; one that waits for the check-point to move (`net start`) took the start of 10 s and, of
 the one of 32 s, said after about 20 s that the service could not be started, while the service went on to RUNNING
-(the probe branch f01da5c). The runner does not raise its check-point while the check walks: a task of its own (U-4).
-Said (T-4): a service of Windows made by hand from a tree a user may change, which watched until now, stops watching
-with this version and says why - in its text file and, by its number, in the system's log (measured: event 7024 of the
-Service Control Manager, "terminated with the following service-specific error: %%536870927"). The check at the start
-is a reading at that moment: a tree changed while the service runs is not seen until the next start (a watch of its
-own tree is another task). What the check at the start does not give, and is said: the code that asks it has already
-run as the system by then - the interpreter, its site and the `import` lines of its *.pth files, and Raqib's own
-modules up to the runner (N-2), or the packed program and its runtime - so a tree a user may change is refused before
-it watches, not before it runs - and, as for the command (N-2), it is a reading of the tree as its own code tells it:
-a tree a user already changed may make its own check pass, and is then watched; only a service that is not made from
-such a tree (the install's refusal, M12.4c2b2) keeps it from running as the system. The system told to start the
-service again after its number 15 is the install's too (M12.4c2b2).
+(the probe branch f01da5c). Since M12.4c2b3 (Amendments ZB to ZD) the runner raises its check-point every 2 s while
+the check walks, with the same wait: the system then said the check-point 1, 2, 3 and on, and `net start` waited the
+whole walk and took the start - measured over walks of 15 to 42 s on x64 and of 32 s on ARM64 (the probe branches
+fe36a7e and 075b909) - and the rig reads it at every run (X55). The raising stops after 300 s of beats, said in the
+text file at that moment; and where a raising was taken, a line there says how many and the last check-point when the
+check is over. Not measured: a raising the system does not take; a check that never ends. Said (T-4): a service of
+Windows made by hand from a tree a user may change, which watched until now, stops watching with this version and says
+why - in its text file and, by its number, in the system's log (measured: event 7024 of the Service Control Manager,
+"terminated with the following service-specific error: %%536870927"). The check at the start is a reading at that
+moment: a tree changed while the service runs is not seen until the next start (a watch of its own tree is another
+task). What the check at the start does not give, and is said: the code that asks it has already run as the system by
+then - the interpreter, its site and the `import` lines of its *.pth files, and Raqib's own modules up to the runner
+(N-2), or the packed program and its runtime - so a tree a user may change is refused before it watches, not before it
+runs - and, as for the command (N-2), it is a reading of the tree as its own code tells it: a tree a user already
+changed may make its own check pass, and is then watched; only a service that is not made from such a tree (the
+install's refusal, M12.4c2b2) keeps it from running as the system. The system told to start the service again after
+its number 15 is the install's too (M12.4c2b2).
 
 **The text file.** A service has no standard streams (each is None; Amendment E). The runner gives the watch a
 text file in the place, `service.txt`, for its report and its errors. It is begun anew at each start; the one
@@ -818,6 +823,15 @@ second ran (exit 0, `RESULT: installed and started: raqib service status answers
 status's own line of the command naming a path under Program Files) and the remove left nothing (exit 0, `RESULT:
 removed`, status `RESULT: NOT INSTALLED`). A byte-order mark before the first key is read past; MISSED with words for
 each thing not found, a file given and missing included; n/a where none was given.
+
+X55 (`tools/rig/check.py --service-point FILE`, ZB-5, ZD-5; tools/rig/service_point.ps1): FILE holds lines `key:
+value` - `names-added`; `point-highest`, `point-wait`, `point-state` and `point-text` of a start by the system's own
+call (the highest check-point the system said while the service started and the wait said with it, the state after,
+the runner's line of the check); `net-exit`, `net-seconds`, `net-state` and `net-text` of a start by `net start`. MET
+only where a check-point above 0 was read with the wait of 60000 ms, the service then Running with the pass in its
+text file, and `net start` ended with 0, the service Running with the pass. A check shorter than the time between two
+raisings raises none, and is said as that. MISSED with words for each thing not found, a file given and missing
+included; n/a where none was given.
 
 ## Windows: the check (`raqib service check`)
 
