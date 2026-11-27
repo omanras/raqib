@@ -587,8 +587,22 @@ Files\NAME\Python311`. Asked on GitHub's Windows machines, python.org's install 
 refused where its installer put it and taken one folder deeper, a venv likewise by where its base
 is. What the interpreter does with those names was read in its source, not measured. A Raqib packed
 with Python 3.14 or later is refused for now: that runtime reads `pyvenv.cfg` above the program's
-folder, and the packed road does not judge it yet. It is a reading at one moment: run it again after
-anything there changes.
+folder, and the packed road does not judge it yet. A path is judged only on a drive the system says
+is of the fixed kind with a device's name that is, whole, a disk's volume in the form measured,
+`\Device\HarddiskVolume` and a number with nothing after it. A letter given to a folder, a volume's
+name with anything after it, a volume of another kind of disk (not measured, so refused until it
+is), any other kind of drive and a letter with no device are refused, with the kind and the device's
+name said and the form asked for, and the pass ends with the drives it asked. A disk the system
+calls fixed is taken whatever it is - one carried from another machine, an image attached, a volume
+a program serves - and its names are judged as any other's. The drive is read with the check's own
+reader of its device's name; the autostart reader also asks a drive's kind, for its own purpose. The
+letter is read as the session that asks names it, and the system's account may name it otherwise:
+the install is to have the service ask the check again at its own start, as the system (not built
+yet). A library Raqib loads by name is searched in the program's own folder, in System32 and in
+folders the process itself added - read in the interpreter's library, not measured: a test holds the
+ways it knows of adding one and of loading by another name (its own text says what it does not see),
+and nothing holds what the interpreter's own start adds. It is a reading at one moment: run it again
+after anything there changes.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

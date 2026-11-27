@@ -1,0 +1,26 @@
+# What the system said of a drive, read on GitHub's Windows machines by GetDriveTypeW (the kind) and QueryDosDeviceW
+# (the device's first name), each line as read (the probe branch cf233f5 and 50baa9d; x64 and ARM64). Nothing is
+# changed; no user's name is in these lines. Format: LETTER <tab> WHAT IT WAS <tab> KIND <tab> DEVICE'S NAME, or
+# `not read: error N` where the device's name was not read.
+#
+# windows-latest (x64)
+C:	the system's disk	3	\Device\HarddiskVolume3
+D:	a second disk of the machine	3	\Device\HarddiskVolume4
+R:	a letter given to a folder (subst R: C:\ProgramData)	3	\??\C:\ProgramData
+R:	a letter given to a folder (subst R: "C:\Program Files\RaqibFieldDrive")	3	\??\C:\Program Files\RaqibFieldDrive
+R:	a letter given to Program Files (subst R: "C:\Program Files")	3	\??\C:\Program Files
+V:	a disk image made for the run, NTFS	3	\Device\HarddiskVolume5
+V:	a disk image made for the run, FAT32	3	\Device\HarddiskVolume6
+Q:	a letter that is not there	1	not read: error 2
+#
+# windows-11-arm (ARM64)
+C:	the system's disk	3	\Device\HarddiskVolume4
+D:	a letter that is not there	1	not read: error 2
+R:	a letter given to a folder (subst R: C:\ProgramData)	3	\??\C:\ProgramData
+V:	a disk image made for the run, NTFS	3	\Device\HarddiskVolume5
+V:	a disk image made for the run, FAT32	3	\Device\HarddiskVolume6
+Q:	a letter that is not there	1	not read: error 2
+#
+# Every disk's volume read so: \Device\HarddiskVolume and a number, and nothing after it. Not read on any machine: a
+# network drive, a removable disk, a disc, a RAM disk; a letter whose device's name is a volume's followed by a
+# folder's path; a volume of another kind of disk (dynamic, a storage pool).

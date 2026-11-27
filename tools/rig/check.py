@@ -7,7 +7,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
                               [--events-check FILE] [--packed FILE]
                               [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
-                              [--summary FILE] [--strict]
+                              [--service-check-plain FILE] [--service-check-drive FILE] [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
@@ -68,6 +68,12 @@ installed into it, asked with -I; open-exit and open-words of the job's own Pyth
 the first is exit 0 with the plain road's counts' sentence (names checked, folders and files under the interpreter's
 folder and its roads, folders above them, adding up), and the second exit 1 naming a path of a drive and a role;
 MISSED and n/a as X49.
+--service-check-drive: what the rig's Windows job kept of `raqib service check` asked through a letter given to the
+folder of its packed copy in Program Files (ADR-0013 P-3, M12.4c2a): FILE holds lines `key: value` (letter-exit,
+letter-words). X51 MET only where the exit is 1 and the words name the drive's kind (`kind N (word)`) and a device's
+name that is not, whole, of a disk's volume's form `\\Device\\HarddiskVolumeN` (`names its device "NAME"`; ADR-0013
+Q-1, Q-5), as raqib/wincode.py drive_refused says them; MISSED where the name is of that form (the letter was a
+disk's) and with words for each thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1334,6 +1340,51 @@ def read_service_check_plain(text):
                       "the job's own Python")
 
 
+SERVICE_CHECK_DRIVE_NAME = ("X51 `raqib service check` asked through a letter given to the packed copy's folder"
+                            " refuses it, naming the drive's kind and a device's name that is not a disk's")
+DRIVE_KEYS = ("letter-exit", "letter-words")
+DRIVE_KIND = re.compile(r"kind (-?\d+) \(([^()]*)\)")         # raqib/wincode.py drive_refused's words
+DRIVE_DEVICE = re.compile(r'names its device "(.*?)"[,:]')
+DISK_DEVICE = re.compile(r"\\Device\\HarddiskVolume[0-9]+")    # raqib/wincode.py DISK_DEVICE (Q-1), matched whole
+
+
+def read_service_check_drive(text):
+    """X51 (ADR-0013 P-3, M12.4c2a): what the rig's Windows job kept of `raqib service check` asked through a letter
+    given to the folder of its packed copy in Program Files (letter-exit, letter-words). text: the FILE's text (None:
+    not given). MET where the exit is 1 and the words name a kind (DRIVE_KIND) and a device's name (DRIVE_DEVICE)
+    that is not, whole, of DISK_DEVICE's form (Q-5); a byte-order mark before the first key is read past. MISSED where
+    the name is of that form (the letter was a disk's) and with words for each thing not found; n/a where none was
+    given. The letter's device is not tied to the job's own copy (Q-5: kept, said). It never raises."""
+    name = SERVICE_CHECK_DRIVE_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no service check through a letter was given (--service-check-drive)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the check's file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in DRIVE_KEYS if key not in got]
+        words = got.get("letter-words", "")
+        if "letter-exit" in got and _int(got["letter-exit"]) != 1:
+            missing.append("the check through the letter: exit %s, not 1 (%s)" % (got["letter-exit"][:20],
+                                                                                  words[:200]))
+        kind, device = DRIVE_KIND.search(words), DRIVE_DEVICE.search(words)
+        if "letter-words" in got:
+            if not kind:
+                missing.append("the check through the letter: its words name no kind of the drive (%s)" % words[:200])
+            if not device:
+                missing.append("the check through the letter: its words name no device's name (%s)" % words[:200])
+            elif DISK_DEVICE.fullmatch(device.group(1)):
+                missing.append("the check through the letter: the device's name it names, %s, is of a disk's volume's"
+                               " form, \\Device\\HarddiskVolumeN (the letter was a disk's), not a letter given to a"
+                               " folder (%s)" % (device.group(1)[:200], words[:200]))
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "the check through the letter was refused (exit 1), naming kind %s (%s) and the device"
+                 " %s: %s" % (kind.group(1), kind.group(2), device.group(1)[:200], words[:300]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the service check through a letter cannot be read (%s)" % type(exc).__name__)]
+
+
 def read_check(text, name, counts_said, option, second):
     """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
     names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
@@ -1589,6 +1640,7 @@ def main(argv=None):
     p.add_argument("--service-events")
     p.add_argument("--service-check")
     p.add_argument("--service-check-plain")
+    p.add_argument("--service-check-drive")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1626,6 +1678,10 @@ def main(argv=None):
     # X50 (ADR-0013 M-6): the same, of a plain interpreter's road
     checked = a.service_check_plain
     rows += read_service_check_plain(None if checked is None else (text(checked) if os.path.isfile(checked)
+                                                                    else ""))
+    # X51 (ADR-0013 P-3): the same, of the check asked through a letter given to the packed copy's folder
+    checked = a.service_check_drive
+    rows += read_service_check_drive(None if checked is None else (text(checked) if os.path.isfile(checked)
                                                                     else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:

@@ -885,6 +885,12 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert plain.isascii() and "pip install" not in plain and "PyInstaller" not in plain
     assert "-I -m raqib service check" in plain and "tools\\rig\\service_check_plain.ps1" in windows
     assert ("--service-check-plain $env:RUNNER_TEMP\\service-check-plain\\service-check-plain.txt" in windows)
+    # P-3 (X51): the same packed copy asked through a letter given to its folder; the letter taken back
+    drive = (ROOT / "tools" / "rig" / "service_check_drive.ps1").read_text(encoding="utf-8")
+    assert drive.isascii() and "pip install" not in drive and "PyInstaller" not in drive
+    assert 'subst "${letter}:" $system' in drive and 'subst "${letter}:" /D' in drive and "service check" in drive
+    assert "tools\\rig\\service_check_drive.ps1 -Packed $env:RUNNER_TEMP\\service-check\\pack\\dist\\raqib" in windows
+    assert ("--service-check-drive $env:RUNNER_TEMP\\service-check-drive\\service-check-drive.txt" in windows)
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1061,7 +1067,8 @@ def checked_line():
     sys.path.insert(0, str(ROOT))
     from raqib import wincode
     return ("raqib service check: the code a service would run is the system's alone: %s"
-            % wincode.checked_words({"folders": 41, "files": 1180, "above": 2}))
+            % wincode.checked_words({"folders": 41, "files": 1180, "above": 2},
+                                    [("C:", "\\Device\\HarddiskVolume3")]))
 
 
 REFUSED_LINE = ("raqib service check: NOT the system's alone: D:\\, as a folder above it (K-3): owned by NS, not the"
@@ -1147,7 +1154,8 @@ def plain_line():
     return ("raqib service check: the code a service would run is the system's alone: %s"
             % wincode.plain_words({"folders": 120, "files": 2400, "above": 2, "entries": 5, "missing": 1, "pth": 0,
                                    "pth_lines": 0, "alone": 2, "beneath": 0, "own": 3, "own_there": 0, "base": 0,
-                                   "exec": 0}))
+                                   "exec": 0}, [("C:", "\\Device\\HarddiskVolume3"),
+                                                ("D:", "\\Device\\HarddiskVolume1")]))
 
 
 PLAIN_REFUSED = ("raqib service check: NOT the system's alone: C:\\hostedtoolcache\\windows\\Python, as a folder"
@@ -1235,3 +1243,107 @@ def test_x50_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
     assert row(["--service-check-plain", str(tmp_path / "plain.txt")]) == check.MET
     assert row(["--service-check-plain", str(tmp_path / "none.txt")]) == check.MISSED
     assert row([]) == check.SKIP
+
+
+# --- X51 (ADR-0013 P-3, M12.4c2a): the check asked through a letter given to the packed copy's folder refuses it ----
+def letter_line():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    root, words = wincode.drive_refused("R:", (3, "\\??\\C:\\Program Files\\RaqibRig"))   # a stand-in letter
+    return "raqib service check: NOT the system's alone: %s, %s" % (root, words)     # and folder: the check's words
+
+
+def refused_line(letter, got):
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    root, words = wincode.drive_refused(letter, got)
+    return "raqib service check: NOT the system's alone: %s, %s" % (root, words)
+
+
+def letterfile(**kw):
+    keys = {"letter-exit": "1", "letter-words": letter_line()}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x51(text):
+    ((ident, state, words),) = check.read_service_check_drive(text)
+    assert ident.startswith("X51 ") and ident == check.SERVICE_CHECK_DRIVE_NAME
+    return state, words
+
+
+def test_x51_met_where_the_letter_was_refused_naming_a_kind_and_a_device_not_a_disks():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    assert (check.DISK_DEVICE.pattern, check.DISK_DEVICE.flags) == (wincode.DISK_DEVICE.pattern,
+                                                                    wincode.DISK_DEVICE.flags)   # Q-1's one form
+    state, words = x51(letterfile())
+    assert state == check.MET, words
+    assert words.startswith('the check through the letter was refused (exit 1), naming kind 3 (fixed) and the device'
+                            ' \\??\\C:\\Program Files\\RaqibRig: raqib service check: NOT the system\'s alone: R:\\')
+    assert x51(letterfile().replace("\n", "\r\n"))[0] == check.MET and x51("\ufeff" + letterfile())[0] == check.MET
+    assert "first met by" not in words and "share" not in words   # Q-2
+    other = refused_line("S:", (2, "\\??\\C:\\x"))   # invented: another kind, not a disk's
+    state, words = x51(letterfile(**{"letter-words": other}))
+    assert state == check.MET and "naming kind 2 (removable)" in words
+    for name in ("\\Device\\HarddiskVolume3\\Users\\someone\\Rig", "\\Device\\HarddiskVolume3\\",
+                 "\\Device\\HarddiskVolume", "\\device\\harddiskvolume3"):   # invented: names not of Q-1's form
+        state, words = x51(letterfile(**{"letter-words": refused_line("S:", (3, name))}))
+        assert state == check.MET and "naming kind 3 (fixed) and the device %s:" % name in words, words
+
+
+@pytest.mark.parametrize("got", [(1, "\\Device\\HarddiskVolume3"), (2, "\\Device\\HarddiskVolume12")])
+def test_x51_missed_where_the_name_said_is_a_disks_volume(got):   # invented: a disk's name, refused by its kind
+    state, words = x51(letterfile(**{"letter-words": refused_line("S:", got)}))
+    assert state == check.MISSED and "the device's name it names, %s, is of a disk's volume's form" % got[1] in words
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"letter-exit": "0"}, "the check through the letter: exit 0, not 1"),
+    ({"letter-exit": "2"}, "the check through the letter: exit 2, not 1"),
+    ({"letter-exit": "one"}, "the check through the letter: exit one, not 1"),
+    ({"letter-words": "raqib service check: NOT the system's alone: R:\\, the drive R:: names its device"
+                      " \"\\??\\C:\\x\","}, "its words name no kind of the drive"),
+    ({"letter-words": "raqib service check: NOT the system's alone: R:\\, the system says kind 3 (fixed)"},
+     "its words name no device's name"),
+    ({"letter-words": "raqib service check: NOT the system's alone: R:\\, the system says kind 1 (no root) and names"
+                      " its device \"\\Device\\HarddiskVolume3\": not the fixed kind"},
+     "the device's name it names, \\Device\\HarddiskVolume3, is of a disk's volume's form, \\Device\\HarddiskVolumeN"
+     " (the letter was a disk's)"),
+    ({"letter-words": "raqib service check: NOT the system's alone: C:\\Program Files, as a folder above it (K-3)"},
+     "its words name no kind of the drive"),
+    ({"letter-exit": None}, "no letter-exit"), ({"letter-words": None}, "no letter-words"),
+])
+def test_x51_missed_for_each_thing_not_found(kw, said):
+    state, words = x51(letterfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x51_missed_where_the_file_is_empty_and_n_a_where_none_was_given():
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x51(text) == (check.MISSED, "missing: the check's file is empty or was not written (silence is a"
+                                           " finding)")
+    assert x51(None) == (check.SKIP, "no service check through a letter was given (--service-check-drive)")
+
+
+def test_x51_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "letter.txt").write_text(letterfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X51 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-check-drive", str(tmp_path / "letter.txt")]) == check.MET
+    assert row(["--service-check-drive", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP
+
+
+def test_x49_and_x50_still_read_the_pass_with_its_drives():
+    assert "C: \"\\Device\\HarddiskVolume3\"" in checked_line() and check.CHECK_COUNTS.search(checked_line())
+    assert "D: \"\\Device\\HarddiskVolume1\"" in plain_line() and check.CHECK_PLAIN_COUNTS.search(plain_line())

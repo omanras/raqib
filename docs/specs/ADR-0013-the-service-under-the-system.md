@@ -795,3 +795,122 @@ The second reviewer read the interpreter's source line by line and found N-1's t
   be merged. Next: M12.4c2 (K-9), with: the drive's device (L-3), the test of the libraries loaded by name, the
   packed road judging the venv file's name for 3.14 on (O-2), and the service's command for a plain interpreter
   written with `-I` (M-1).
+
+## Amendment P (the Table, 2026-11-27) - M12.4c2 in two; M12.4c2a: the drive, and the libraries loaded by name
+Before an install rests on the check (M12.4c2b: `raqib service install | remove | status` on Windows), two things
+the check says it does not read are closed, each from what was measured or read.
+Measured (the probe branch cf233f5; x64 and ARM64): the system says a disk's letter is of the fixed kind and
+names its device `\Device\HarddiskVolumeN`; a letter given to a folder (`subst`) is said of the fixed kind too,
+and its device's name is the folder's own path behind `\??\`; a volume that keeps no lists (FAT32, exFAT) is a
+fixed disk whose every name reads with the owner `WD` and a null list; a letter that is not there has no root and
+no device. Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10), not measured: a
+library asked for by a bare name is searched with the system's default folders - the application's own folder,
+System32, and folders the process itself added - and not along the PATH or in the folder the process was started
+in.
+- P-1 (the drive; closes L-3's "what the drive's letter names"). A path is judged only where the system says of
+  its drive: the fixed kind, and a device's name that begins with `\Device\`. A letter given to a folder or to a
+  share, a removable disk, a network drive, a disk in the drive of discs, a letter with no device: refused, with
+  the kind and the device's name as read - what is above such a letter is not what the check reads, or can be
+  changed where the check cannot see. Asked once for each drive met, before any name of it is read; both roads.
+  The reading is one function beside the one reader of a name (K-7), with no second copy of its calls. FOR: "to
+  the drive's letter" in the pass then means a disk. MUST NOT TOUCH: K-2, K-3, L-1, N-1, O-1, O-2.
+- P-2 (the libraries loaded by name; closes K's "the system's PATH"). A test reads every place in raqib/ where a
+  library is loaded and holds: the name is a plain name written in the code (no path, no name worked out, no
+  folder added to the search, no search mode given), and it is on one list; on Windows the test also finds each
+  name of the list in System32. With the reading above, a library Raqib asks for comes from the program's own
+  folder - which the check walks as the code itself - or from System32. FOR: nothing Raqib loads is found along
+  a path a user can write. MUST NOT TOUCH: any loader's behaviour; this is a test and its list.
+- P-3 (a claim on the rig, the Table's wiring after the task lands). The rig's Windows job gives a letter to the
+  folder of its packed copy in Program Files and asks the check through that letter; X51 is MET where the answer
+  is 1 and names the letter's device.
+- Not measured, and said: a network drive, a removable disk and a disc (their kinds are the system's own
+  numbers, read in its documents, not seen); a letter the system's account has and the asker has not; a folder
+  mounted on a volume with no letter; whether a library's own dependencies are searched as the library is.
+- M12.4c2b, after it (K-9, O-5): install, remove and status by the system's own calls, as measured; the install
+  asks the check and refuses unless it is taken; the command quoted, and for a plain interpreter with `-I`; the
+  place made with its owner named (AG-5); the start at boot; the system told to start it again; a refusal's
+  number said with its words.
+
+## Amendment Q (the Table, 2026-11-27) - the review of M12.4c2a (docs/review/2026-11-27-M12.4c2a.md) and its field run: REDO
+The reviewer's verdict is STOP on the ruling, and it is right. P-1 took a device's name that begins with
+`\Device\`; what was measured of a disk is narrower - `\Device\HarddiskVolume` and a number, with nothing after
+it (tests/fixtures/wincode/drives.txt). A letter whose device's name is a volume's followed by a folder's path
+begins the same way, and is the very thing P-1 exists to refuse: what is above that folder is never judged. The
+code does what P-1 said; P-1 said too much.
+The field's word on the branch as built (the probe branch 50baa9d on bed5479; x64 and ARM64): the gate green on
+six jobs and the rig green, X49, X50 and X51 MET; the tests of the check, the reader and the libraries passed on
+both, the two that read a real machine among them (a disk's reading; each library of the list a file in
+System32). The reader said `C:` kind 3 `\Device\HarddiskVolumeN`, x64's `D:` the same form, a letter not there
+error 2. A packed copy asked by its disk's letter: taken, the pass naming the drive and its device. Asked through
+a letter given to its folder, and through one given to Program Files: refused before any name was read, the
+device's name the folder's own path behind `\??\`. On a disk image with lists the drive was taken and the tree
+refused by its lists; on one without lists, by the null list.
+- Q-1 (the form measured, and no other; replaces P-1's test). A drive is taken only where the system says the
+  fixed kind and a device's name that is, whole, `\Device\HarddiskVolume` and a number: nothing before it,
+  nothing after it, its letters as written. Every other name refuses, said as read with the form asked for:
+  a folder's path behind `\??\`; a volume's name with anything after it; a volume of another kind of disk (not
+  measured: refused until it is). FOR: "to the drive's letter" means a volume's root and nothing below it.
+  MUST NOT TOUCH: the kind's rule; asked once, before any name; both roads.
+- Q-2 (the words; findings 5, 7, 10). A refused drive is said without "first met by", which always named the
+  drive's own root; the words for a name of another form say the form asked for and do not say what a share's
+  letter reads as (not measured: such a letter is refused by its kind, if the system's documents hold). Where
+  the device's name was not read, the kind stays in the reader's own words.
+- Q-3 (said in the documents; findings 2, 3, 4, 6, 16, 17). The letter is read as the session that runs the
+  check names it - said again; the system's account may name it otherwise or not at all, which the install
+  closes by having the service ask the check at its own start (M12.4c2b). The kind is also asked by the
+  autostart reader for its own purpose: the device's name has one reader, the kind two. A disk the system calls
+  fixed is taken as a disk whatever it is - one carried from another machine, an image attached, a volume a
+  program serves: who made its lists is not read. P-2's reading names three places a library is searched; the
+  third, folders the process itself added, is what the test's "no folder added" holds for raqib/ and nothing
+  holds for what the interpreter's own start adds.
+- Q-4 (the tests; findings 8, 9, 11, 13, 15). The measured readings are a fixture (drives.txt), read by the
+  tests. The letter-case test reaches the folding. The second-drive case holds that the walk's earlier names
+  were read. The scan of the libraries also refuses: a loader asked by index; ctypes' own low loader; a second
+  positional argument or `**` in a loading call; a name of a search call written as a string anywhere but where
+  it is allowed; a whole-table write to the environment; a table of names changed after it was written; a
+  loader handed on as a value; and a second call of the one allowed search call.
+- Q-5 (X51). It asks for the kind and a device's name that is not of the form of Q-1; the job's letter is given
+  to the job's own copy, and the name's end is not tied to it (kept, said).
+- Q-6 (the builder's questions, kept as built unless Q-1 to Q-5 say otherwise). The drives asked on a list the
+  caller gives; said at the end of the pass; a refused drive names no role; the stand-in's default for a letter
+  a test does not give is a disk of the measured form, said as a stand-in; the buffer's bound; find_library
+  refused outright.
+- M12.4c2b gains, from this review: the runner asks the check at its start, as the system, and does not watch a
+  tree it does not take (its own number for it); the install writes the command by the path the check judged.
+
+## Amendment R (the Table, 2026-11-27) - the review of M12.4c2a REDO (docs/review/2026-11-27-M12.4c2a-redo.md) and its field run: the drive lands; the libraries' hold is re-made
+The field's word on f27ccef (the probe branch bcf1a7c; x64 and ARM64): the gate green on six jobs and the rig
+green, X49, X50 and X51 MET; the tests passed on both. Measured there, the thing the first review named: a letter
+given to a volume's own name followed by a folder's path reads as the fixed kind with exactly that name - P-1
+would have taken it - and is refused before any name is read. A letter given to the volume's name alone is
+another letter of that volume's root: taken, the whole tree walked from the root, the pass naming the letter and
+its device. Letters given to a folder (the `\??\` form), and the disk images with and without lists: as before.
+The second reviewer's verdict is REDO, for the libraries' test alone: the drive is built as Q-1 ruled, with no
+input found that is taken outside the form; the scan still passes three forms Q-4 named (a folder reaching CI-3's
+call through its parameter bound again; a loader lambda handed on inside its own binding line; a table of names
+changed from another module), and its list of what it does not see was not whole. Ruled:
+- R-1 (the drive lands). P-1 as Q-1 corrected it, with its words, its rig claim and its documents, lands now. It is
+  the part an install will rest on, it was measured on real machines in every case ruled, and both reviews found
+  it sound.
+- R-2 (small, by the Table's hand; findings 7, 8). The system's answer is read only as the plain types - a tuple,
+  an int, a str, never a kind of them. The guide, the spec and the threat model say of the libraries' test what
+  it holds - the ways it knows - and that the search's three places were read, not measured.
+- R-3 (the libraries' hold is re-made, a task of its own: M12.4c2a2). A scan that lists the forms it refuses is
+  out-written by the next form; two reviews each found forms the one before had not. The hold is turned round:
+  every mention in raqib/ of a word by which a library can be loaded, the search changed, or ctypes reached - as
+  a name, an attribute, an import, a keyword or a string, docstrings too - is on a list the test holds, by file,
+  function and count, and any other mention fails; every attribute taken of ctypes is on a list of those Raqib
+  uses; the one function that calls CI-3's call is held word for word; each table of names is mentioned only
+  where the test says. A new load then cannot be written without changing the test's own list, where a reviewer
+  reads it. Until it lands, the scan stands as the first hold, its own first lines saying what it does not yet
+  hold; nothing in the tree today is one of those forms (two reviewers read every load by hand). FOR: the hold
+  no longer depends on knowing every way. MUST NOT TOUCH: any loader.
+- R-4 (kept, and recorded; findings 6, 9, 10, 12, 15 and the builder's questions). The lines of the rig's check
+  that describe X51 follow its reading. The pattern takes any number of digits; the numbers measured were 3 to 7.
+  A volume is taken as the system names it: what can write it beneath its file system is not read. A letter
+  given to a disk's own root behind `\??\` is refused by its form (kept: it errs toward refusal). The drives are
+  said at the end of the pass; a refused drive names no role; the stand-in's default disk is a stand-in.
+- R-5 (lands, and next). M12.4c2a lands as 0.13.0 after the gate and the rig on the commit to be merged. Next:
+  M12.4c2a2 (R-3), then M12.4c2b (K-9, O-5, Q's two additions: the runner asks the check at its own start as the
+  system and does not watch a tree it does not take; the install writes the command by the path the check
+  judged).

@@ -5,6 +5,44 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.13.0 - 2026-11-27
+
+What is new:
+- `raqib service check` (Windows) now asks the system what a drive is before it reads anything on it (ADR-0013
+  Amendments P to R). A path is judged only on a disk's volume: the fixed kind, and a device's name of the form
+  the system gives a volume (`\Device\HarddiskVolume` and a number, nothing after it). A drive letter given to a
+  folder, a letter that names a volume and a folder on it, a network or removable drive, a letter with no device:
+  each is refused, with what the system said of it. Before this, such a letter read as a drive of its own, and
+  the folders really above it were never judged.
+- The pass now ends with each drive it asked and the device the system named for it.
+- Measured on GitHub's Windows machines, x64 and ARM64: a packed copy asked by its disk's letter is taken;
+  asked through a letter given to its folder, to Program Files, or to the volume's name followed by the folder's
+  path, it is refused before any name is read; a second letter of the same volume's root is taken, the whole
+  tree walked from the root. A disk image without access lists is refused by its lists, as before.
+- A test now reads every place Raqib loads a system library by name and holds the names to one list, each found
+  in System32 on Windows, with no folder added to the search by the ways the test knows.
+- The rig asks the check through a letter given to a folder at every run (X51).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window or the Linux service. On Windows, a check that passed before through a
+  letter given to a folder (the subst command) is now refused: ask it by the disk's own letter.
+
+Not measured:
+- A network drive, a removable disk, a disc: refused by the kind the system's documents give them, not seen.
+- A volume of another kind of disk (dynamic, a storage pool): refused until its name is measured.
+- A disk the system calls fixed is taken whatever it is - one carried from another machine, an image attached:
+  who made its access lists is not read.
+- The letter is read as the asking session names it; the system's account may name it otherwise. The install,
+  not built yet, is to have the service ask the check again at its own start.
+- Where a library asked for by name is searched (the program's folder, System32, folders the process added) was
+  read in Python's own library, not measured; and the test of the libraries does not yet hold every way a
+  folder could be added - its own text says which, and a task re-makes it as a list of what is allowed.
+
 ## 0.12.0 - 2026-11-27
 
 What is new:
