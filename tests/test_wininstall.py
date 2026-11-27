@@ -837,16 +837,33 @@ def test_zF2_a_host_watch_that_still_holds_the_place_fresh_leaves_it_untouched_i
     code, lines = remove(manager, purge=True, place=place)
     assert code == 1 and lines[-2] == (
         "  the record (--purge): a host watch's state still holds the place (its heartbeat 3 s ago, stale after 30"
-        " s): that watch still watches, or was ended without its end; nothing removed: ask for the record again when"
-        " it has ended (ADR-0013 ZF-2)")
+        " s): that watch still watches, or was ended without its end, or its heartbeat is ahead of this clock;"
+        " nothing removed: ask for the record again when it has ended (ADR-0013 ZF-2)")
     assert lines[-1] == "RESULT: nothing installed; the record NOT removed: a watch still holds the place"
     assert manager.paths == [] and manager.tree == TREE and place.held_asked == [PLACE] and lines[-3] == READ_TAKEN
-    # stale, none, unparsed, unreadable, or no dict: not held, as the runner's _wait_for reads the same answer
-    for answer in (dict(FRESH, held="stale", age=31.0), {"held": "none"}, {"held": "unparsed"},
-                   {"held": "unreadable"}, ["fresh"]):
+    # stale or none: no watch holds it, and it is removed
+    for answer in (dict(FRESH, held="stale", age=31.0), {"held": "none"}):
         manager = Manager(tree=TREE)
         code, lines = remove(manager, purge=True, place=taken(manager, holds=answer))
         assert code == 0 and manager.place_gone, answer
+    # ZG-1: a state that cannot be read, or an answer not known, is no leave to remove (the watch's own D-6)
+    for answer, why in (({"held": "unparsed", "why": "the heartbeat cannot be parsed"},
+                         "the heartbeat cannot be parsed"),
+                        ({"held": "unreadable", "why": "the state cannot be read (ValueError: made up)"},
+                         "the state cannot be read (ValueError: made up)"),
+                        ({"held": "later"}, "its state gave an answer this command does not know"),
+                        (["fresh"], "its state gave an answer this command does not know")):
+        manager = Manager(tree=TREE)
+        code, lines = remove(manager, purge=True, place=taken(manager, holds=answer))
+        assert code == 1 and manager.paths == [] and manager.tree == TREE, answer
+        assert lines[-2] == ("  the record (--purge): whether a host watch still holds the place is not known: %s; a"
+                             " state that cannot be read is no leave to remove (ADR-0013 ZG-1): nothing touched;"
+                             " where no watch runs there, the place is removed by hand" % why), lines[-2]
+        assert lines[-1] == ("RESULT: nothing installed; the record NOT removed: whether a watch still holds the"
+                             " place NOT KNOWN")
+    assert {host.HELD_NONE, host.HELD_STALE, host.HELD_FRESH, host.HELD_UNPARSED, host.HELD_UNREADABLE} == {
+        "none", "stale", "fresh", "unparsed", "unreadable"}   # the answers this reading was written against
+    assert wininstall.HELD_CLEAR == (host.HELD_NONE, host.HELD_STALE)
     # an exception out of it: said, nothing touched
     manager = Manager(tree=TREE)
     code, lines = remove(manager, purge=True, place=taken(manager, holds=RecursionError("made up")))
@@ -1459,3 +1476,33 @@ def test_zE2_the_real_systems_record_calls_list_without_following_a_link_and_ans
     fake = FakeOs(attributes=False)   # a listing that gives no attributes fails whole: nothing of it is handed
     monkeypatch.setattr(wininstall, "os", fake)
     assert real.listed(PLACE) == (None, "an exception, AttributeError") and ("closed", PLACE) in fake.asked
+
+
+def test_zG2_one_bound_for_the_whole_purge_two_names_in_use_wait_20_s_in_all_not_each():
+    """ADR-0013 ZG-2: two files the ended service has not let go: the whole purge asks again for 20 s in all, 40 asks,
+    not 20 s for each."""
+    first, second = sorted(p for p, attributes in TREE.items() if not attributes & 0x10)[:2]
+    manager = ours(before=RUNS, tree=TREE, refuse={first: 32, second: 32})
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and "error 32 (in use by another process) 2 times" in lines[-2], lines[-2]
+    assert manager.clock_at == DELAY + wininstall.IN_USE_BOUND
+    assert manager.paths.count(first) + manager.paths.count(second) == 2 + wininstall.IN_USE_ASKS == 42
+    assert wininstall.IN_USE_ASKS == wininstall.IN_USE_BOUND / wininstall.IN_USE_EVERY
+
+
+@pytest.mark.parametrize("broken, said", [("sleep", "its pause failed"), ("clock", "its clock failed")])
+def test_zG3_a_pause_or_a_clock_that_fails_ends_the_waiting_and_is_said_never_passed_off_as_made(broken, said):
+    lock = HOST + "\\events.jsonl"
+    manager = ours(before=RUNS, tree=TREE, refuse={lock: 32})
+    real = getattr(manager, broken)
+
+    def failing(*args):
+        if manager.paths.count(lock) and (broken == "clock" or args == (wininstall.IN_USE_EVERY,)):
+            raise OSError("made up")     # only the purge's own wait: the remove's waits before it are as they were
+        return real(*args)
+    setattr(manager, broken, failing)
+    code, lines = remove(manager, purge=True, place=taken(manager))
+    assert code == 1 and manager.paths.count(lock) == 1, manager.paths.count(lock)
+    assert lines[-2].endswith("left: error 32 (in use by another process) once; the first at %s; the wait for a name in"
+                              " use could not be made (%s): no name was asked again after that; the place stays"
+                              % (lock, said)), lines[-2]

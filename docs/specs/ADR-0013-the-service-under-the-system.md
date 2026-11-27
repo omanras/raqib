@@ -1561,3 +1561,38 @@ another name still writing the place; a place replaced between its reading and i
 - ZF-8 (the rig, and landing). X56 is wired on this branch. M12.4c2b4 lands as 0.19.0 after the fixes' gate, the
   gate's Windows jobs, X56 read as met in the rig's Windows log, and the eight moments asked again of the commit
   to be merged.
+
+## Amendment ZG (the Table, 2026-11-27) - M12.4c2b4's fixes reviewed (NEXT, thirteen findings) and asked again on real Windows; lands as 0.19.0
+The packet is docs/review/2026-11-27-M12.4c2b4-fixes.md. Asked of the fixes' commit 04fd853 on real Windows (the
+probe branch c44e3ec; x64 and ARM64, the same on both): the eight moments ended as before - and so with the
+place's state asked first, which the one command of a running service passed (the watch had ended with its end),
+with "read again, is gone", and with error 5 and 32 inside the place in their new words. X56 was met on the rig
+at 56833db and at 04fd853, and the gate's six jobs were green on 04fd853. In those two rig runs other claims of
+the watch's own part were missed - X14 and X32 to X34 once (the stand-in's PowerShell took 60 s and 43 s, so its
+last acts fell after the watch's rounds), X11 once (the watch reported a line of silence in the stand-in's own
+source) - each before any step of the service's ran: not this task's, and recorded below. Not measured: a state
+that cannot be read; a wait on 32 that is needed; a name the system rewrites.
+- ZG-1 (a state that cannot be read is no leave to remove; finding 1). ZF-2 said "fresh" and the builder built
+  that, so a state not parsed or not readable let the place be removed. The watch's own rule for such a state is
+  that it is not clearance, and a state can read as torn at the moment a living watch writes it. So: the place
+  is removed only where its state says no watch holds it, or is stale; fresh is said as ZF-2 rules; every other
+  answer is said as not known, nothing is touched, and the line says such a place is removed by hand where no
+  watch runs.
+- ZG-2 (one bound for the whole removal; finding 2, and the builder's question). ZF-3's reason is one process
+  letting go of its handles at once. The bound is therefore one for the whole removal - 20 s from the first name
+  found in use - and one count of asks, 40, so that a clock that does not move ends it too (finding 8).
+- ZG-3 (a wait that could not be made is said; finding 3). A clock or a pause that fails ends the asking for the
+  rest of the removal, and the line of what is left says that the wait could not be made.
+- ZG-4 (words; findings 5, 6, 7 and 12). On the read again, an error 5 is not said with "an administrator is
+  needed". The held line adds a heartbeat ahead of the clock, as the runner's own does. The module's measured
+  sentence says each moment as it was; its older sentence that the module was never run on a real machine goes.
+- ZG-5 (recorded). Two judgements of a Windows name now exist (the check's and this one's, the stricter);
+  `holder` reads the state through `.raqib\host` by path, following links, and only reads (ZE-5's trust); the
+  test of the three `os` calls can still be passed by a route through another module's name. And for the rig: on
+  2026-11-27 its Windows watch part missed claims twice for reasons of the machine's speed and of a silence the
+  watch itself reported - a task of the rig's own if it comes again: the watch should outlast the stand-in, not
+  run a fixed count of rounds.
+- ZG-6 (lands). M12.4c2b4 lands as 0.19.0 after the gate on the tree to be merged and its Windows jobs, X56 read
+  as met with no claim missed in that run's Windows log, and the eight moments asked of the commit to be merged.
+  With it the service of Windows is whole: run, checked, installed, asked, removed, and its record removed, each
+  by Raqib's own commands.

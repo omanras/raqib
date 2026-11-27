@@ -9,8 +9,8 @@ its description), level 2 (started again after 5000, 30000 and 300000 ms, the co
 4 (the failure flag); StartServiceW, the state START_PENDING then RUNNING; a service opened with 0x10024, a Stop,
 STOPPED, DeleteService, and the name asked for again answering 1060; a Stop while it waits for its next start
 answering 1062. From Amendments T, U and W: a Stop while it starts answers 1052; a name already there answers 1073
-to a making, one marked for removal 1072. This module itself was not run on a real machine: the rig reads it as X54
-(X-7).
+to a making, one marked for removal 1072. The rig reads the install and the remove on a real machine at every run as
+X54 (X-7), and the remove with --purge as X56.
 
 install (X-3), in this order, one line each, and at the first that fails nothing more is made: Windows; the check of
 this process's own code by raqib/wincode.py's own functions (not_asked on the plain road, then check), refused in
@@ -43,22 +43,24 @@ remove --purge (Amendments ZE and ZF; M12.4c2b4): the service's remove first, as
 where that ended with exit 0 (the service gone, or none installed) - else one line says so (a service that may still
 run may still write), 1. Then the place is judged by place_judged, the install's reading of a place it finds, tied by
 the tests to the runner's own (winservice.prepare): absent is nothing to remove, 0; refused is said in its own words
-and the name left exactly as it is, 1 (a place that could not be read at all is said so in the RESULT). Taken, its
-own state is asked first, as the runner asks it at a start (winservice.System.held): a host watch that still holds it
+and the name left exactly as it is, 1 (a place that could not be read at all is said so in the RESULT). Taken, its own
+state is asked first, as the runner asks it at a start (winservice.System.held): a host watch that still holds it
 fresh leaves it, 1. Else it is removed bottom up by System's listed, remove_file and remove_folder, every path handed
 one inside the place and no name handed that the system would rewrite (ZF-1: one ending in a dot or a space, a
 device's name); a reparse point inside is neither entered nor removed, counted and said, and the place then stays;
-where this command removed the service, a removal inside answering 32 is asked again every IN_USE_EVERY s for at most
-IN_USE_BOUND s by the system object's own clock and sleep (ZF-3); each error is counted by the system's number and
-the first one's path said; 0 only where the place, read again by place_judged, is not there. Between its reading and
-its removing the place and each folder in it are named again by path (ZE-5). Measured of this command on real Windows
-(ZF's first paragraph; the probe a672ab5 of a2c6905, x64 and ARM64): a service Raqib's install made and that watched
-a round, removed with its place in one command, 0; nothing installed and no place, 0; a folder of the name made by an
-administrator's shell, a link of the name, and a link inside the place, each left with its target's file, 1; a
-read-only file inside, error 5, 1; a file held open, error 32, 1, and 0 once let go; a user outside the
-administrators' group, the place not read and nothing touched, 1. Not measured: a name the system rewrites; a service
-of another name still writing the place; a place replaced between its reading and its removal; nor the held state's
-road, the wait on 32 or the words ZF rules, built after that probe.
+where this command removed the service, a removal inside answering 32 is asked again every IN_USE_EVERY s, for at most
+IN_USE_BOUND s in the whole purge, by the system object's own clock and sleep (ZF-3, ZG-2); a host watch's state that
+says fresh, or that cannot be read, leaves the place untouched (ZF-2, ZG-1); each error is counted by the system's
+number and the first one's path said; 0 only where the place, read again by place_judged, is not there. Between its
+reading and its removing the place and each folder in it are named again by path (ZE-5). Measured of this command on
+real Windows (ZF's first paragraph; the probe a672ab5 of a2c6905, x64 and ARM64): a service Raqib's install made and
+that watched a round, removed with its place in one command, 0; nothing installed and no place, 0; a folder of the
+name made by an administrator's shell, left with its file, 1; a link of the name, left with its target's file, 1; a
+link inside the place, the rest removed and the link left with its target's file, 1; a read-only file inside, error 5,
+1; a file held open, error 32, 1, and 0 once let go; a user outside the administrators' group, the place not read and
+nothing touched, 1. Not measured: a name the system rewrites; a service of another name still writing the place; a
+place replaced between its reading and its removal; nor the held state's road, the wait on 32 or the words ZF rules,
+built after that probe.
 
 Every call of the system that writes or removes goes through one object, System, whose methods are the system's own
 calls and nothing else, each returning (what it did or read, 0), (None, the system's error number) or (None, words);
@@ -145,10 +147,13 @@ RECORD_UNREAD = ("  the record (--purge): %s; the place could not be read, so no
 RECORD_TAKEN = ("  the record (--purge): %s is there, a folder owned by %s with the closed list, as the runner makes"
                 " it: to be removed bottom up, no link followed\n")
 RECORD_HELD = ("  the record (--purge): a host watch's state still holds the place (its heartbeat %s, stale after %s"
-               " s): that watch still watches, or was ended without its end; nothing removed: ask for the record"
-               " again when it has ended (ADR-0013 ZF-2)\n")
+               " s): that watch still watches, or was ended without its end, or its heartbeat is ahead of this"
+               " clock; nothing removed: ask for the record again when it has ended (ADR-0013 ZF-2)\n")
 RECORD_HELD_FAULT = ("  the record (--purge): whether a host watch still holds the place could not be asked (%s):"
                      " nothing touched\n")
+RECORD_HELD_UNKNOWN = ("  the record (--purge): whether a host watch still holds the place is not known: %s; a state"
+                       " that cannot be read is no leave to remove (ADR-0013 ZG-1): nothing touched; where no watch"
+                       " runs there, the place is removed by hand\n")
 RECORD_GONE = "  the record: removed %s and %s inside it, then the place itself: %s, read again, is gone\n"
 RECORD_NOT_GONE = ("  the record: removed %s and %s inside it, then the place itself; read again, it answers: %s\n")
 RECORD_LEFT = "  the record: NOT all removed: %s and %s removed; left: %s; the place stays\n"
@@ -160,6 +165,9 @@ RECORD_KEPT = "%s; the record NOT removed: %s"
 NOT_PLACE = "not the place as Raqib's service makes it"   # a place read and refused; the rig reads it (X56)
 NOT_READ = "the place could not be read"
 HELD_SAID = "a watch still holds the place"
+# raqib/host.py HELD_NONE and HELD_STALE, holder()'s words for no watch holding the place (a test ties them); every
+# other answer but "fresh" is not known, and is no leave to remove (ZG-1)
+HELD_CLEAR = ("none", "stale")
 HELD_UNKNOWN = "whether a watch still holds the place NOT KNOWN"
 NOT_ABSENT = "the place, read again, is not absent (said above)"
 PART_LEFT = "part of it is left (said above)"
@@ -169,7 +177,8 @@ NOT_ONE_NAME = "a name listed that is not one plain name"
 DEVICES = ("CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$")   # ZF-1: and COM and LPT with a digit
 IN_USE = 32                     # ERROR_SHARING_VIOLATION: a name another process holds open (measured, ZF)
 IN_USE_EVERY = 0.5              # ZF-3: seconds between two asks of a removal answering IN_USE
-IN_USE_BOUND = 20.0             # ZF-3: seconds a removal answering IN_USE is asked again, at most
+IN_USE_BOUND = 20.0             # ZF-3, ZG-2: seconds names answering IN_USE are asked again, in one purge
+IN_USE_ASKS = 40                # ZG-2: and asks in all (the bound over the pause): a clock that stands still
 INSIDE_WORDS = {DENIED: "access denied: a read-only file, or a name the system holds",   # ZF-4: no administrator
                 IN_USE: "in use by another process"}
 
@@ -860,23 +869,28 @@ def _inside_said(error):
 
 
 def _removal(system, call, path, wait):
-    """ZF-3: one removal inside the place (call: remove_file or remove_folder); where `wait` (this command removed the
-    service) and it answers IN_USE, asked again every IN_USE_EVERY s for at most IN_USE_BOUND s by the system object's
-    own clock and sleep, the ones the remove's waits use: its last error, or 0."""
+    """ZF-3, ZG-2: one removal inside the place (call: remove_file or remove_folder); where `wait` is on (this command
+    removed the service) and it answers IN_USE, asked again every IN_USE_EVERY s by the system object's own clock and
+    sleep, the ones the remove's waits use - within ONE bound for the whole purge, kept in `wait`: IN_USE_BOUND s
+    from the first name found in use, and IN_USE_ASKS asks in all (so that a clock that does not move ends it too). A
+    clock or a sleep that fails ends the waiting for the rest of the purge and is kept to be said. Its last error,
+    or 0."""
     _, error = _call(call, path)
-    if error != IN_USE or not wait:
-        return error
-    first, failed = _call(system.clock)
-    while not failed:
+    while error == IN_USE and wait is not None and wait["on"] and wait["asks"] < IN_USE_ASKS:
+        now, failed = _call(system.clock)
+        if failed or not isinstance(now, (int, float)) or now != now:
+            wait["on"], wait["failed"] = False, "its clock failed"
+            break
+        if wait["until"] is None:
+            wait["until"] = now + IN_USE_BOUND
+        if now >= wait["until"]:
+            break
         _, failed = _call(system.sleep, IN_USE_EVERY)
         if failed:
+            wait["on"], wait["failed"] = False, "its pause failed"
             break
+        wait["asks"] += 1
         _, error = _call(call, path)
-        if error != IN_USE:
-            return error
-        now, failed = _call(system.clock)
-        if not failed and now - first >= IN_USE_BOUND:
-            break
     return error
 
 
@@ -888,6 +902,7 @@ def _purge(system, path, wait):
     from raqib import winservice
     done, errors, first, links, left = {"folder": 0, "file": 0}, {}, [], [], set()
     above, order, pending = {path: None}, [], [path]
+    waiting = {"on": bool(wait), "until": None, "asks": 0, "failed": None}   # ZG-2: one for the whole purge
 
     def failed(error, where):
         errors[error] = errors.get(error, 0) + 1
@@ -913,7 +928,7 @@ def _purge(system, path, wait):
                 above[inner] = folder
                 pending.append(inner)
             else:
-                error = _removal(system, system.remove_file, inner, wait)
+                error = _removal(system, system.remove_file, inner, waiting)
                 if error:
                     failed(error, inner)
                     left.add(folder)
@@ -922,7 +937,7 @@ def _purge(system, path, wait):
     gone = False
     for folder in reversed(order):   # a folder after every folder inside it: bottom up
         if folder not in left:
-            error = _removal(system, system.remove_folder, folder, wait and folder != path)
+            error = _removal(system, system.remove_folder, folder, waiting if folder != path else None)
             if not error:
                 gone = folder == path
                 done["folder"] += folder != path
@@ -937,6 +952,9 @@ def _purge(system, path, wait):
     if errors:
         counted = ["%s %s" % (_inside_said(n), "once" if c == 1 else "%d times" % c) for n, c in errors.items()]
         what.append("%s; the first at %s" % (", ".join(counted), _error_said(first[0])))
+    if waiting["failed"]:   # ZG-3: a wait that could not be made is said, not passed off as made
+        what.append("the wait for a name in use could not be made (%s): no name was asked again after that"
+                    % waiting["failed"])
     return gone, _many(done["folder"], "folder"), _many(done["file"], "file"), "; ".join(what) or "NOT KNOWN what"
 
 
@@ -963,10 +981,16 @@ def _record(system, out, place, service, wait):
     except Exception as exc:   # said, nothing touched
         out.write(RECORD_HELD_FAULT % type(exc).__name__)
         return 1, RECORD_KEPT % (service, HELD_UNKNOWN)
-    if isinstance(held, dict) and held.get("held") == winservice.HELD_FRESH:   # as the runner's _wait_for reads it
+    state = held.get("held") if isinstance(held, dict) else None
+    if state == winservice.HELD_FRESH:   # as the runner's _wait_for reads it
         out.write(RECORD_HELD % (_error_said(winservice._age_said(held.get("age"))),
                                  _error_said(winservice._number_said(held.get("stale")))))
         return 1, RECORD_KEPT % (service, HELD_SAID)
+    if state not in HELD_CLEAR:   # ZG-1: a state that cannot be read is no clearance (the watch's own D-6)
+        why = held.get("why") if isinstance(held, dict) else None
+        out.write(RECORD_HELD_UNKNOWN % _error_said(str(why) if why else "its state gave an answer this command"
+                                                                         " does not know"))
+        return 1, RECORD_KEPT % (service, HELD_UNKNOWN)
     gone, folders, files, what = _purge(system, path, wait)
     if not gone:
         out.write(RECORD_LEFT % (folders, files, what))
@@ -975,7 +999,8 @@ def _record(system, out, place, service, wait):
     if again[0] == "absent":
         out.write(RECORD_GONE % (folders, files, _error_said(path)))
         return 0, PURGED % service
-    out.write(RECORD_NOT_GONE % (folders, files, again[2] if again[0] == "refused" else
+    out.write(RECORD_NOT_GONE % (folders, files, again[2].replace("; an administrator is needed", "")
+                                 if again[0] == "refused" else
                                  "%s is there, a folder owned by %s with the closed list" % (_error_said(again[1]),
                                                                                            again[2])))
     return 1, RECORD_KEPT % (service, NOT_ABSENT)

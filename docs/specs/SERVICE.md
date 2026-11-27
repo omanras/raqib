@@ -817,38 +817,45 @@ makes it`, 1). A place taken - a folder, no reparse point, owned by the system o
 held fresh, one line says how old the state is and that the record is asked for again when that watch has ended,
 nothing is removed, and the RESULT ends `; the record NOT removed: a watch still holds the place`, 1 (a killed watch's
 state holds it until it is stale, about half a minute; a watch that ended with its end does not); an exception out of
-that call is said and nothing is touched, 1. Else it is removed bottom up through three calls of the system object
-(os.scandir with each name's own attributes, no link followed; os.unlink; os.rmdir), every path handed one inside the
-place. A listed name the system would make another name of - empty, ending in a dot or a space, holding a separator, a
-colon or NUL, or a device's name (CON, PRN, AUX, NUL, COM or LPT with a digit, CONIN$, CONOUT$; with or without an
-extension, in any case) - is never handed: it is counted and said, and the place then stays. A reparse point inside is
-neither entered nor removed, it is counted and said, and every folder above it stays. Where this command removed the
-service, a removal inside the place answering error 32 (in use: the runner's process may live a little after it says
-STOPPED) is asked again every half second for at most 20 s by the command's own clock, then counted; with nothing
-installed there is no waiting. Each error is counted by the system's number and the first one's path said; error 5
-there is said "access denied: a read-only file, or a name the system holds" (the caller has just read the place;
-nothing changes a file's attributes to make it removable), and 32 "in use by another process". Between its reading and
-its removing the place and each folder in it are named again by path, not held by a handle (ZE-5): who could change
-them in between is the system or an administrator. One line says what was read of the place and that it is to be
-removed; one says the result: after the place's own folder is removed the place is read again, and only where it is
-not there is it said `..., read again, is gone` with `RESULT: the service removed; the record removed` (or `nothing
-installed; the record removed`), 0; else what it answered, with `; the record NOT removed: the place, read again, is
-not absent (said above)`, 1; or what is left, with `; the record NOT removed: part of it is left (said above)`, 1.
-Measured of this command on real Windows (ZF's first paragraph: the builder's commit a2c6905 asked through the probe
-a672ab5, x64 and ARM64, the same on both): a service Raqib's install made and that watched a round was removed with
-its place in one command, exit 0; with nothing installed and no place, exit 0, nothing to remove; a folder of the name
-made by an administrator's shell, exit 1, its inherited list said against the closed one, the folder and its file
-left; a link of the name, exit 1, "is a reparse point", the link and its target's file left; the place with a link
-inside, exit 1, the rest removed, the link neither entered nor removed, its target's file left, and with the link
-taken away by hand, asked again, exit 0; a read-only file inside, exit 1, error 5; a file held open by another
-process, exit 1, error 32, and once it was let go, asked again, exit 0; a user outside the administrators' group, exit
-1, the place not read (error 5), nothing touched. Before that (ZE's first paragraph; the probe 91952bf) the place
-after Raqib's own remove read as the runner makes it, holding 3 folders and 11 files (about 109 kB), and an
-administrator's process removed its 14 names bottom up, and the place, in under a tenth of a second with no error. Not
-measured: a name inside the place that the system rewrites; a service of another name still writing the place; a place
-replaced between its reading and its removal; a very large record (removed name by name, with no bound of time: ZE-5);
-and what ZF added - the held state asked, the wait on 32, the words for 5 and 32 inside the place, the reading again -
-built after that probe. An update over a running service is: remove, then install (X-10).
+that call is said and nothing is touched, 1; and a state that cannot be read - not parsed, not readable, an answer not
+known - is no leave to remove either (ZG-1, the watch's own rule for a state it cannot read): one line says so and
+that such a place is removed by hand where no watch runs, the RESULT ends `; the record NOT removed: whether a watch
+still holds the place NOT KNOWN`, 1. Only a state that says no watch holds the place, or a stale one, lets it be
+removed: bottom up through three calls of the system object (os.scandir with each name's own attributes, no link
+followed; os.unlink; os.rmdir), every path handed one inside the place. A listed name the system would make another
+name of - empty, ending in a dot or a space, holding a separator, a colon or NUL, or a device's name (CON, PRN, AUX,
+NUL, COM or LPT with a digit, CONIN$, CONOUT$; with or without an extension, in any case) - is never handed: it is
+counted and said, and the place then stays. A reparse point inside is neither entered nor removed, it is counted and
+said, and every folder above it stays. Where this command removed the service, a removal inside the place answering
+error 32 (in use: the runner's process may live a little after it says STOPPED) is asked again every half second, for
+at most 20 s and 40 asks in the whole removal (ZG-2), by the command's own clock, then counted - and a clock or a
+pause that fails ends the asking and is said (ZG-3); with nothing installed there is no waiting. Each error is counted
+by the system's number and the first one's path said; error 5 there is said "access denied: a read-only file, or a
+name the system holds" (the caller has just read the place; nothing changes a file's attributes to make it removable),
+and 32 "in use by another process". Between its reading and its removing the place and each folder in it are named
+again by path, not held by a handle (ZE-5): who could change them in between is the system or an administrator. One
+line says what was read of the place and that it is to be removed; one says the result: after the place's own folder
+is removed the place is read again, and only where it is not there is it said `..., read again, is gone` with `RESULT:
+the service removed; the record removed` (or `nothing installed; the record removed`), 0; else what it answered, with
+`; the record NOT removed: the place, read again, is not absent (said above)`, 1; or what is left, with `; the record
+NOT removed: part of it is left (said above)`, 1. Measured of this command on real Windows (ZF's first paragraph: the
+builder's commit a2c6905 asked through the probe a672ab5, x64 and ARM64, the same on both): a service Raqib's install
+made and that watched a round was removed with its place in one command, exit 0; with nothing installed and no place,
+exit 0, nothing to remove; a folder of the name made by an administrator's shell, exit 1, its inherited list said
+against the closed one, the folder and its file left; a link of the name, exit 1, "is a reparse point", the link and
+its target's file left; the place with a link inside, exit 1, the rest removed, the link neither entered nor removed,
+its target's file left, and with the link taken away by hand, asked again, exit 0; a read-only file inside, exit 1,
+error 5; a file held open by another process, exit 1, error 32, and once it was let go, asked again, exit 0; a user
+outside the administrators' group, exit 1, the place not read (error 5), nothing touched. Before that (ZE's first
+paragraph; the probe 91952bf) the place after Raqib's own remove read as the runner makes it, holding 3 folders and 11
+files (about 109 kB), and an administrator's process removed its 14 names bottom up, and the place, in under a tenth
+of a second with no error. Not measured: a name inside the place that the system rewrites; a service of another name
+still writing the place; a place replaced between its reading and its removal; a very large record (removed name by
+name, with no bound of time: ZE-5); a state that cannot be read; a wait on 32 that is ever needed (in no run was a
+name in use after the service's own remove). What ZF added was asked the same way of the fixes' commit 04fd853 (the
+probe c44e3ec, x64 and ARM64): the eight moments ended as before, the one command removing the service and its place
+with the state asked first, the place "read again, is gone", and error 5 and 32 inside the place said in their new
+words. An update over a running service is: remove, then install (X-10).
 
 **What they do not do.** They make and remove exactly one service, RaqibWatch with Raqib's mark, and change none that
 is there; they start no program themselves, write no file and read no registry; the place is read and never made; one
