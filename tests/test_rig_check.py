@@ -1132,3 +1132,92 @@ def test_x49_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
     assert row(["--service-check", str(tmp_path / "check.txt")]) == check.MET
     assert row(["--service-check", str(tmp_path / "none.txt")]) == check.MISSED
     assert row([]) == check.SKIP
+
+
+# --- X50 (ADR-0013 M-6, M12.4c1b): `raqib service check` takes a Python copied under Program Files, refuses the job's
+def plain_line():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    return ("raqib service check: the code a service would run is the system's alone: %s"
+            % wincode.plain_words({"folders": 120, "files": 2400, "above": 2, "entries": 5, "missing": 1, "pth": 0,
+                                   "pth_lines": 0}))
+
+
+PLAIN_REFUSED = ("raqib service check: NOT the system's alone: C:\\hostedtoolcache\\windows\\Python, as a folder"
+                 " above it (K-3): the entry (A;ID;0x1301bf;;;AU) gives AU, a name outside the system's, 0x10000:"
+                 " not allowed")
+
+
+def plainfile(**kw):
+    keys = {"system-exit": "0", "system-words": plain_line(), "open-exit": "1", "open-words": PLAIN_REFUSED}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x50(text):
+    ((ident, state, words),) = check.read_service_check_plain(text)
+    assert ident.startswith("X50 ") and ident == check.SERVICE_CHECK_PLAIN_NAME
+    return state, words
+
+
+def test_x50_met_where_the_copy_was_taken_by_count_and_the_jobs_python_refused_with_a_path_and_a_role():
+    state, words = x50(plainfile())
+    assert state == check.MET, words
+    assert "(exit 0; 2522 names checked: 120 folders, 2400 files, 2 folders above)" in words
+    assert "the job's own Python was refused (exit 1): " + PLAIN_REFUSED in words
+    assert x50(plainfile().replace("\n", "\r\n"))[0] == check.MET and x50("\ufeff" + plainfile())[0] == check.MET
+    code_role = PLAIN_REFUSED.replace("as a folder above it (K-3)", "as the code itself (K-2)")
+    assert x50(plainfile(**{"open-words": code_role}))[0] == check.MET
+
+
+def test_x50_and_x49_are_one_reading_each_its_own_sentence():
+    assert x50(checkfile())[0] == check.MISSED and "its words hold no counts' sentence" in x50(checkfile())[1]
+    assert x49(plainfile())[0] == check.MISSED and "its words hold no counts' sentence" in x49(plainfile())[1]
+    assert check.read_service_check.__code__.co_names.count("read_check") == 1
+    assert check.read_service_check_plain.__code__.co_names.count("read_check") == 1
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"system-exit": "1"}, "the copy in Program Files: exit 1, not 0"),
+    ({"system-exit": "two"}, "the copy in Program Files: exit two, not 0"),
+    ({"system-words": "raqib service check: the code a service would run is the system's alone"},
+     "its words hold no counts' sentence"),
+    ({"open-exit": "0"}, "the job's own Python: exit 0, not 1"),
+    ({"open-exit": "2"}, "the job's own Python: exit 2, not 1"),
+    ({"open-words": "raqib service check: NOT the system's alone: somewhere, as a folder above it (K-3): no"},
+     "its words name no path of a drive"),
+    ({"open-words": "raqib service check: NOT the system's alone: D:\\, owned by NS"}, "its words name no role"),
+    ({"system-exit": None}, "no system-exit"), ({"system-words": None}, "no system-words"),
+    ({"open-exit": None}, "no open-exit"), ({"open-words": None}, "no open-words"),
+])
+def test_x50_missed_for_each_thing_not_found(kw, said):
+    state, words = x50(plainfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x50_missed_where_the_counts_do_not_add_up_or_the_file_is_empty():
+    state, words = x50(plainfile(**{"system-words": plain_line().replace("checked 2522 names", "checked 9 names")}))
+    assert state == check.MISSED and "its counts do not add up (9 names, 120 + 2400 + 2)" in words
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x50(text) == (check.MISSED, "missing: the check's file is empty or was not written (silence is a"
+                                           " finding)")
+
+
+def test_x50_n_a_where_none_was_given():
+    assert x50(None) == (check.SKIP, "no service check was given (--service-check-plain)")
+
+
+def test_x50_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "plain.txt").write_text(plainfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X50 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-check-plain", str(tmp_path / "plain.txt")]) == check.MET
+    assert row(["--service-check-plain", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP

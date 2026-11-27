@@ -337,19 +337,27 @@ NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing list
            " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
 GUIDE_NEW += NO_PAGE
 # ADR-0013 Amendment K (M12.4c1, K-6): `raqib service check`'s row in the guide's table, and when to run it
-SERVICE_CHECK = [
-    "| `raqib service check` | Windows, Raqib packed with its own runtime; no rights needed, nothing wr"
-    "itten: whether the code a service of Windows would run is the system's alone - the program's folde"
-    "r, whole, and each folder above it to the drive, by the owners and lists Windows gives (`docs/spec"
-    "s/SERVICE.md`); exit 0 the system's alone, with how many names of which kinds it checked, 1 not or"
-    " not read, the first name refused said with its role and why, 2 not Windows or not packed (a plain"
-    " interpreter's roads are not yet checked) |",
-    "Run `raqib service check` on Windows before a service of Windows is made to run Raqib as the syste"
-    "m, from the packed copy that service would run, once it is where it will stay: "
-    "on GitHub's Windows machines a copy an administrator put under `C:\\Program Files` was taken, asked"
-    " by an administrator and by a plain user alike.",
-    "A copy in a folder made at the drive's root or under `C:\\ProgramData` was refused, with the name r"
-    "efused said; a Raqib a plain interpreter runs is not checked yet and gets exit 2.",
+SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendment M): the row and the paragraph say the plain road
+    "| `raqib service check` | Windows; no rights needed, nothing written: whether the code a service of"
+    " Windows would run is the system's alone, by the owners and lists Windows gives (`docs/specs/SERVIC"
+    "E.md`) - packed with its own runtime, the program's folder, whole, and each folder above it to the "
+    "drive; run by a plain interpreter asked with `-I`, its folder, its base's, its prefixes, every entr"
+    "y of its path and the lines of its *.pth files (an entry not there judged by the deepest folder of "
+    "it that is there), and the raqib package, each whole, and each folder above them; exit 0 the system"
+    "'s alone, with how many names of which kinds it checked, 1 not or not read, the first name refused "
+    "said with its role and why, 2 not Windows, or a plain interpreter not started with `-I` or started "
+    "with `-S` (the command to ask it by said) |",
+    "Run `raqib service check` on Windows before a service of Windows is made to run Raqib as the system"
+    ", from the packed copy that service would run, once it is where it will stay: on GitHub's Windows m"
+    "achines a copy an administrator put under `C:\\Program Files` was taken, asked by an administrator a"
+    "nd by a plain user alike.",
+    "A copy in a folder made at the drive's root or under `C:\\ProgramData` was refused, with the name re"
+    "fused said.",
+    "For a Raqib a plain interpreter runs, ask it with that interpreter as the service will run it, `\"PA"
+    "TH\\python.exe\" -I -m raqib service check`: asked without `-I`, or with `-S`, it gets exit 2 and tha"
+    "t command.",
+    "The plain road is held by tests on the owners and lists measured of a Python an administrator put u"
+    "nder Program Files (taken); it was not yet asked on a real machine.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK

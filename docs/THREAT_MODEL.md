@@ -2189,11 +2189,14 @@ collector that is slow, down or refusing never delays or loses a capture
   system's; a place on another volume, or one with a file held open by
   another process; Windows before the runners' versions.
 - **What the check of the code does not read (`raqib service check`;
-  ADR-0013 Amendment K).** On Windows `raqib service check` says whether the
-  code a service would run is the system's alone, by the owners and lists of
-  the packed program's folder, whole, and of each folder above it, read at
-  one moment; Raqib installs no service of Windows yet, so nothing asks it
-  before one runs. It does not read the rights a user holds apart from any
+  ADR-0013 Amendments K and M).** On Windows `raqib service check` says
+  whether the code a service would run is the system's alone, by the owners
+  and lists of the packed program's folder, whole, or, for a plain
+  interpreter asked with `-I`, of its folder, its base's, its prefixes,
+  every entry of its path and of its *.pth files and the raqib package's
+  folder, each whole, and of each folder above them, read at one moment;
+  Raqib installs no service of Windows yet, so nothing asks it before one
+  runs. It does not read the rights a user holds apart from any
   list (backup and restore, taking ownership, debugging programs), each of
   which reaches past every list it reads; the packed runtime's own roads
   outside the program's folder, if it has any (it takes the packer's word
@@ -2202,11 +2205,20 @@ collector that is slow, down or refusing never delays or loses a capture
   test); the labels of a system list; what a drive's letter really names (a
   letter given to a folder or a share reads as a drive of its own, and the
   folders really above it are not read - refused with the install, not yet);
-  or anything that changes after it was read. A plain interpreter is
-  refused, never passed: its roads are not checked. Not measured: a
-  removable or shared drive, a machine joined to a domain, Program Files
-  with lists an administrator changed, a file the system itself marks as a
-  reparse point.
+  or anything that changes after it was read. On the plain road it does not
+  read what the system's own account would add to the path that the
+  asker's does not (only the system writes there), a finder or hook a
+  package installs (an editable install is met only as its *.pth file and
+  the package's folder), or what an `import` line of a *.pth file does (the
+  file is found the system's alone, and nothing of it is run); a plain
+  interpreter asked without `-I`, or with `-S`, is never passed (exit 2).
+  An entry of the path that is not there is judged by the deepest folder of
+  it that is there, as the code itself: whoever may add the missing thing
+  decides what runs. Not measured: a removable or shared drive, a machine
+  joined to a domain, Program Files with lists an administrator changed, a
+  file the system itself marks as a reparse point; whether `-I` reads the
+  registry's paths, the Store's Python, an embedded distribution, Python
+  older than 3.10, and the plain road itself on a real machine.
 
 ## 7. Platform
 

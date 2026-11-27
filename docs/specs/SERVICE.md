@@ -530,8 +530,8 @@ is not the system's alone, and the event log are M12.4c's.
 
 ## Windows: the check (`raqib service check`)
 
-ADR-0013 Amendment K (K-1 to K-7), in raqib/wincode.py. A service of Windows runs as the system what its command
-names, so before anything installs one (installing, removing and the state are not built yet: M12.4c2) Raqib says
+ADR-0013 Amendments K (K-1 to K-7), L and M (M-1 to M-5), in raqib/wincode.py. A service of Windows runs as the
+system what its command names, so before anything installs one (installing, removing and the state are not built yet: M12.4c2) Raqib says
 whether that code is the system's alone: whether anybody but the system could change it, add to it or take from it.
 It judges by the owners and access lists Windows gives, read through the runner's one reader (one handle on the name
 itself, a link not followed: its kind, its owner and its list; K-7, `winservice.System.read_place`), and by nothing
@@ -556,8 +556,8 @@ empty; a flag or a rights word this Raqib does not know; a name of neither form.
 
 | Role | Taken only where it is | And every allowing entry for a name outside the three holds nothing but |
 |---|---|---|
-| the code itself (K-2): the program's folder and every file and folder below it, whole | no reparse point; owned by one of the three; its list there | reading and executing: 0x1, 0x8, 0x20, 0x80, 0x20000, 0x100000, GR, GX - its inherit-only entries too (what the folder would give to what is made in it later is judged now), but for the creator's own, taken only where it is inherit-only |
-| a folder above (K-3, L-1): each folder above the program's folder, up to the drive's own; the program's folder itself is judged as code | a folder and no reparse point; owned by one of the three; its list there | K-2's bits and adding a thing beside: add a file 0x2, add a folder 0x4, and no other bit - in each entry that is not inherit-only (inherit-only entries are not read here: what a folder on the way gives to new things beside the code is not the code) |
+| the code itself (K-2): each root of the road and every file and folder below it, whole - packed, the program's folder; on the plain road each root of M-2 - and, for an entry of the path that is not there, the deepest folder of it that is there, itself only (M-3) | no reparse point; owned by one of the three; its list there | reading and executing: 0x1, 0x8, 0x20, 0x80, 0x20000, 0x100000, GR, GX - its inherit-only entries too (what the folder would give to what is made in it later is judged now), but for the creator's own, taken only where it is inherit-only |
+| a folder above (K-3, L-1): each folder above a root, up to the drive's own; a root itself is judged as code | a folder and no reparse point; owned by one of the three; its list there | K-2's bits and adding a thing beside: add a file 0x2, add a folder 0x4, and no other bit - in each entry that is not inherit-only (inherit-only entries are not read here: what a folder on the way gives to new things beside the code is not the code) |
 
 Denying entries give nothing and are not counted. These are lists of what is allowed, not of what is refused: a bit on
 neither list refuses. So nobody but the system may delete or rename what a folder above holds (0x40), delete or rename
@@ -569,7 +569,8 @@ Files pass, and refuses GitHub's Python, the job's own folders and `D:\`. A refu
 owner or the entry as read, with the bits that refuse in hex.
 
 **The path, and what is refused unread (K-4).** The program's path, and the folder its runtime says its modules are
-in, are judged only where each begins with a drive's letter (`X:\`) and every part of it is one plain name: a share,
+in - on the plain road the interpreter's path, its base executable's, its prefixes, every entry of its path, every
+line of a *.pth file made whole, and the raqib package's folder - are judged only where each begins with a drive's letter (`X:\`) and every part of it is one plain name: a share,
 a device path (`\\?\`, `\\.\`), `/`, `..`, `.`, an empty part, a character no name of Windows holds, a name ending in
 a dot or a space, a device's name (`NUL`, `COM1`; Windows would open another thing for each of those last two) - each
 is refused, and nothing is read. A path longer than the system opens plainly (259 characters), a name that cannot be
@@ -583,18 +584,47 @@ is the folder the program file is in. The folders above it are read first, from 
 every file and folder below it, whole; the modules' folder (`sys._MEIPASS`) and the program are then met again and
 not read twice (names are compared without case). Where the runtime does not say where its modules are, or says a
 folder outside the program's (a one-file packing unpacks into a temporary folder at each start), the check refuses:
-what would run is not there to be read. A plain interpreter is refused for now, with its own words: its roads (the
-interpreter's folder, a venv's base, every entry of sys.path, the lines of *.pth files) are not ruled before an
-install of Python for all users is measured, and GitHub's own Python can only ever be refused.
+what would run is not there to be read. The packed road is chosen first; a plain interpreter takes the plain road.
+
+**The plain road (Amendment M).** A Raqib a plain interpreter runs, as M12.4c2's service will run it: the interpreter,
+`-I`, `-m raqib service run` (measured). So the check takes a plain interpreter only where it was itself started with
+`-I` and with its site (no `-S`), read from the running interpreter (`sys.flags.isolated`, `sys.flags.no_site`): then
+the path it walks is the path the service gets, read and never worked out. Otherwise exit 2, on the error stream,
+saying which is missing and the command to ask it by: the interpreter's path, then `-I -m raqib service check` (M-1).
+Walked, each by K-2 and whole, the folders above each by K-3, top first, in this order (M-2): the folder the
+interpreter is in (`sys.executable`); where it names a base executable (`sys._base_executable`, a venv's base), that
+one's folder; its prefix and base prefix (`sys.prefix`, `sys.base_prefix`); every entry of its path (`sys.path`), and
+of the lines its *.pth files add; the folder of the raqib package (the folder of its `__init__.py`), wherever it is -
+outside every entry too (an editable install's finder is met only so). Each real folder is walked once (names compared
+without case), a name judged in two roles - a folder above one root that is itself a root - is read once and counted
+once, as the code itself, and one WALK_MAX bounds the whole walk. An entry that is a file is judged as itself; an entry
+that is not a string, not a whole path of a drive, or of a form K-4 refuses is refused with its own words, and so is a
+root of any other form. An entry that is not there - the library's zip, a line of a *.pth file - is judged by the
+deepest folder of it that is there, as the code itself, itself only, and the folders above that by K-3: whoever may
+add the missing thing decides what runs, so `C:\made-later\x` on a path is refused because signed-in users may add a
+folder to `C:\` (M-3). "Not there" is the reader's own answer for a missing name, the system's errors 2 and 3 (file
+not found, path not found), and nothing else: a name that cannot be opened for another reason is not read, and
+refused as such; a name not there whose drive is not there either is refused, no folder of it being there to judge.
+The refusal names the entry, says it is not there, and names the folder judged for it. The interpreter's folder, its
+base's, its prefixes and the package's folder must be there: one not there is not read. In every entry that is a
+folder each *.pth file (a name ending in `.pth`, as site and the Linux check read them) is read only once it was taken
+as the code itself, as a file, with the whole entry: at most 1048576 bytes (PTH_MAX), a longer one refused; a byte
+outside printable ASCII, tab, LF and CR refuses, the byte and its offset said (PTH_ODD, as on Linux); a name ending in
+`.pth` that reads as a folder is refused. Its lines that are paths, by site's own rule - not blank, not `#`, not
+`import ` or `import` and a tab - each, its trailing whitespace stripped, joined to the entry and made whole (with
+`ntpath`, as `raqib.service.pth_entries` does with `posixpath`), become entries, there or not; a refusal under such an
+entry says the line's *.pth file. Nothing of a *.pth file is run or imported: an `import` line is code the file's owner
+put there, the file was found the system's alone, and no more is said of it (M-4). The bytes are one bounded read in
+binary mode through the check's system object, the only file the check opens; the constants are raqib/service.py's.
 
 **The command (K-6).** `raqib service check` (no option; `--no-start` and `--purge` are install's and remove's, exit
 2):
 
 | Exit | When | What it says |
 |---|---|---|
-| 0 | Windows, packed, and every name walked is the system's alone | on the output, one sentence with its counts: "raqib service check: the code a service would run is the system's alone: checked N names, each the system's alone (...): under the program's folder, whole, F folders and G files, ..., and A folders above it to the drive's letter, ..." - never a pass without them; it says the creator's own inherit-only entry was left apart, and that above only the entries that apply to the folder itself were read |
-| 1 | a name is not the system's alone, or was not read | on the output: "raqib service check: NOT the system's alone: NAME, ROLE: WHY", the first name refused, its role (`as the code itself (K-2)`, `as a folder above it (K-3)`, or none where it is the path's form, the modules' place or the walk's bound) and why |
-| 2 | not Windows, or not packed | on the error stream, which; for a plain interpreter, that its roads are not yet checked (K-5) |
+| 0 | Windows, and every name walked of the road - packed, or a plain interpreter asked with `-I` - is the system's alone | on the output, one sentence with its counts: packed, "raqib service check: the code a service would run is the system's alone: checked N names, each the system's alone (...): under the program's folder, whole, F folders and G files, ..., and A folders above it to the drive's letter, ..."; on the plain road, "... checked N names, each the system's alone (...): under the interpreter's folder, its base's, its prefix and base prefix, E entries of its path and the raqib package's folder, whole, F folders and G files, ...; M of those entries not there, each judged by the deepest folder of it that is there, itself only; P *.pth files read, L of their lines taken as entries, nothing of them run; and A folders above them to the drive's letter, ..." - never a pass without them; each says the creator's own inherit-only entry was left apart, and that above only the entries that apply to the folder itself were read (M-5) |
+| 1 | a name is not the system's alone, or was not read | on the output: "raqib service check: NOT the system's alone: NAME, ROLE: WHY", the first name refused, its role (`as the code itself (K-2)`, `as a folder above it (K-3)`, or none where it is the path's form, the modules' place, a *.pth file's bytes or the walk's bound) and why; an entry not there is said as "ENTRY, not there (error 2): the deepest folder of it that is there, FOLDER, judged for it ROLE: WHY" |
+| 2 | not Windows, or a plain interpreter not started with `-I` or started with `-S` | on the error stream, which, and for a plain interpreter the command to ask it by: `"PATH" -I -m raqib service check` (M-1) |
 
 Names and texts said are made printable (a character that is not is `?`) and cut at 200 characters, the cut marked
 `...` (200 and not the runner's 80, so that the entry that decides is said whole; a piece inside a refusal's words - a
@@ -603,7 +633,11 @@ where there is one. Below the root the walk goes in the order the file system li
 several may differ between two volumes. The rig's Windows job asks it of a packed copy an administrator put in Program
 Files and of the copy in the job's own folder, and keeps both answers (K-8; the job's wiring is the Table's): X49
 (`tools/rig/check.py --service-check FILE`) is MET only where the first is exit 0 with its counts adding up and the
-second exit 1 with a path of a drive and a role in its words.
+second exit 1 with a path of a drive and a role in its words. On the plain road the job is to copy its Python under
+Program Files as an administrator would, install Raqib into the copy, and ask the copy with `-I` and its own Python
+with `-I` (M-6; the wiring is the Table's): X50 (`tools/rig/check.py --service-check-plain FILE`, the same four keys
+and the same reading as X49) is MET only where the copy is exit 0 with the plain road's counts adding up and the job's
+own Python exit 1 with a path of a drive and a role in its words.
 
 **What Amendment K measured, and by what.** GitHub's Windows machines, x64 and ARM64 (the same on both unless said),
 every owner and list read through one handle on the name, whole; the texts are tests/fixtures/wincode/measured.txt,
@@ -633,7 +667,22 @@ drive's root was refused (the folder inherits modify for signed-in users), one u
 in the job's own folder refused (x64: `D:\`, its owner; ARM64: the job's folder on `C:\`, which signed-in users may
 delete); a copy three folders deep under Program Files, a space in a name, was taken with 5 folders above; a one-file
 packing was refused, its modules unpacked under the user's temporary folder; a plain interpreter got exit 2 and its
-words. X49 read MET on both.
+words (0.11.0, before Amendment M). X49 read MET on both.
+
+**What Amendment M measured, and by what.** GitHub's Windows machines (the probe branch's runs; the texts are
+tests/fixtures/wincode/python.txt): python.org's installer for all users (3.10.11 on x64, 3.11.9 on ARM64) puts the
+interpreter under Program Files, everything of it owned by the system or the administrators, Program Files' list
+inherited, no reparse point; asked with `-I`, its whole path lies in its own folder (its zip, which is not there; DLLs;
+Lib; the folder; its site folder), and its site folder holds one *.pth file of one `import` line. A copy of a Python an
+administrator put under Program Files, Raqib installed into it, reads the same; a venv made from it under Program
+Files adds its own folder and site folder to the base's entries and names the base in pyvenv.cfg and in the base
+executable. Without `-I` the path began with the folder the interpreter was started in and the user's site was on. A
+plain user's six writes into the copy and the venv and one renaming were refused; the watch ran as a service from the
+copy by `"...python.exe" -I -m raqib service run`. Every row of that file is taken as the code itself, and each
+folder of it as a folder above, by tests on any system; the walk of the installer's tree, the copy and the venv is held
+on a made-up Windows built from those rows, with stand-ins said in the test where no machine gave a reading (the
+venv's Lib folder, the installer's raqib package and its *.pth file, every *.pth file's bytes). The check's plain road
+itself was not run on a real machine by this task: X50 is the rig's, wired by the Table.
 
 **What the check does not read, and what was not measured (Amendments K and L).** Not read: rights a user holds apart
 from any list (backup and restore, taking ownership, debugging programs); the packed runtime's own roads - an entry of
@@ -649,5 +698,16 @@ reading from the asker too, and the file was refused as not read); a file the sy
 (it would be refused); a removable or shared drive; a machine joined to a domain; Program Files on a machine whose
 lists an administrator changed; a plain user's own profile. Measured since Amendment K and kept for the tasks that
 rule them: a volume that keeps no lists (FAT32, exFAT) gives every name the owner `WD` and a null list, and is refused
-as it is; python.org's installer for all users puts an interpreter under Program Files owned by the system and the
-administrators with Program Files' list, which a plain interpreter's road (not yet ruled) can rest on.
+as it is.
+
+**What the plain road does not read, and what was not measured (Amendment M).** Not read: what the system's own
+account would add to the path that the asker's does not (a path the registry gives under the asking user's own key is
+on the asker's path and is walked; one under the system account's own key is not seen - only the system writes
+there); a finder or hook a package installs (an editable install is met only as its *.pth file and the package's
+folder); what an `import` line of a *.pth file would do (the file is the system's alone, and that is all that is
+said); whether site would skip a *.pth file (one marked hidden is read even so; a name ending in `.PTH`, which site
+does not read either, is judged as code only). Not measured: whether `-I` reads the registry's paths at all; python.org's
+installer with a plain user's writes tried against it (they were tried against the copy); the Store's Python (its
+interpreter is a reparse point: refused); an embedded distribution with a `._pth` file; Python older than 3.10; what
+a real Windows answers when a name below a file is opened (not there, error 3, or another number: refused as not
+read); the plain road itself on a real machine.

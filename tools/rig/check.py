@@ -62,6 +62,12 @@ open-exit, open-words: of the copy in the job's own folder). X49 MET only where 
 counts' sentence (names checked, folders and files under the program's folder, folders above it, adding up), and
 the second exit 1, its words naming a path of a drive and the role it was refused in; MISSED with words for each
 thing not found, a file given and missing included; n/a where none was given.
+--service-check-plain: the same four keys and the same reading, of `raqib service check` on a plain interpreter's road
+(ADR-0013 M-6, M12.4c1b): system-exit and system-words of a Python an administrator copied under Program Files, Raqib
+installed into it, asked with -I; open-exit and open-words of the job's own Python asked with -I. X50 MET only where
+the first is exit 0 with the plain road's counts' sentence (names checked, folders and files under the interpreter's
+folder and its roads, folders above them, adding up), and the second exit 1 naming a path of a drive and a role;
+MISSED and n/a as X49.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1302,6 +1308,13 @@ CHECK_PATH = re.compile(r"[A-Za-z]:\\")
 CHECK_ROLES = ("as the code itself (K-2)", "as a folder above it (K-3)")   # raqib/wincode.py ROLE_CODE, ROLE_ABOVE
 
 
+SERVICE_CHECK_PLAIN_NAME = ("X50 `raqib service check` takes a Python copied under Program Files, asked with -I, and"
+                            " refuses the job's own Python, naming the path and the role it refused")
+CHECK_PLAIN_COUNTS = re.compile(r"checked (\d+) names, each the system's alone \(.*?\): under the interpreter's"
+                                r" folder, .*?, whole, (\d+) folders and (\d+) files, .*?; and (\d+) folders above"
+                                r" them to the drive's letter")
+
+
 def read_service_check(text):
     """X49 (ADR-0013 K-8, M12.4c1): what the rig's Windows job kept of `raqib service check`, asked of the packed
     copy an administrator put in Program Files (system-exit, system-words) and of the copy in the job's own folder
@@ -1309,10 +1322,25 @@ def read_service_check(text):
     sentence (CHECK_COUNTS, its numbers adding up) and the second exit 1 with words naming a path of a drive and one
     of the two roles; a byte-order mark before the first key is read past. MISSED with words for each thing not
     found; n/a where none was given. It never raises."""
-    name = SERVICE_CHECK_NAME
+    return read_check(text, SERVICE_CHECK_NAME, CHECK_COUNTS, "--service-check", "the copy in the job's folder")
+
+
+def read_service_check_plain(text):
+    """X50 (ADR-0013 M-6, M12.4c1b): the same four keys and the same reading as X49 (read_check), of a Python an
+    administrator copied under Program Files with Raqib installed into it, asked with -I (system-exit, system-words),
+    and of the job's own Python asked with -I (open-exit, open-words); the counts' sentence is the plain road's
+    (CHECK_PLAIN_COUNTS). It never raises."""
+    return read_check(text, SERVICE_CHECK_PLAIN_NAME, CHECK_PLAIN_COUNTS, "--service-check-plain",
+                      "the job's own Python")
+
+
+def read_check(text, name, counts_said, option, second):
+    """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
+    names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
+    the second answer is of. MET, MISSED or n/a as read_service_check says. It never raises."""
     try:
         if text is None:
-            return [(name, SKIP, "no service check was given (--service-check)")]
+            return [(name, SKIP, "no service check was given (%s)" % option)]
         if not str(text).lstrip(BOM).strip():
             return [(name, MISSED, "missing: the check's file is empty or was not written (silence is a finding)")]
         got = _run_lines(text)
@@ -1320,7 +1348,7 @@ def read_service_check(text):
         taken, refused = got.get("system-words", ""), got.get("open-words", "")
         if "system-exit" in got and _int(got["system-exit"]) != 0:
             missing.append("the copy in Program Files: exit %s, not 0 (%s)" % (got["system-exit"][:20], taken[:200]))
-        counts = CHECK_COUNTS.search(taken)
+        counts = counts_said.search(taken)
         if "system-words" in got and not counts:
             missing.append("the copy in Program Files: its words hold no counts' sentence (%s)" % taken[:200])
         elif counts:
@@ -1329,18 +1357,17 @@ def read_service_check(text):
                 missing.append("the copy in Program Files: its counts do not add up (%d names, %d + %d + %d)" % (
                     total, folders, files, above))
         if "open-exit" in got and _int(got["open-exit"]) != 1:
-            missing.append("the copy in the job's folder: exit %s, not 1 (%s)" % (got["open-exit"][:20],
-                                                                                  refused[:200]))
+            missing.append("%s: exit %s, not 1 (%s)" % (second, got["open-exit"][:20], refused[:200]))
         if "open-words" in got:
             if not CHECK_PATH.search(refused):
-                missing.append("the copy in the job's folder: its words name no path of a drive (%s)" % refused[:200])
+                missing.append("%s: its words name no path of a drive (%s)" % (second, refused[:200]))
             if not any(role in refused for role in CHECK_ROLES):
-                missing.append("the copy in the job's folder: its words name no role (%s)" % refused[:200])
+                missing.append("%s: its words name no role (%s)" % (second, refused[:200]))
         if missing:
             return [(name, MISSED, "missing: %s" % "; ".join(missing))]
         return [(name, MET, "the copy in Program Files was taken (exit 0; %s names checked: %s folders, %s files,"
-                 " %s folders above); the copy in the job's folder was refused (exit 1): %s" % (
-                     total, folders, files, above, refused[:300]))]
+                 " %s folders above); %s was refused (exit 1): %s" % (
+                     total, folders, files, above, second, refused[:300]))]
     except Exception as exc:   # never raises: a reader that fails is MISSED
         return [(name, MISSED, "the service check cannot be read (%s)" % type(exc).__name__)]
 
@@ -1561,6 +1588,7 @@ def main(argv=None):
     p.add_argument("--service-run")
     p.add_argument("--service-events")
     p.add_argument("--service-check")
+    p.add_argument("--service-check-plain")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1595,6 +1623,10 @@ def main(argv=None):
     # X49 (ADR-0013 K-8): a file given and missing is the job's silence, MISSED; not given, n/a
     checked = a.service_check
     rows += read_service_check(None if checked is None else (text(checked) if os.path.isfile(checked) else ""))
+    # X50 (ADR-0013 M-6): the same, of a plain interpreter's road
+    checked = a.service_check_plain
+    rows += read_service_check_plain(None if checked is None else (text(checked) if os.path.isfile(checked)
+                                                                    else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))
