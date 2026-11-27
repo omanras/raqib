@@ -601,11 +601,14 @@ the install is to have the service ask the check again at its own start, as the 
 yet). A library Raqib loads by name is searched in the program's own folder, in System32 and in
 folders the process itself added - read in the interpreter's library, not measured: a test holds
 every mention in Raqib's code of a word by which a library is loaded, a folder added or ctypes
-reached, exactly as it is, so that any other fails; it does not hold a word built from pieces at run
-time, the loads the interpreter itself makes, or whether a library's own dependencies are searched
-as it is (not measured), and nothing holds what the interpreter's own start adds. It is a reading at
-one moment: run it again
-after anything there changes.
+reached, exactly as it is, so that a change made in good faith and written the ordinary way (a new
+library, a library's path, a folder added, the PATH set) changes what the test holds, and a reviewer
+reads it. It is no wall against code written to get past it: it does not hold a library's object, a
+name or a table reached from elsewhere, the interpreter's own roads to code (its imports by a path,
+sys.path, extension modules), what the system's own libraries load by the registry's word, a word
+built from pieces at run time, the loads the interpreter itself makes, or whether a library's own
+dependencies are searched as it is (not measured), and nothing holds what the interpreter's own
+start adds. It is a reading at one moment: run it again after anything there changes.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

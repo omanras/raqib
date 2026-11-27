@@ -802,13 +802,22 @@ own. The reading names three places a library is searched: the program's own fol
 itself; System32; and folders the process itself added. Of the third, the test holds since Amendment R (R-3) every
 mention in raqib/ of a word by which a library can be loaded, the search changed, the environment set past
 `os.environ` or ctypes reached by another road - as a name, an attribute, an import, a keyword, a parameter or a whole
-word in a string, docstrings too - by file, function and count, compared whole and exactly, so that a mention more or
-fewer fails; and it holds the statement around each load and CI-3's function and `own.library_folder` word for word,
-every attribute taken of ctypes on one list, each table of names and each loader as written with every mention of its
-name, every use of a library's object, and every use of `os.environ` but a read of one name by its statement. It does
-not hold a word built from pieces at run time that is on no list, or the loads the interpreter itself makes outside
-raqib/; nothing holds what the interpreter's own start adds (site, an `import` line of a *.pth file, sitecustomize),
-which the check walks as files and does not read for what it adds. The refusals of Amendment Q (Q-4) stand beneath it:
+word in a string, docstrings too, but `compile`, `exec` and `eval` not in a docstring or as `re.compile` (Amendment S,
+S-4) - by file, function and count, compared whole and exactly; and it holds the statement around each load and CI-3's
+function and `own.library_folder` word for word, every attribute taken of ctypes on one list, each table of names and
+each loader as written with every mention of its name, each use of a library's object in the function and file that
+loaded it, and each use of `os.environ`, or of a name it is bound to in a function, but a read of one name, by its
+statement. What that is for (S-1): a change made in good faith and written the ordinary way - a new library, a
+library's path, a folder added, the PATH or the whole environment set, a loader handed somewhere new, ctypes used as
+the tree did not use it - changes a table of the test, and a reviewer reads the change; it is no wall against code
+written to get past it, so it does not hold (S-2) a library's object reached outside the function and file that loaded
+it (by getattr of what holds it, a closure or the interpreter's own lists of live objects), a name the held statements
+read bound otherwise elsewhere, a table reached by its name as a string from another module, the interpreter's own
+roads to code that is not a library by name (its import system given a path, `sys.path`, extension modules), what the
+system's own libraries load by the registry's word, a word built from pieces at run time that is on no list, or the
+loads the interpreter itself makes outside raqib/; nothing holds what the interpreter's own start adds (site, an
+`import` line of a *.pth file, sitecustomize), which the check walks as files and does not read for what it adds. The
+refusals of Amendment Q (Q-4) stand beneath it:
 a loader asked by index, ctypes' low loader and the class its loaders are made by, a loading call given more than its
 name, a search call's name written in a string, the environment written whole or by the setters it knows past
 `os.environ`, a table of names changed after it was written, a loader handed on as a value, and a second call of

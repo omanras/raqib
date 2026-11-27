@@ -1,5 +1,20 @@
-"""M12.4c2a (ADR-0013 P-2, Q-4) and M12.4c2a2 (Amendment R, R-3): every library Raqib loads by name, held by one list;
-and every mention in raqib/ by which one could be loaded otherwise, held as it is.
+"""M12.4c2a (ADR-0013 P-2, Q-4) and M12.4c2a2 (Amendments R and S): every library Raqib loads by name, held by one
+list; and every mention in raqib/ by which one could be loaded otherwise, held as it is.
+
+What the hold is for (S-1): it guards against a change made in good faith that no reader notices - a new library's
+name, a library loaded by a path, a folder added to the search, the PATH or the whole environment set, a loader
+handed somewhere new, ctypes used in a way the tree did not use it. Each of those, written the ordinary way, changes a
+table below, and a reviewer reads the table's change. It does not hold code written to get past it: whoever can write
+a file of raqib/ can write anything there, and a reading of source text can always be written round. So it does not
+hold (S-2): an object of a library reached outside the function and file that loaded it, or by getattr of what holds
+it, a closure, or the interpreter's own lists of live objects; a name the held statements read, bound otherwise
+elsewhere; a table reached by its name as a string from another module; the interpreter's own roads to code that is
+not a library by name (its import system given a path, sys.path, extension modules); what the system's own libraries
+load by the registry's word; loads the interpreter itself makes, outside raqib/ (ctypes' own windll.kernel32 at its
+import, _ctypes' dependencies, tkinter's libraries); folders the interpreter's own start adds to the search (site, a
+*.pth line, sitecustomize), which no test here reads; a word built from pieces at run time that is on no list (a name
+joined from parts and given to getattr, a name read from a file); or whether a library's own dependencies are
+searched as the library is (Amendment P: not measured).
 
 Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10; Amendment P), not measured: a
 library asked for by a bare name is searched with the system's default folders - the application's own folder,
@@ -8,17 +23,20 @@ System32, and folders the process itself added - and not along the PATH or in th
 The first hold (Scan; P-2, Q-4) reads every .py file of raqib/ by its syntax tree, finds every place a library is
 loaded (ctypes' classes, its loaders by attribute and by LoadLibrary, find_library, and Raqib's own loader functions
 and lambdas, whose callers give the names), and holds: every name is a string written in the code, followed through
-a table of strings written once, plain, and on one list (LIBRARIES); no search mode, no folder added, PATH never set;
-CI-3's one call (SetDllDirectoryW with no folder, raqib/cli.py) on its one road. It refuses the forms it knows.
+a table of strings written once, plain, and on one list (LIBRARIES); CI-3's one call (SetDllDirectoryW with no
+folder, raqib/cli.py) on its one road. It refuses the forms it knows of a search mode given, a folder added and the
+PATH set.
 
-The hold on it (Mentions; R-3) is turned round: what is in the tree is held as it is, and anything else fails. Each
-table below is what the scan found in raqib/, printed by dump_held() and pasted, compared whole and exactly - a
-mention more fails, a mention fewer fails, a statement changed by one token fails:
+The hold on it (Mentions; R-3, S-3, S-4) holds what is in the tree as it is. Each table below is what the scan found
+in raqib/, printed by dump_held() and pasted, compared whole and exactly - a mention more, a mention fewer and a
+statement changed by one token each fail:
 - E1 MENTIONS: every mention of a word of WORDS (by which a library is loaded, the search changed, the environment
   set past os.environ, or ctypes and its loaders reached by another road) and of sys.modules - as a name, an
-  attribute, each part of an imported or aliased name, a keyword, a parameter, a def's name, and as a whole word in
-  every string and bytes constant, docstrings too - by (file, function, word): count. ENVIRON: every use of
-  os.environ but a read of one name (a subscript read, .get given a string written in the code, `in`), by file,
+  attribute, each part of an imported or aliased name, a keyword, a parameter, a def's name, a class pattern's
+  keyword, and as a whole word in every string and bytes constant, docstrings too - by (file, function, word): count;
+  but compile, exec and eval (S-4) are not counted in a docstring, or as an attribute of a name that `import re`
+  alone binds. ENVIRON: every use of os.environ, and of a name it is bound to in a function (followed through that
+  function: S-3), but a read of one name (a subscript read, .get given a string written in the code, `in`), by file,
   function and its statement's text.
 - E2 STATEMENTS: the statement around each mention in code of a loader's, a search call's or a setter's word, as
   ast.unparse writes it. E3 CI3_TEXT, CI3_HANDOVER: CI-3's function in cli.main and own.library_folder, whole
@@ -30,17 +48,13 @@ mention more fails, a mention fewer fails, a statement changed by one token fail
   loaders, its value or body as written, and every mention of its name (in its own file by name; in any other as an
   attribute, an imported name or a keyword), by file, function and count.
 - E6 HANDED_OBJECTS, REBOUND, OTHER_USES: an object a load gives is used by taking a function of it by name (an
-  attribute not beginning with `_`; getattr given a string written in the code, or a parameter every call of its
-  def gives one); handed to a call or kept on an object only where held, and followed there; its name bound again,
-  or put to any other use, only where held by its statement (autostart._windows_drive_kind, as the tree has it).
-ESCAPES: each form the two reviews found, put in a copy of the file it would live in, fails at its own line.
-On Windows only: each name of the list is a file in System32.
-
-Not held, said plainly: loads the interpreter itself makes, outside raqib/ (ctypes' own windll.kernel32 at its
-import, _ctypes' dependencies, tkinter's libraries); folders the interpreter's own start adds to the search (site, a
-*.pth line, sitecustomize), which no test here reads; a word built from pieces at run time that is on no list (a
-name joined from parts and given to getattr, a name read from a file); whether a library's own dependencies are
-searched as the library is (Amendment P: not measured).
+  attribute not beginning with `_`; getattr given a string written in the code that does not begin with `_`, or a
+  parameter every call of its def gives as one); handed to a call or kept on an object only where held, and followed
+  there in its own file; its name bound again, or put to any other use, only where held by its statement
+  (autostart._windows_drive_kind, as the tree has it).
+ESCAPES: each form the first two reviews found, put in a copy of the file it would live in, fails at its own line.
+ORDINARY: each form S-3 and S-4 name, one harmless statement in a copy of a real file (parsed, never run), changes a
+table or does not, as they rule. On Windows only: each name of the list is a file in System32.
 """
 import ast
 import copy
@@ -540,7 +554,7 @@ def scan_of(source, filename="raqib/made_up.py"):
     return s.run()
 
 
-# --- ADR-0013 R-3 (M12.4c2a2): what is in the tree, held as it is, mention by mention; anything else fails ---
+# --- ADR-0013 R-3 (M12.4c2a2), S-3, S-4: what is in the tree, held as it is, mention by mention; for S-1 ---
 LOAD_WORDS = CLASSES + LOADERS + ("pythonapi", "LibraryLoader", "_dlopen", "dlopen", "_ctypes", "LoadLibrary",
                                   "LoadLibraryW", "LoadLibraryA", "LoadLibraryExW", "LoadLibraryExA",
                                   "LoadPackagedLibrary", "find_library", "find_msvcrt", "winmode")   # E1, E2
@@ -552,6 +566,7 @@ ROAD_WORDS = ("__import__", "importlib", "import_module", "__class__", "__base__
               "__subclasses__", "__doc__", "__dict__", "__getattribute__", "__builtins__", "builtins", "globals",
               "vars", "locals", "exec", "eval", "compile")   # E1: ctypes and its loaders reached by another road
 WORDS = LOAD_WORDS + SEARCH_WORDS + ENV_WORDS + ROAD_WORDS
+NARROWED = ("compile", "exec", "eval")   # S-4: not counted in a docstring or as an attribute of `import re`'s name
 SYS_MODULES = "sys.modules"   # E1: held as a word of its own (an attribute of sys, an imported name, a string)
 PATTERNS = {w: re.compile(r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(w)) for w in WORDS + (SYS_MODULES,)}
 STATEMENT_WORDS = LOAD_WORDS + SEARCH_WORDS + ENV_WORDS   # E2: where one is code, its statement is held
@@ -601,7 +616,8 @@ def whole(fn):
 
 def named(node):
     """The words a node writes as code: a name, an attribute, a parameter, a keyword, each part of an imported or
-    aliased name, a def's or a class's name, a name an except, a global or a pattern binds."""
+    aliased name, a def's or a class's name, a name an except, a global or a pattern binds, a class pattern's
+    keyword names (S-3)."""
     if isinstance(node, ast.Name):
         return [node.id]
     if isinstance(node, ast.Attribute):
@@ -616,6 +632,8 @@ def named(node):
         return [node.name]
     if isinstance(node, (ast.Global, ast.Nonlocal)):
         return list(node.names)
+    if isinstance(node, ast.MatchClass):
+        return list(node.kwd_attrs)
     name = node.arg if isinstance(node, ast.keyword) else node.rest if isinstance(node, ast.MatchMapping) else \
         node.name if isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) else None
     return [name] if isinstance(name, str) else []
@@ -623,8 +641,10 @@ def named(node):
 
 class Mentions:
     """R-3: the layers held on the first hold's scan (the same trees): every mention of WORDS (E1), the environment
-    used past a read of one name (E1), the statement around each load (E2), CI-3's road (E3), ctypes' attributes,
-    imports and bindings (E4), the tables and loaders (E5), and every use of a library's object (E6)."""
+    used past a read of one name, as os.environ or a name bound to it in a function (E1, S-3), the statement around
+    each load (E2), CI-3's road (E3), ctypes' attributes, imports and bindings (E4), the tables and loaders (E5), and
+    each use of a library's object where it is followed: its function, a def of its file it is handed to, an
+    attribute of its file it is kept on (E6). What is not followed is not held (S-2)."""
 
     def __init__(self, scan=None):
         self.scan, self.files = scan, scan.files if scan is not None else {}
@@ -632,7 +652,7 @@ class Mentions:
         self.environ, self.statements, self.imports, self.bound, self.rebound = [], [], [], [], []
         self.attrs, self.whole, self.handover = {}, {}, []         # E4: {"ctypes.X": [(file, line)]}; E3
         self.tables, self.bodies, self.named, self.named_lines, self.names = {}, {}, Counter(), {}, set()   # E5
-        self.handed, self.handed_lines, self.other, self.faults = Counter(), {}, [], []  # E6
+        self.handed, self.handed_lines, self.other = Counter(), {}, []   # E6: what is not taken by name, held
 
     def run(self):
         for f, (tree, parents) in sorted(self.files.items()):
@@ -682,9 +702,16 @@ class Mentions:
             "os" for a in imports if a.name.startswith("os.") and not a.asname}
         environ_names = {a.asname or a.name for n in nodes(tree) if isinstance(n, ast.ImportFrom)
                          and n.module == "os" for a in n.names if a.name == "environ"}
-        stated, env, words = set(), set(), index(tree)
+        re_names = {a.asname or "re" for a in imports if a.name == "re"} - self._bound_otherwise(tree)
+        docs = {id(n.body[0].value) for n in nodes(tree) if isinstance(n, (
+            ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body and isinstance(
+            n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant) and isinstance(n.body[0].value.value, str)}
+        stated, env, words, bound = set(), set(), index(tree), []
         for word in WORDS:
             for node in words.get(word, ()):
+                if word in NARROWED and isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and \
+                        node.value.id in re_names:
+                    continue   # S-4: a regular expression's compile
                 self._count(f, node, parents, word)
                 if word in STATEMENT_WORDS:
                     self._held(self.statements, f, node, parents, stated)
@@ -692,7 +719,7 @@ class Mentions:
             if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
                 text = node.value.decode("latin-1") if isinstance(node.value, bytes) else node.value
                 for word, pattern in PATTERNS.items():
-                    if word in text:
+                    if word in text and not (word in NARROWED and id(node) in docs):   # S-4: a docstring's prose
                         for _ in pattern.finditer(text):
                             self._count(f, node, parents, word)
                 continue
@@ -706,6 +733,41 @@ class Mentions:
                     any(a.name == "environ" for a in node.names):
                 if not self._read(node, parents):
                     self._held(self.environ, f, node, parents, env)
+                if not isinstance(node, ast.ImportFrom):
+                    bound += self._environ_bound(node, parents)
+        for scope, target in bound:   # S-3: a name os.environ is bound to, followed through its function
+            for n in ast.walk(scope or tree):
+                if isinstance(n, ast.Name) and n.id == target.id and n is not target and not (
+                        isinstance(n.ctx, ast.Load) and self._read(n, parents)):
+                    self._held(self.environ, f, n, parents, env)   # a store, a del, a method, handed on, bound again
+
+    @staticmethod
+    def _environ_bound(node, parents):
+        """[(its function, the name)] where os.environ itself is bound to a name: alone, as a branch of `x if c else
+        y` or an operand of `or` or `and`, by `=` (each name of its targets), an annotated `=` or `:=` (S-3)."""
+        up = parents.get(node)
+        while isinstance(up, ast.BoolOp) or isinstance(up, ast.IfExp) and up.test is not node:
+            node, up = up, parents.get(up)
+        targets = up.targets if isinstance(up, ast.Assign) and up.value is node else [up.target] if isinstance(
+            up, (ast.AnnAssign, ast.NamedExpr)) and up.value is node else []
+        return [(Mentions._scope(up, parents), t) for t in targets if isinstance(t, ast.Name)]
+
+    @staticmethod
+    def _bound_otherwise(tree):
+        """The names a file binds by anything but `import re`: an assignment, a del, a parameter, a def, a class, an
+        except, another import (S-4: compile, exec and eval are set apart only on a name `import re` alone binds)."""
+        out = set()
+        for n in nodes(tree):
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+                out.add(n.id)
+            elif isinstance(n, ast.arg):
+                out.add(n.arg)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler)) and n.name:
+                out.add(n.name)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                out |= {a.asname or a.name.split(".")[0] for a in n.names if isinstance(n, ast.ImportFrom)
+                        or a.name != "re"}
+        return out
 
     @staticmethod
     def _read(node, parents):
@@ -810,15 +872,21 @@ class Mentions:
 
     # --- E6: a library's object ---
     def _use(self, f, node, seen):
-        """Where an expression whose value is a library's object goes: a function of it taken by name, or handed to
-        a call (held by callee, and followed into a def of its file), or bound to a name (followed); else a fault."""
+        """Where an expression whose value is a library's object goes: a function of it taken by name (an attribute,
+        or getattr given a string written in the code, neither beginning with `_`), handed to a call (held by callee,
+        and followed into a def of its file), bound to a name (followed), or kept on an object (held, and followed
+        to an attribute of that name in its file); any other use is held by its statement, where the tree has it."""
         tree, parents = self.files[f]
         up, here = parents.get(node), Scan.where(node, parents)
         if isinstance(up, ast.Attribute) and up.value is node and not up.attr.startswith("_"):
             return   # a function of it, taken by name
         if isinstance(up, ast.Call) and any(a is node for a in up.args):
             callee, i = ast.unparse(up.func), [k for k, a in enumerate(up.args) if a is node][0]
-            if callee == "getattr" and i == 0 and len(up.args) in (2, 3) and self._written(f, up.args[1]):
+            said = self._strings(f, up.args[1]) if callee == "getattr" and i == 0 and len(up.args) in (2, 3) else None
+            if said is not None and not any(s.startswith("_") for s in said):
+                return   # a function of it, taken by a name written in the code
+            if said is not None:   # S-3: getattr by a name beginning with `_`, held as any other use
+                self._held(self.other, f, node, parents)
                 return
             key = (f, here, callee)
             self.handed[key] += 1
@@ -903,24 +971,26 @@ class Mentions:
                 return got[0]
         return None
 
-    def _written(self, f, expr):
-        """A string written in the code: here, or a parameter every call of its def (in its file) gives as one."""
+    def _strings(self, f, expr):
+        """The strings written in the code that `expr` is: itself, or a parameter every call of its def (in its file)
+        gives as one; else None."""
         if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
-            return True
+            return [expr.value]
         tree, parents = self.files[f]
         scope = self._scope(expr, parents)
         if not isinstance(expr, ast.Name) or scope is None:
-            return False
+            return None
         params = [p.arg for p in scope.args.posonlyargs + scope.args.args]
         if expr.id not in params or any(isinstance(n, ast.Name) and n.id == expr.id and not isinstance(
                 n.ctx, ast.Load) for n in ast.walk(scope)):
-            return False
+            return None
         i = params.index(expr.id)
         calls = [c for c in nodes(tree) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
                  and c.func.id == scope.name]
-        return bool(calls) and all(len(c.args) > i and not any(isinstance(a, ast.Starred) for a in c.args[:i + 1])
-                                   and isinstance(c.args[i], ast.Constant) and isinstance(c.args[i].value, str)
-                                   for c in calls)
+        if calls and all(len(c.args) > i and not any(isinstance(a, ast.Starred) for a in c.args[:i + 1])
+                         and isinstance(c.args[i], ast.Constant) and isinstance(c.args[i].value, str) for c in calls):
+            return [c.args[i].value for c in calls]
+        return None
 
 
 def scan_all(sources):
@@ -965,7 +1035,7 @@ def _listed(out, found, held, what):
 def problems(m):
     """What the layers found that the held tables do not hold, or held that they did not find: [(file, line, why)],
     each line where it was found (0: a held thing not found)."""
-    out = list(m.faults)
+    out = []
     _counted(out, m.words, m.lines, MENTIONS, "E1")
     _listed(out, m.environ, ENVIRON, "E1 (os.environ)")
     _listed(out, m.statements, STATEMENTS, "E2")
@@ -1065,7 +1135,6 @@ def dump_held():   # not a test: prints what the layers find in raqib/, to be pa
     table("HANDED_OBJECTS", m.handed)
     listed("REBOUND", [r[:3] for r in m.rebound])
     listed("OTHER_USES", [r[:3] for r in m.other])
-    print("# faults: %r" % (m.faults,))
 
 
 # --- the held tables (R-3): pasted from what dump_held() prints of raqib/, compared whole and exactly ---
@@ -1076,74 +1145,43 @@ raqib/app.py _win_api.Api.DwmSetWindowAttribute windll 1
 raqib/app.py _win_api.Api.SetProcessDpiAwareness windll 1
 raqib/app.py probe_tk import_module 1
 raqib/app.py probe_tk importlib 1
-raqib/autostart.py <module> compile 2
 raqib/autostart.py _windows_drive_kind WinDLL 1
 raqib/autostart.py _windows_opener WinDLL 1
-raqib/cli.py <module> eval 5
+raqib/cli.py <module> eval 3
 raqib/cli.py _parser eval 1
 raqib/cli.py cmd_eval eval 1
 raqib/cli.py main eval 1
 raqib/cli.py main.set_dll_directory_w SetDllDirectoryW 1
 raqib/cli.py main.set_dll_directory_w WinDLL 1
-raqib/discover.py <module> compile 10
-raqib/discover.py _merge_procs exec 1
-raqib/discover.py _programs_of exec 1
-raqib/discover.py parse_procevents exec 1
-raqib/etwnet.py <module> compile 1
 raqib/etwnet.py Api WinDLL 1
 raqib/etwnet.py Api.__init__ WinDLL 1
-raqib/event.py <module> compile 7
-raqib/forward.py <module> compile 8
 raqib/forward.py eventlog_dll WinDLL 1
 raqib/hooks/capture.py <module> globals 1
 raqib/hooks/capture.py _load_common importlib 3
-raqib/hooks/common.py <module> compile 14
 raqib/hooks/common.py _program_name builtins 1
-raqib/hooks/os_sysmon.py <module> compile 7
 raqib/host.py HostWatch._give_kept __dict__ 1
 raqib/host.py HostWatch._host_lines __dict__ 3
 raqib/host.py HostWatch._keep_child __dict__ 2
 raqib/host.py HostWatch.procevents_lines exec 1
-raqib/host.py child_names exec 1
-raqib/hostwin.py <module> compile 1
 raqib/hostwin.py Api WinDLL 1
 raqib/hostwin.py Api.__init__ WinDLL 1
 raqib/hostwin.py probe WinDLL 1
-raqib/install.py <module> compile 2
-raqib/install.py <module> exec 1
 raqib/install.py <module> globals 1
-raqib/link.py <module> compile 2
-raqib/notify.py <module> compile 1
 raqib/notify.py <module> exec 1
 raqib/overlay.py load_measured __import__ 1
 raqib/own.py library_folder SetDllDirectoryW 5
-raqib/procevents.py <module> exec 18
+raqib/procevents.py <module> exec 8
 raqib/procevents.py Reader.__init__ exec 1
 raqib/procevents.py Reader._missed_words exec 1
 raqib/procevents.py Reader._on_exec exec 1
-raqib/procevents.py Reader._read_exec exec 2
 raqib/procevents.py Reader._start exec 1
 raqib/procevents.py Reader._take exec 1
-raqib/procevents.py Reader.counts exec 2
-raqib/procevents.py parse exec 2
-raqib/procevents.py serve exec 1
-raqib/procevents.py stat_name exec 1
-raqib/ruleform.py <module> compile 2
+raqib/procevents.py parse exec 1
 raqib/ruleform.py <module> exec 2
-raqib/rules/engine.py <module> compile 9
-raqib/rules/engine.py _predicate compile 1
-raqib/rules/engine.py compile_rule compile 1
-raqib/rules/fixturegen.py <module> compile 1
-raqib/rules/trace.py <module> compile 2
-raqib/rules/trace.py strict_problem eval 1
-raqib/rules/yamlite.py <module> compile 4
-raqib/service.py <module> compile 2
 raqib/tray.py _Api windll 1
 raqib/tray.py _Api.__init__ WinDLL 3
 raqib/tray.py _BoxApi.__init__ WinDLL 1
 raqib/ui.py Kernel32.__init__ WinDLL 1
-raqib/wincode.py <module> compile 8
-raqib/wincode.py <module> exec 2
 raqib/wincode.py _plain exec 6
 raqib/wincode.py plain_words exec 4
 raqib/winservice.py System._win WinDLL 2
@@ -1151,12 +1189,21 @@ raqib/winservice.py System._win WinDLL 2
 ENVIRON = (
     ('raqib/app.py', 'Controller.open_page',
      'environ = os.environ if self.options is None or self.options.environ is None else self.options.environ'),
+    ('raqib/app.py', 'Controller.open_page',
+     'why = self.opener(url, environ)'),
     ('raqib/app.py', 'run',
      'environ = os.environ if options.environ is None else options.environ'),
+    ('raqib/app.py', 'run',
+     'problem = display_problem(environ)'),
     ('raqib/autostart.py', '_sure',
      'held = os.environ if environ is None else environ'),
+    ('raqib/autostart.py', '_sure',
+     "value = next((v for k, v in held.items() if k.lower() == lead.strip('%')), None)"),
     ('raqib/autostart.py', 'default_folders',
      'environ = os.environ if environ is None else environ'),
+    ('raqib/autostart.py', 'default_folders',
+     'return {scope: os.path.join(environ[var], *STARTUP) if environ.get(var) else None for scope, var in START'
+     'UP_ROOTS}'),
     ('raqib/cli.py', '_gap_seconds',
      'return silence.gap_seconds_from(os.environ)'),
     ('raqib/cli.py', '_watch_setup',
@@ -1168,20 +1215,39 @@ ENVIRON = (
      'system_root, _ = notify.windows_root(os.environ)'),
     ('raqib/doctor.py', 'checks',
      'environ = os.environ if environ is None else environ'),
+    ('raqib/doctor.py', 'checks',
+     "lines = [('python', check_python(version_info, executable, windows, which, environ)), ('claude', check_cl"
+     "aude(environ, windows, which, runner, project)), ('hooks', check_hooks(project, windows)), ('notifier', c"
+     "heck_notifier(project, environ, platform, isfile, isdir)), ('tkinter', check_tkinter(environ, platform, i"
+     'mporter))]'),
     ('raqib/hooks/os_sysmon.py', 'read_live',
      'environ = os.environ if environ is None else environ'),
     ('raqib/hooks/os_sysmon.py', 'read_live_bounded',
      'environ = os.environ if environ is None else environ'),
     ('raqib/host.py', 'start',
      'environ = os.environ if environ is None else environ'),
+    ('raqib/host.py', 'start',
+     "notifier = notify.Notifier(HOST, enabled=not no_notify, reason='--no-notify' if no_notify else None, envi"
+     "ron=environ, stderr=err, host=True, tmp_root=os.path.join(home, '.raqib', 'tmp') if home else None)"),
+    ('raqib/host.py', 'start',
+     'return Running(watcher, server, notifier, thread, no_open, environ, out, err, no_page=no_page)'),
     ('raqib/notify.py', 'Notifier.__init__',
      'self.environ = dict(os.environ if environ is None else environ)'),
     ('raqib/own.py', 'handed',
      'out = dict(os.environ if environ is None else environ)'),
     ('raqib/watch.py', 'open_page',
+     'env.update({k: environ[k] for k in OPENER_ENV if environ.get(k)})'),
+    ('raqib/watch.py', 'open_page',
      'environ = os.environ if environ is None else environ'),
+    ('raqib/watch.py', 'open_page',
+     'root, why = notify.windows_root(environ, isdir)'),
     ('raqib/watch.py', 'start',
      'environ = os.environ if environ is None else environ'),
+    ('raqib/watch.py', 'start',
+     "notifier = notify.Notifier(project, enabled=not no_notify, reason='--no-notify' if no_notify else None, e"
+     'nviron=environ, stderr=err)'),
+    ('raqib/watch.py', 'start',
+     'return Running(watcher, server, notifier, thread, refresh, environ, no_open, out, err)'),
     ('raqib/winservice.py', 'System.getenv',
      'return os.environ.get(name)'),
     ('raqib/winservice.py', 'System.setenv',
@@ -1658,3 +1724,42 @@ def test_r3_the_held_tables_are_not_vacuous(filename, anchor, lines, replace, wh
     found = problems(scan_all(sources)[1])
     assert [p for p in found if why in p[2] and p[1] in (at, 0)], found
     assert all(p[1] in (at, 0) for p in found), found   # for that reason, at that line, and nothing else
+
+
+AFTER_ENVIRON = "    environ = os.environ if environ is None else environ"   # autostart.default_folders binds it
+ORDINARY = [   # S-3, S-4: (what it proves, the file, the line it goes after (None: at the end), its lines, the line
+    # of them where it fails (None: it changes nothing), the words its reason says, whether every problem says them).
+    # Each is one harmless statement in a copy of a real file, which the test parses and never runs.
+    ("S-3 a store through a name os.environ is bound to", "raqib/autostart.py", AFTER_ENVIRON,
+     ['environ["PATH"] = "C:\\\\x"'], 0, ("E1 (os.environ): a statement not held, in default_folders",), True),
+    ("S-3 getattr of a library's object by a name beginning with _", W32, K32, ['getattr(k32, "_handle")'], 0,
+     ("E6 (a library's object used otherwise): a statement not held",), True),
+    ("S-3 a class pattern's keyword name", "raqib/wincode.py", None,
+     ["match value:", "    case object(LoadLibraryW=f):", "        pass"], 1,
+     ("E1: a mention more than held", "'LoadLibraryW')"), False),
+    ("S-3 sys.modules counted where the file imports sys", "raqib/cli.py", None, ["loaded = sorted(sys.modules)"], 0,
+     ("E1: a mention more than held", "'sys.modules')"), True),
+    ("S-4 a new regular expression", "raqib/event.py", None, ['NEW_RE = re.compile("x")'], None, (), True),
+    ("S-4 a docstring's exec, eval and compile", "raqib/event.py", None,
+     ["def made_up():", '    """Says exec, eval and compile, as help does."""'], None, (), True),
+    ("S-4 eval as a name", "raqib/event.py", None, ["got = eval(x)"], 0, ("E1: a mention more", "'eval')"), True),
+    ("S-4 exec as an attribute of builtins", "raqib/event.py", None, ["run = builtins.exec"], 0,
+     ("E1: a mention more", "'exec')"), False),
+    ("S-4 compile as an attribute of a name that is not re", "raqib/event.py", None, ['got = obj.compile("x")'], 0,
+     ("E1: a mention more", "'compile')"), True),
+    ("S-4 eval in a string given to getattr", "raqib/event.py", None, ['got = getattr(obj, "eval")'], 0,
+     ("E1: a mention more", "'eval')"), True),
+]
+
+
+@pytest.mark.parametrize("what, filename, anchor, lines, fails, why, alone", ORDINARY, ids=[o[0] for o in ORDINARY])
+def test_s3_s4_each_ordinary_form_changes_a_table_or_does_not_as_ruled(what, filename, anchor, lines, fails, why,
+                                                                       alone):
+    sources, at = edited(filename, anchor, lines)
+    found = problems(scan_all(sources)[1])
+    if fails is None:
+        assert found == [], (what, found)   # nothing held changes
+        return
+    assert [p for p in found if p[0] == filename and p[1] == at + fails and all(w in p[2] for w in why)], (what, found)
+    assert all(p[1] == 0 or at <= p[1] < at + len(lines) for p in found), (what, found)   # at its lines alone
+    assert not alone or all(all(w in p[2] for w in why) for p in found), (what, found)   # for that reason alone
