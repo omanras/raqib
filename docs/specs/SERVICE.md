@@ -802,8 +802,32 @@ handles closed; and the name asked for again with the reader's rights - 1060 is 
 for again is `RESULT: removed by DeleteService, whether it is gone NOT KNOWN`, 1. A call that fails, a service still
 starting or not stopped at its bound are said, nothing removed after them (`RESULT: NOT REMOVED: ...; left as it is`
 or `RESULT: NOT REMOVED, nothing touched`, 1). The record is never touched, and its place is said on every road:
-`Raqib` under ProgramData, its events in `.raqib\host\events.jsonl` there. `--purge` on Windows is refused, exit 2:
-not built. An update over a running service is: remove, then install (X-10).
+`Raqib` under ProgramData, its events in `.raqib\host\events.jsonl` there. That is without `--purge`; with it
+(ADR-0013 Amendment ZE, M12.4c2b4) the record is touched only after the service's remove ended 0 (gone, or none
+installed): where the service is not Raqib's, was refused, failed or is marked for removal and not yet gone, one line
+says the record is not touched (a service that may still run may still write) and the RESULT ends `; the record NOT
+removed: not touched`, 1. Else the place is judged by the one judgement the runner's start and the install use
+(`place_judged`, X-8): not there is `; no record to remove`, 0; one the runner would refuse is said in that reading's
+own words and left exactly as it is (`; the record NOT removed: not the place as Raqib's service makes it`, 1) - so is
+a caller who is no administrator, refused by the place's own list, the words saying an administrator is needed; and
+the place taken - a folder, no reparse point, owned by the system or the administrators, the closed list - is removed
+bottom up through three calls of the system object (os.scandir with each name's own attributes, no link followed;
+os.unlink; os.rmdir), every path handed one inside the place. A reparse point inside is neither entered nor removed,
+it is counted and said, and every folder above it stays; each error is counted by the system's number, the first one's
+path said, error 5 with "an administrator is needed". One line says what was read of the place, one the result:
+`removed <n> folders and <m> files inside it, then the place itself: ... is gone` with `RESULT: the service removed;
+the record removed` (or `nothing installed; the record removed`), 0; or what is left, with `; the record NOT removed:
+part of it is left (said above)`, 1. Measured before it was ruled (ZE's first paragraph; the probe 91952bf, x64 and
+ARM64, the same on both): after Raqib's own remove the place, read by an administrator through the runner's own
+reader, was a folder with no reparse point, owned by the administrators, with the closed list, holding 3 folders and
+11 files (about 109 kB) and no reparse point; an administrator's process removed its 14 names bottom up, and the
+place, in under a tenth of a second with no error. A folder of the name made by an administrator's shell read with
+ProgramData's own inherited list, not the closed one; a link of the name read as a reparse point, a walk of the path
+listed the target's own file through it, and removing the link removed the link alone. Not measured: a file in the
+place that some process still has open; a plain user asking; a machine whose ProgramData an administrator changed; a
+very large record (removed name by name, with no bound of time: ZE-5). This command's `--purge` itself has not yet
+been run on a real machine (the rig's claim, X56, is the Table's). An update over a running service is: remove, then
+install (X-10).
 
 **What they do not do.** They make and remove exactly one service, RaqibWatch with Raqib's mark, and change none that
 is there; they start no program themselves, write no file and read no registry; the place is read and never made; one
