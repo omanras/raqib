@@ -1,6 +1,6 @@
 name: service-field
 # Probe only (never merged): the field's word for ADR-0013 AE-5 - a branch's `raqib service run` as a real
-# service of Windows, plain and packed, x64 and ARM64; and the gate's one real-object test of the runner.
+# service of Windows, plain and packed, x64 and ARM64; and the runner's tests on a real Windows. Run on the REDO.
 on:
   push:
     branches: [claude/rig-probe]
