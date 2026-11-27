@@ -1384,3 +1384,41 @@ differ between the two x64 runs because they were two machines; the raising make
   under Program Files made large is started by `net start`, the system is read with a check-point above 0 while
   it starts, and `net start` ends with 0. docs/specs/SERVICE.md and docs/THREAT_MODEL.md, which say since U-4
   that the check-point is not raised, are righted by the Table with what the field read of the branch.
+
+## Amendment ZC (the Table, 2026-11-27) - M12.4c2b3 reviewed (NEXT, thirteen findings) and asked on real Windows
+The packet is docs/review/2026-11-27-M12.4c2b3.md. Asked of the builder's commit 67ad291 on real Windows (the
+probe branch fe36a7e; x64 and ARM64; the same service over about 157000 names): the system said the check-point
+1 at 2.4 to 2.5 s, 2 at 4.2 to 4.4 s and on, each with the wait of 60 s, then RUNNING with 0; the walk took 15 s
+(x64) and 32 s (ARM64); Start-Service took the start after 15.5 s and 33.4 s; `net start` ended with exit 0 and
+"was started successfully" after 15.3 s and 32.4 s. Not measured: a raising the system does not take; `net
+start` over a walk longer than 32.4 s; a check that never ends.
+- ZC-1 (the order at the check's end; findings 1 and 13). U-3's "the number is set before anything is written"
+  holds for every line, the raising's included. So: at the check's end the raising is closed at once (no raising
+  begins after it); the answer is worked out with nothing written; on a refusal the number 15 is set; only then
+  is the raising waited for and are its lines written; then the check's own line. Nothing raised out of the
+  raising's end replaces the check's answer: it is said in one line where a line can be written, and the answer
+  stands. The check's seconds are the check's own: the clock is read after the thread is begun.
+- ZC-2 (what is promised, said as it is; findings 2 and 4). ZB-2 and ZB-4 are read so: a raising already in the
+  system's call when the check ends finishes; none begins after; RUNNING and STOPPED are told under the lock a
+  raising holds, so always after it. Where the wait's bound passes, the start goes on only once that call
+  returns, and the line says that. After the bound has passed, a late failure writes no line: the count's line
+  then says "at least".
+- ZC-3 (a check that does not end, and the evidence; finding 3). The raising runs on a clock, not on the walk's
+  progress, so a check that hung would be told as progress for ever. It is therefore bounded: after
+  CHECK_RAISE_MAX (300 s - seven times the longest walk measured at the check's own bound) no more is raised,
+  said in one line at that moment; whoever waits then sees a check-point that has stopped. And where at least
+  one raising was taken, one line when the check is over says how many and the last check-point: the text file
+  alone then shows that the raising happened (A5). Not measured: a check that hangs.
+- ZC-4 (small; findings 9, 10 and 12). The words say what is so: "one higher than the last tried"; a failed
+  raising "failed", and the thread goes on to its next beat; the numbers of the measurement named as whose they
+  are. A failure's words are cut and made printable as every exception's are. A thread that ended by an
+  exception outside a beat is said in one line.
+- ZC-5 (the tests; findings 5 to 8 and 11). The bound's test uses a small bound that is not 0 and reads the sum
+  in the line; STOPPED told while a raising is held, and nothing after it; exactly one failed raising, its
+  count's line saying 0; a wait for the thread before it is said to be over; the structure's order tied to its
+  own fields.
+- ZC-6 (the builder's three choices). Taken as built: the count's line is written whenever a first failure was
+  said; the check-point goes up at each beat whether the last was taken or not; the bound after the check is a
+  value of the module's.
+- ZC-7 (the rig, and landing). X55 is wired (a094b15). M12.4c2b3 lands as 0.18.0 after the fixes' gate, the
+  gate's Windows jobs on the commit to be merged, and X55 read as met in the rig's Windows log.
