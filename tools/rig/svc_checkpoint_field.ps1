@@ -3,6 +3,7 @@
 # and a candidate that raises its check-point every 2 s while the check walks (ADR-0013 U-4). What the system
 # says of the service through the walk, and what Start-Service and net start say and when. It makes one folder
 # under Program Files and one service of its own at a time, and removes them. It ends no process.
+# Asked a third time of the builder's branch after the review's fixes (ADR-0013 ZC).
 $ErrorActionPreference = "Continue"
 function Flat($lines) { ((($lines -join " ") -replace "S-1-5-21-[0-9-]+", "S-1-5-21-<a user>") -replace "\s+", " ").Trim() }
 function Cut($s, $n) { if ($null -eq $s) { "" } else { $s.Substring(0, [Math]::Min($n, $s.Length)) } }
