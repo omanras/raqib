@@ -4,6 +4,7 @@
 # says of the service through the walk, and what Start-Service and net start say and when. It makes one folder
 # under Program Files and one service of its own at a time, and removes them. It ends no process.
 # Asked a third time of the builder's branch after the review's fixes (ADR-0013 ZC).
+# Asked a fourth time, of the commit to be merged (ADR-0013 ZD); it prints the runner's own line of its raisings too.
 $ErrorActionPreference = "Continue"
 function Flat($lines) { ((($lines -join " ") -replace "S-1-5-21-[0-9-]+", "S-1-5-21-<a user>") -replace "\s+", " ").Trim() }
 function Cut($s, $n) { if ($null -eq $s) { "" } else { $s.Substring(0, [Math]::Min($n, $s.Length)) } }
@@ -30,6 +31,7 @@ function Unmake {
   $q = Q
   if ($q -notmatch "^state 1 ") { "a Stop at the end: " + (Cut (Flat (sc.exe stop $name | Select-String "STATE|FAILED|\d+:")) 200); $t = Get-Date; while (((Get-Date) - $t).TotalSeconds -lt 60 -and (Q) -notmatch "^state 1 ") { Start-Sleep -Milliseconds 300 } }
   "at the end: " + (Q) + "; its text file's last line: " + (Cut (Flat (Get-Content "$place\service.txt" -Tail 1 -ErrorAction SilentlyContinue)) 300)
+  "the raisings' line: " + (Cut (Flat (Get-Content "$place\service.txt" -ErrorAction SilentlyContinue | Where-Object { $_ -match "check-point" })) 400)
   "the check's line: " + (Cut (Flat (Get-Content "$place\service.txt" -ErrorAction SilentlyContinue | Where-Object { $_ -match "its own code" } | Select-Object -First 1)) 240)
   sc.exe delete $name | Out-Null
   Remove-Item -Recurse -Force $place -ErrorAction SilentlyContinue
