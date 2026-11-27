@@ -1107,3 +1107,48 @@ no rights; a service marked for removal as such a caller sees it.
 - V-6 (not in this part). Anything that writes to the manager; the place's own list read by status (the
   administrator's check says it); the delayed start and the failure actions, until they are measured as a caller
   with no rights reads them (M12.4c2b2b measures them before it sets them).
+
+## Amendment W (the Table, 2026-11-27) - the review of M12.4c2b2a (docs/review/2026-11-27-M12.4c2b2a.md) and its field run: status says no more than it read; lands as 0.15.0
+The builder (152fc91) built V-2 to V-5 on Linux, where none of the system's calls could be run, and said so; the
+reviewer read them against the system's documents and found them right as text (verdict NEXT, with small fixes).
+Measured on real Windows after the build (the probe branch 23d544f, of 152fc91; x64 and ARM64, the same): the
+command asked by an administrator and by a user the probe made outside the administrators' group, at ten moments
+- no service of the name; one made without the mark; with it and never started; running; stopped by a Stop; its
+start set to automatic; its account set to another; one refused at its start with 15; one whose command lacks
+`-I`; one whose description only begins like the mark - and at each the two were answered the same lines and the
+same exit, as V-3 and V-4 rule them. The account of a service made with none named reads `LocalSystem`; a
+service with no description reads as having none. And the gate's two Windows jobs failed on 152fc91: nine tests
+of the Linux command, run on a Windows machine, went through the command's new turn to the real service manager.
+The builder's gate is Linux's; the Windows jobs caught it.
+- W-1 (the builder's questions, as built). The mark ends at its own end or at white space, so a later mark is
+  not read as this one (V-2 is read so). The system's account is `LocalSystem`, in any case, as measured; no
+  other text is taken on a guess. A running service that is not as installed is `ACTIVE, NOT AS INSTALLED`, 1,
+  as on Linux. A state's number with no word is said as that and is not ACTIVE. A close that fails is a call
+  that failed: NOT KNOWN. The bound of 8192 bytes for both asks stands.
+- W-2 (nothing said that was not read; the review's findings 1, 2 and 9). "Stopped" is said of a stopped service
+  alone; of any other state the exit is the bare number the system holds. The runner's own words for a number,
+  the text file named for 15 and the reason a start may be long are said only of a service that carries the
+  mark: one without it is not read as Raqib's runner. The line for 15 says where the text file is, not who may
+  read the place - status did not read that. MUST NOT TOUCH: the four answers.
+- W-3 (a text of another party's; finding 5). What the manager holds of a service was written by whoever made
+  it. It is written out as printable ASCII and cut: a character that is not printable as `?`, a printable one
+  outside ASCII by its number. FOR: such a text breaks no line and forges no answer, and a path that only looks
+  like one under Program Files is seen for what it is.
+- W-4 (the calls held; finding 3). The three structures are held field by field in the system's own order, the
+  two asks by the bound they go through, and one test runs the real object's own logic against a made-up
+  library; the real calls are run on Windows by the rig at every run.
+- W-5 (the Windows jobs' failure). A test of the Linux command says which system's command it asks, so that on a
+  Windows machine it does not reach the real service manager. Recorded for every task that turns a command by
+  the platform: the Windows jobs of the gate are read before a branch is called green, whatever the builder's
+  own gate said.
+- W-6 (X53; findings 4 and 11). The rig's job makes a user outside the administrators' group, has it ask, says
+  in its file who asked, and removes it; X53 is MET only where the asker was no administrator and the lines kept
+  are status's own lines of the command and of the exit.
+- W-7 (the documents; findings 7 and 8, the builder's question 9). What was measured is said as what it was -
+  the manager's answers for a service's state, making and description, and then this command by two askers - and
+  the sentences that said the status was not built are righted.
+- W-8 (lands, and next). M12.4c2b2a lands as 0.15.0 after the gate on the tree to be merged, its Windows jobs,
+  and X53 read on the branch. Not measured: a service that is starting, stopping or paused as status reads it;
+  one marked for removal; a machine joined to a domain. Next: M12.4c2b2b (install and remove), which measures
+  first what a caller with no rights reads back of the delayed start, the failure actions and the flag; then
+  M12.4c2b3 (U-4).

@@ -39,6 +39,7 @@ class Manager:
         self.made, self.got = dict(MAKING, **(making or {})), dict(STATE, **(state or {}))
         self.fail, self.raises = dict(fail or {}), set(raises)
         self.opened, self.closed, self.log, self.next = [], [], [], 100
+        self.breaches = []   # a call with a handle not held, or another name: kept, and asked() holds none
 
     def _answer(self, call, value):
         self.log.append(call)
@@ -54,7 +55,8 @@ class Manager:
         return self.next
 
     def _held(self, handle):
-        assert handle in self.opened and handle not in self.closed, handle
+        if handle not in self.opened or handle in self.closed:
+            self.breaches.append(("a handle not held", handle))
 
     def platform(self):
         self.log.append("platform")
@@ -66,7 +68,8 @@ class Manager:
 
     def open(self, manager, name):
         self._held(manager)
-        assert name == winservice.SERVICE_NAME and manager == self.opened[0]
+        if name != winservice.SERVICE_NAME or manager != self.opened[0]:
+            self.breaches.append(("opened otherwise", manager, name))
         if not self.there and "open" not in self.fail:
             self.log.append("open")
             return None, 1060
@@ -97,6 +100,7 @@ def asked(manager):
     lines = out.getvalue().splitlines()
     assert sorted(manager.closed) == sorted(manager.opened), (manager.opened, manager.closed)   # every handle closed
     assert manager.closed == manager.opened[::-1]   # the service's before the manager's, each once
+    assert manager.breaches == [], manager.breaches   # no call with a handle not held (kept, never swallowed)
     if code != 2:
         assert lines[0] == "raqib service status" and lines[-1].startswith("RESULT: ")
         assert sum(1 for x in lines if x.startswith("RESULT:")) == 1
@@ -202,7 +206,10 @@ def test_e3_every_state_by_its_number_and_word_and_only_running_is_active(number
         assert not [x for x in lines if x.startswith("  exit: ")]   # where it runs, no exit is said
     else:
         assert (code, lines[-1]) == (1, "RESULT: INSTALLED, NOT ACTIVE")
-        assert "  exit: 0, stopped with no failure" in lines
+        # W-2: "stopped" is said of a stopped service alone; of any other state only the number the system holds
+        assert [x for x in lines if "exit" in x] == ["  exit: 0, stopped with no failure" if number == 1 else
+                                                     "  exit the system holds: 0"]
+        assert ("stopped" in " ".join(lines[1:-1])) == (number == 1)
         assert "ACTIVE says the service runs" not in " ".join(lines)
     starting = [x for x in lines if "a start may be long" in x]
     assert starting == ([] if number != 2 else ["  a start may be long: before the watch the runner checks its own"
@@ -226,8 +233,8 @@ def test_e3_each_exit_where_it_is_not_running():
         assert got[0] == "  exit: 1066, the service's own number: %s" % winservice.told(own)
         assert winservice.EXIT_WORDS[own] in got[0] and "0x%08X" % own in got[0]
         if own == winservice.EXIT_NOT_ALONE:
-            assert got[1:] == ["  the whole refusal is in its text file: service.txt in the place (Raqib under"
-                               " ProgramData, the system's and the administrators' alone)"]
+            assert got[1:] == ["  what was refused is in its text file: service.txt in the place (Raqib under"
+                               " ProgramData, as the runner took it at that start)"]
             assert winservice.TEXT_NAME == "service.txt" and winservice.PLACE_NAME == "Raqib"
         else:
             assert got[1:] == []
@@ -342,7 +349,7 @@ def test_e3_an_answer_of_a_shape_this_command_does_not_read_is_not_known_never_r
         def making(self, handle):
             return ["no", "get"], 0
     code, lines = asked(Shapeless())
-    assert (code, lines[-2:]) == (3, ["  what the service manager answered cannot be read here (AttributeError)",
+    assert (code, lines[-2:]) == (3, ["  an answer this command cannot read, or a fault of its own (AttributeError)",
                                       "RESULT: NOT KNOWN"])
 
 
@@ -410,6 +417,13 @@ def test_e1_one_system_object_whose_methods_are_the_systems_own_calls_each_decla
             _, call, kind = ast.unparse(node.targets[0]).split(".")
             declared.setdefault(call, {})[kind] = ast.unparse(node.value)
     assert {k: (v["restype"], v["argtypes"]) for k, v in declared.items()} == DECLARED
+    # W-4: the three structures, field by field in the system's own order, and the two asks bounded by room()
+    fields = {n.name: ast.unparse(n.body[0]) for n in ast.walk(methods["_win"]) if isinstance(n, ast.ClassDef)}
+    assert fields == {name: "_fields_ = [%s]" % ", ".join("('%s', wintypes.%s)" % f for f in listed)
+                      for name, listed in STRUCTURES.items()}
+    for call, structure in (("making", "config"), ("description", "description")):
+        assert ("room(done, 0 if done else api.ctypes.get_last_error(), needed.value, api.ctypes.sizeof(api.%s))"
+                % structure) in ast.unparse(methods[call]), call
     loads = [ast.unparse(n) for n in ast.walk(tree) if isinstance(n, ast.Call) and "WinDLL" in ast.unparse(n.func)]
     assert loads == ["ctypes.WinDLL('advapi32', use_last_error=True)"]
     used = {}
@@ -474,6 +488,143 @@ def test_e1_e4_the_module_is_imported_nowhere_but_in_cmd_service():
         assert not [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))
                     and "winmanager" in ast.unparse(n)], path
     assert where == [("cli.py", "cmd_service", "from raqib import winmanager")]
+
+
+STRUCTURES = {   # as the system documents them (winsvc.h), each field by its name and type, in order
+    "SERVICE_STATUS_PROCESS": [(name, "DWORD") for name in (
+        "dwServiceType", "dwCurrentState", "dwControlsAccepted", "dwWin32ExitCode", "dwServiceSpecificExitCode",
+        "dwCheckPoint", "dwWaitHint", "dwProcessId", "dwServiceFlags")],
+    "QUERY_SERVICE_CONFIGW": [("dwServiceType", "DWORD"), ("dwStartType", "DWORD"), ("dwErrorControl", "DWORD"),
+                              ("lpBinaryPathName", "LPWSTR"), ("lpLoadOrderGroup", "LPWSTR"), ("dwTagId", "DWORD"),
+                              ("lpDependencies", "LPWSTR"), ("lpServiceStartName", "LPWSTR"),
+                              ("lpDisplayName", "LPWSTR")],
+    "SERVICE_DESCRIPTIONW": [("lpDescription", "LPWSTR")],
+}
+
+
+class Library:
+    """A made-up advapi32 for the real object's own logic (W-4): its six calls fill the real structures as the
+    system's do - a first ask with no room answers `first` and names the bytes, the second fills the buffer - and
+    keep what they were asked. Nothing of the system is called."""
+
+    def __init__(self, real, description=MARKED, first=122):
+        self.real, self.text, self.first, self.last, self.closed, self.kept = real, description, first, 0, [], []
+        for name in DECLARED:
+            setattr(self, name, _Callable(getattr(self, "_" + name)))
+
+    def _ask(self, kind, buffer, size, needed, more):
+        import ctypes
+        if buffer is None:
+            needed._obj.value, self.last = ctypes.sizeof(kind) + more, self.first
+            return 0
+        assert size == ctypes.sizeof(kind) + more and len(buffer) == size
+        got = kind.from_buffer(buffer)
+        self.kept.append(got)   # the texts a field points at live as long as this
+        return got
+
+    def _OpenSCManagerW(self, machine, base, rights):
+        return 11 if (machine, base, rights) == (None, None, 0x1) else None
+
+    def _OpenServiceW(self, manager, name, rights):
+        return 12 if (manager, name, rights) == (11, winservice.SERVICE_NAME, 0x5) else None
+
+    def _QueryServiceStatusEx(self, service, level, buffer, size, needed):
+        import ctypes
+        got = buffer._obj
+        assert (service, level, size) == (12, 0, ctypes.sizeof(got))
+        got.dwServiceType, got.dwCurrentState, got.dwWin32ExitCode = 0x10, 1, winservice.SERVICE_SPECIFIC
+        got.dwServiceSpecificExitCode, got.dwProcessId = winservice.EXIT_NOT_ALONE, 0
+        return 1
+
+    def _QueryServiceConfigW(self, service, buffer, size, needed):
+        got = self._ask(self.real._api.config, buffer, size, needed, 200)
+        if got == 0:
+            return 0
+        got.dwServiceType, got.dwStartType = 0x10, 2
+        got.lpBinaryPathName, got.lpServiceStartName = PLAIN, "LocalSystem"
+        return 1
+
+    def _QueryServiceConfig2W(self, service, level, buffer, size, needed):
+        assert level == 1
+        got = self._ask(self.real._api.description, buffer, size, needed, 160)
+        if got == 0:
+            return 0
+        got.lpDescription = self.text   # None: the system's NULL where a service has no description
+        return 1
+
+    def _CloseServiceHandle(self, handle):
+        self.closed.append(handle)
+        return 1
+
+
+class _Callable:
+    """A call of the made-up library: it takes the declarations the real object sets on it, and answers."""
+
+    def __init__(self, answer):
+        self.answer = answer
+
+    def __call__(self, *given):
+        return self.answer(*given)
+
+
+def real_with(monkeypatch, **kw):
+    import ctypes
+    real = winmanager.System()
+    library = Library(real, **kw)
+    monkeypatch.setattr(ctypes, "WinDLL", lambda name, use_last_error=False: library, raising=False)
+    monkeypatch.setattr(ctypes, "get_last_error", lambda: library.last, raising=False)
+    monkeypatch.setattr(real, "platform", lambda: "win32")
+    out = io.StringIO()
+    code = winmanager.status(real, out)
+    return code, out.getvalue().splitlines(), library
+
+
+def test_w4_the_real_objects_own_logic_runs_against_a_made_up_library_the_two_asks_the_cast_and_the_texts(
+        monkeypatch):
+    code, lines, library = real_with(monkeypatch)
+    assert (code, lines[-1]) == (1, "RESULT: INSTALLED, NOT ACTIVE"), lines
+    assert "  command: %s (as the service manager holds it)" % PLAIN in lines
+    assert "  account: LocalSystem (the system's)" in lines and "  start: 2, automatic" in lines
+    assert "  installed: it carries Raqib's mark, raqib-service/1, at the start of its description" in lines
+    assert "  exit: 1066, the service's own number: %s" % winservice.told(winservice.EXIT_NOT_ALONE) in lines
+    assert library.closed == [12, 11]                       # the service's handle, then the manager's
+    declared = {name: (getattr(library, name).restype, getattr(library, name).argtypes) for name in DECLARED}
+    assert all(restype is not None and argtypes for restype, argtypes in declared.values())
+    # a service with no description: the system's NULL is "no description", read without a fault
+    code, lines, library = real_with(monkeypatch, description=None)
+    assert code == 3 and "  not installed by Raqib: it has no description; a service of the name without Raqib's" \
+                         " mark is not Raqib's" in lines and library.closed == [12, 11]
+    # a first ask that answers another number than 122: nothing is read past it, and both handles are closed
+    code, lines, library = real_with(monkeypatch, first=5)
+    assert (code, lines[-1]) == (3, "RESULT: NOT KNOWN") and library.closed == [12, 11]
+    assert [x for x in lines if "QueryServiceConfig2W (level 1) failed" in x and "error 5" in x], lines
+
+
+def test_w2_a_service_without_the_mark_is_not_read_as_raqibs_runner_no_words_of_its_own_no_text_file_no_t2():
+    own = winservice.EXIT_NOT_ALONE
+    refused = {"state": 1, "pid": 0, "exit": winservice.SERVICE_SPECIFIC, "own": own}
+    code, lines = asked(Manager(description="Another program's service", state=refused))
+    said = " ".join(lines)
+    assert code == 3 and "  exit: 1066, a number of the service's own: %d (0x%08X)" % (own, own) in lines
+    assert winservice.EXIT_WORDS[own] not in said and "text file" not in said and "service.txt" not in said
+    code, lines = asked(Manager(description=None, state={"state": 2, "pid": 0}))
+    assert "  exit the system holds: 0" in lines and "a start may be long" not in " ".join(lines)
+    # the same two states of a service that carries the mark say them
+    said = " ".join(asked(Manager(state=refused))[1])
+    assert winservice.EXIT_WORDS[own] in said and "service.txt" in said
+    assert "a start may be long" in " ".join(asked(Manager(state={"state": 2, "pid": 0}))[1])
+
+
+def test_w3_text_read_from_the_manager_is_said_in_ascii_a_letter_of_another_script_by_its_number():
+    look = '"C:\\Program Files\\Raqib\\r\u0430qib.exe" service run'   # a Cyrillic letter that reads as Latin
+    code, lines = asked(Manager(making={"command": look, "account": "LocalSystem\u200b"}))
+    assert ('  command: "C:\\Program Files\\Raqib\\r\\u0430qib.exe" service run (as the service manager holds'
+            ' it)') in lines
+    assert [x for x in lines if x.startswith("  its form: ") and x.endswith("r\\u0430qib.exe")], lines
+    assert "  account: LocalSystem?" in lines and code == 1
+    assert "  NOT AS INSTALLED: the account is not the system's (LocalSystem)" in lines
+    assert winmanager._said("\u0430\u00e9\U0001F600 a") == "\\u0430\\u00E9\\U0001F600 a"
+    assert winmanager._said("\u0430" * 400).endswith("...") and len(winmanager._said("\u0430" * 400)) == 303
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="off Windows only: on Windows the real object asks the manager")

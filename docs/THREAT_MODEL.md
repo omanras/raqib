@@ -2324,12 +2324,19 @@ collector that is slow, down or refusing never delays or loses a capture
   who made it - whether the code its command names is the system's alone
   is the check's to say (`raqib service check`, and the runner's check at
   every start), and status does not read it. Nor does it read the delayed
-  start, the failure actions or the failure flag (not measured as a caller
-  with no rights reads them), the place's own list, or what changes after
-  it was read: ACTIVE says the service runs at that moment, not that the
-  watch writes its record. What the manager answers a caller with no
-  rights was measured (the probe b1ee4fb, x64 and ARM64); this command
-  itself is not measured on a real machine until the rig reads it (X53).
+start, the failure actions or the failure flag (not measured as a caller
+  with no rights reads them), a service marked for removal (not measured),
+  the place's own list, or what changes after it was read: ACTIVE says the
+  service runs at that moment, not that the watch writes its record. A text
+  it reads from the manager - the description, the command, the account - is
+  another party's: it is written as printable ASCII, a letter outside ASCII
+  by its number, and cut, so that it can break no line and a letter that
+  only looks Latin is seen. What the manager answers a caller with no rights
+  for a service's state, making and description was measured (the probe
+  b1ee4fb, x64 and ARM64), and this command was then asked on real machines
+  by an administrator and by a user outside the administrators' group, who
+  were answered the same (the probe 23d544f); the rig asks it at every run
+  (X53).
 
 ## 7. Platform
 

@@ -1481,25 +1481,31 @@ SERVICE_STATUS_NAME = ("X53 `raqib service status` on Windows, with no rights, s
                        " INSTALLED (3), the service made from the copy under Program Files as ACTIVE (0) with its"
                        " command, and the one made from the job's own Python as installed and not active (1) with"
                        " 15's words")
-STATUS_KEYS = ("none-exit", "none-result", "active-exit", "active-result", "active-command", "refused-exit",
-               "refused-result", "refused-words")
+STATUS_KEYS = ("asked-by-administrator", "none-exit", "none-result", "active-exit", "active-result",
+               "active-command", "refused-exit", "refused-result", "refused-words")
 STATUS_PLAIN = "-I -m raqib service run"              # raqib/winmanager.py FORMS[1]: a plain interpreter's command
 PROGRAM_FILES = re.compile(r"[A-Za-z]:\\Program Files\\", re.IGNORECASE)   # a path under Program Files
 NOT_ALONE_WORDS = ("the code it runs is not the system's alone: its own check at this start refused it, or gave no"
                    " answer it reads")                # raqib/winservice.py EXIT_WORDS[EXIT_NOT_ALONE] (a test ties)
 STATUS_TEXT = "service.txt"                           # raqib/winservice.py TEXT_NAME, the runner's text file
+# W-6: the lines kept are status's own, not other text that holds the same words; and the asker had no rights
+STATUS_COMMAND = re.compile(r'command: "[A-Za-z]:\\Program Files\\[^"]+" -I -m raqib service run'
+                            r" \(as the service manager holds it\)", re.IGNORECASE)
+STATUS_OWN_HEAD = "exit: 1066, the service's own number: "
 
 
 def read_service_status(text):
-    """X53 (ADR-0013 V-5, M12.4c2b2a): what the rig's Windows job kept of `raqib service status` asked with no rights
-    at three moments: no service of the name (none-exit, none-result), the job's service made with the mark from the
-    copy under Program Files and running (active-exit, active-result, active-command), and one made with the mark
-    from the job's own Python, refused at its start (refused-exit, refused-result, refused-words). text: the FILE's
-    text (None: not given). MET only where none-exit is 3 and none-result `RESULT: NOT INSTALLED`; active-exit 0,
-    active-result `RESULT: ACTIVE` and active-command holding STATUS_PLAIN and a path under Program Files;
-    refused-exit 1, refused-result beginning `RESULT: INSTALLED, NOT ACTIVE` and refused-words holding
-    NOT_ALONE_WORDS and STATUS_TEXT; a byte-order mark before the first key is read past. MISSED with words for each
-    thing not found; n/a where none was given. It never raises."""
+    """X53 (ADR-0013 V-5, W-6, M12.4c2b2a): what the rig's Windows job kept of `raqib service status` asked with no
+    rights (asked-by-administrator: no - a user the job makes, outside the administrators' group) at three moments: no
+    service of the name (none-exit, none-result), the job's service made with the mark from the copy under Program
+    Files and running (active-exit, active-result, active-command), and one made with the mark from the job's own
+    Python, refused at its start (refused-exit, refused-result, refused-words). text: the FILE's text (None: not
+    given). MET only where none-exit is 3 and none-result `RESULT: NOT INSTALLED`; active-exit 0, active-result
+    `RESULT: ACTIVE` and active-command holding STATUS_PLAIN and a path under Program Files; refused-exit 1,
+    refused-result beginning `RESULT: INSTALLED, NOT ACTIVE` and refused-words holding NOT_ALONE_WORDS and
+    STATUS_TEXT; the command's and the exit's lines status's own (STATUS_COMMAND, STATUS_OWN_HEAD); a byte-order mark
+    before the first key is read past. MISSED with words for each thing not found; n/a where none was given. It never
+    raises."""
     name = SERVICE_STATUS_NAME
     try:
         if text is None:
@@ -1508,6 +1514,9 @@ def read_service_status(text):
             return [(name, MISSED, "missing: the status file is empty or was not written (silence is a finding)")]
         got = _run_lines(text)
         missing = ["no %s" % key for key in STATUS_KEYS if key not in got]
+        if "asked-by-administrator" in got and got["asked-by-administrator"].strip().lower() != "no":
+            missing.append("status was not asked with no rights: asked-by-administrator is %s, not no" % (
+                got["asked-by-administrator"][:40] or "not said"))
         for key, want, of in (("none-exit", 3, "with no service of the name"), ("active-exit", 0, "of the running"
                               " service"), ("refused-exit", 1, "of the service refused at its start")):
             if key in got and _int(got[key]) != want:
@@ -1527,6 +1536,10 @@ def read_service_status(text):
             if not PROGRAM_FILES.search(command):
                 missing.append("status of the running service: its command names no path under Program Files (%s)"
                                % command[:200])
+            if not STATUS_COMMAND.fullmatch(command):
+                missing.append("status of the running service: the line kept is not status's own line of the"
+                               " command, a quoted path under Program Files and then %s (%s)" % (STATUS_PLAIN,
+                                                                                                command[:200]))
         if "refused-result" in got and not refused.startswith("RESULT: INSTALLED, NOT ACTIVE"):
             missing.append("status of the service refused at its start: %s, not RESULT: INSTALLED, NOT ACTIVE" % (
                 refused[:200] or "nothing"))
@@ -1537,6 +1550,9 @@ def read_service_status(text):
             if STATUS_TEXT not in words:
                 missing.append("status of the service refused at its start: its words do not name %s (%s)" % (
                     STATUS_TEXT, words[:200]))
+            if STATUS_OWN_HEAD not in words:
+                missing.append("status of the service refused at its start: its words are not status's own line of"
+                               " the exit (%s)" % words[:200])
         if missing:
             return [(name, MISSED, "missing: %s" % "; ".join(missing))]
         return [(name, MET, "no service of the name: RESULT: NOT INSTALLED (exit 3); the service from the copy under"

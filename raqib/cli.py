@@ -290,8 +290,8 @@ no command, raqib prints its usage and exits 2.
       status needs no rights: exit 0 active as installed (the file's whole
       text, where systemd loaded it from, no drop-in, not changed since), 1
       installed and not active, or not as installed, 3 not installed (a unit
-      of the name systemd holds is said) or not known, 2 not Linux. On
-      Windows status asks the system's service manager, with no rights, for
+      of the name systemd holds is said) or not known, 2 on a system that
+      is neither Linux nor Windows. On Windows status asks the system's service manager, with no rights, for
       the service RaqibWatch: whether it carries Raqib's mark, its command
       (one of the two forms Raqib's install writes), type, start, account,
       state and exit; exit 0 running as installed, 1 not running or not as

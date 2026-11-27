@@ -59,7 +59,7 @@ ASK_MAX = 8192                  # bytes the second ask is given at most (QuerySe
 SAID_MAX = 300                  # characters of a text read from the manager said; past it, cut and marked
 OWN_PROCESS = 0x10              # SERVICE_WIN32_OWN_PROCESS: a process of its own
 SYSTEM_ACCOUNT = "LocalSystem"  # the system's account, as the manager names it (read without regard to case)
-RUNNING, START_PENDING = 4, 2
+RUNNING, START_PENDING, STOPPED = 4, 2, 1
 FORMS = ("service run", "-I -m raqib service run")   # what Raqib's install writes after the quoted path (V-3)
 FORM_WORDS = {FORMS[0]: "a packed program's", FORMS[1]: "a plain interpreter's"}
 COMMAND = re.compile(r'"([^"\x00-\x1f]+)" (service run|-I -m raqib service run)')   # FORMS, matched whole
@@ -230,8 +230,13 @@ def _failed(exc):
 
 
 def _said(value):
-    """A text read from the manager as one line of printable text, cut at SAID_MAX and the cut marked."""
-    text = "".join(c if c.isprintable() else "?" for c in str(value)[:SAID_MAX + 1])
+    """A text read from the manager as one line of printable ASCII, cut at SAID_MAX and the cut marked: a character
+    that is not printable is `?`, and a printable one outside ASCII is written as its number (\\uXXXX, or
+    \\UXXXXXXXX past that), so that a letter of another script that looks like a Latin one is seen for what it is
+    (ADR-0013 W-3)."""
+    text = "".join(c if c.isascii() and c.isprintable() else
+                   ("\\u%04X" if ord(c) < 0x10000 else "\\U%08X") % ord(c) if c.isprintable() else "?"
+                   for c in str(value)[:SAID_MAX + 1])
     return text if len(text) <= SAID_MAX else text[:SAID_MAX] + "..."
 
 
@@ -307,22 +312,29 @@ def _making(making, out):
     return differ
 
 
-def _exit(got, out, ws):
-    """V-3: where it is not running, the exit the system holds, in words (the runner's own by winservice.told)."""
+def _exit(got, out, ws, state, ours):
+    """V-3, W-2: where it is not running, the exit the system holds. Its words are said only where they were read:
+    "stopped" of a stopped service alone, and the runner's own words (winservice.told, and the text file for 15) of
+    a service that carries Raqib's mark alone - a service without it is not read as Raqib's runner."""
     code, own = _number(got.get("exit")), _number(got.get("own"))
-    if code == 0:
+    if code == 0 and state == STOPPED:
         out.write("  exit: 0, stopped with no failure\n")
+    elif code == 0:
+        out.write("  exit the system holds: 0\n")
     elif code == NEVER_STARTED:
         out.write("  exit: %d, never started (since it was made, or since the system started)\n" % NEVER_STARTED)
     elif code == ws.SERVICE_SPECIFIC:
-        if own in ws.EXIT_WORDS:
+        if not ours:
+            out.write("  exit: %d, a number of the service's own: %s\n" % (
+                code, "%d (0x%08X)" % (own, own) if own is not None else _said(got.get("own"))))
+        elif own in ws.EXIT_WORDS:
             out.write("  exit: %d, the service's own number: %s\n" % (code, ws.told(own)))
         else:
             out.write("  exit: %d, the service's own number: %s, a number the runner does not give\n" % (
                 code, "%d (0x%08X)" % (own, own) if own is not None else _said(got.get("own"))))
-        if own == ws.EXIT_NOT_ALONE:
-            out.write("  the whole refusal is in its text file: %s in the place (%s under ProgramData, the system's"
-                      " and the administrators' alone)\n" % (ws.TEXT_NAME, ws.PLACE_NAME))
+        if ours and own == ws.EXIT_NOT_ALONE:
+            out.write("  what was refused is in its text file: %s in the place (%s under ProgramData, as the runner"
+                      " took it at that start)\n" % (ws.TEXT_NAME, ws.PLACE_NAME))
     elif code is not None:
         out.write("  exit: %d, the system's number for the service's end (its words are not read here)\n" % code)
     else:
@@ -378,8 +390,8 @@ def _read(system, out, ws, opened):
     out.write("  state: %s (its process's id: %s)\n" % (_word(STATES, got.get("state"), "a state"),
                                                       _said(got.get("pid"))))
     if state != RUNNING:
-        _exit(got, out, ws)
-    if state == START_PENDING:
+        _exit(got, out, ws, state, ours)
+    if state == START_PENDING and ours:
         out.write("  a start may be long: before the watch the runner checks its own code (ADR-0013 T-2) and tells"
                   " the system to wait up to %d s; ask again\n" % (ws.CHECK_WAIT_HINT // 1000))
     if not ours:
@@ -412,7 +424,7 @@ def status(system, out):
     try:
         code, result = _read(system, out, winservice, opened)
     except Exception as exc:   # an answer of a shape this command does not read: said, never raised
-        out.write("  what the service manager answered cannot be read here (%s)\n" % type(exc).__name__)
+        out.write("  an answer this command cannot read, or a fault of its own (%s)\n" % type(exc).__name__)
         code, result = 3, "NOT KNOWN"
     for what, handle in reversed(opened):   # every handle opened is closed, on every road
         _, error = _call(system.close, handle)

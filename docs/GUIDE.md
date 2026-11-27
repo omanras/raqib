@@ -624,12 +624,13 @@ it as Raqib's only where its description begins with `raqib-service/1`; a servic
 without that mark is said as not Raqib's (exit 3). Raqib does not install a service of Windows yet,
 so a service an administrator made with that mark is read as Raqib's: make it from a copy the check
 takes. Where the service stopped with the runner's own number, status says the number in the
-runner's words, and for 15 that the whole refusal is in `service.txt` in `C:\ProgramData\Raqib`. A
+runner's words, and for 15 that what was refused is in `service.txt` in `C:\ProgramData\Raqib`. A
 start may be long: the runner checks its own code before the watch and tells the system to wait up
 to 60 s, so a service that is starting is said as starting, not ACTIVE; ask again. ACTIVE says the
-service runs, not that the watch writes its record. What a caller with no rights may read of the
-service manager was measured on GitHub's Windows machines; this command itself was not asked on a
-real machine before it was built, and the rig's Windows job is to read it (X53).
+service runs, not that the watch writes its record. What the service manager answers a caller with
+no rights for a service's state, making and description was measured (x64 and ARM64), and this
+command was then asked on real Windows by an administrator and by a user outside the administrators'
+group, who were answered the same; the rig's Windows job asks it at every run (X53).
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

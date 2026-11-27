@@ -417,19 +417,20 @@ GUIDE_NEW += SERVICE_CHECK
 # ADR-0013 Amendment V (M12.4c2b2a): the paragraph of `raqib service status` on Windows, after the check's
 SERVICE_STATUS_WINDOWS = [
     "Ask `raqib service status` on Windows as a plain user: it needs no rights and changes nothing.",
-    "It asks the system's service manager, by its own calls, about the service named `RaqibWatch`, and ta"
-    "kes it as Raqib's only where its description begins with `raqib-service/1`; a service of the name wi"
-    "thout that mark is said as not Raqib's (exit 3).",
-    "Raqib does not install a service of Windows yet, so a service an administrator made with that mark i"
-    "s read as Raqib's: make it from a copy the check takes.",
-    "Where the service stopped with the runner's own number, status says the number in the runner's words"
-    ", and for 15 that the whole refusal is in `service.txt` in `C:\\ProgramData\\Raqib`.",
+    "It asks the system's service manager, by its own calls, about the service named `RaqibWatch`, and"
+    " takes it as Raqib's only where its description begins with `raqib-service/1`; a service of the name"
+    " without that mark is said as not Raqib's (exit 3).",
+    "Raqib does not install a service of Windows yet, so a service an administrator made with that mark"
+    " is read as Raqib's: make it from a copy the check takes.",
+    "Where the service stopped with the runner's own number, status says the number in the runner's"
+    " words, and for 15 that what was refused is in `service.txt` in `C:\\ProgramData\\Raqib`.",
     "A start may be long: the runner checks its own code before the watch and tells the system to wait up"
     " to 60 s, so a service that is starting is said as starting, not ACTIVE; ask again.",
     "ACTIVE says the service runs, not that the watch writes its record.",
-    "What a caller with no rights may read of the service manager was measured on GitHub's Windows machin"
-    "es; this command itself was not asked on a real machine before it was built, and the rig's Windows j"
-    "ob is to read it (X53).",
+    "What the service manager answers a caller with no rights for a service's state, making and"
+    " description was measured (x64 and ARM64), and this command was then asked on real Windows by an"
+    " administrator and by a user outside the administrators' group, who were answered the same; the rig's"
+    " Windows job asks it at every run (X53).",
 ]
 GUIDE_NEW += SERVICE_STATUS_WINDOWS
 # M17.1 (ADR-0015 V-1 to V-3, Amendment A): the number, what a move of it means, the changelog and the update

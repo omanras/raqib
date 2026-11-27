@@ -906,6 +906,16 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
         "its own code, checked at this start")
     assert "tools\\rig\\service_refused.ps1 -Out $env:RUNNER_TEMP\\service-refused" in windows
     assert "--service-refused $env:RUNNER_TEMP\\service-refused\\service-refused.txt" in windows
+    # V-5, W-6 (X53): status asked by a user the job makes outside the administrators' group, and removes
+    asked = (ROOT / "tools" / "rig" / "service_status.ps1").read_text(encoding="utf-8")
+    assert asked.isascii() and "pip install" not in asked and "taskkill" not in asked
+    assert "-m raqib service status" in asked and "New-LocalUser -Name $user" in asked
+    assert "Remove-LocalUser -Name $user" in asked and "-Credential $cred" in asked and "S-1-5-32-544" in asked
+    assert "Administrators" not in asked.replace("administrators' group", "")   # the user joins Users alone
+    assert all("%s: " % key in asked for key in check.STATUS_KEYS)
+    assert "raqib-service/1 " in asked and "sc.exe description $name $mark" in asked
+    assert "tools\\rig\\service_status.ps1 -Out $env:RUNNER_TEMP\\service-status" in windows
+    assert "--service-status $env:RUNNER_TEMP\\service-status\\service-status.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1508,7 +1518,8 @@ def status_lines():
 
 def statusfile(**kw):
     (none, none_lines), (active, active_lines), (refused, refused_lines) = status_lines()
-    keys = {"none-exit": str(none), "none-result": none_lines[-1], "active-exit": str(active),
+    keys = {"asked-by-administrator": "no", "none-exit": str(none), "none-result": none_lines[-1],
+            "active-exit": str(active),
             "active-result": active_lines[-1],
             "active-command": [x for x in active_lines if x.startswith("  command: ")][0].strip(),
             "refused-exit": str(refused), "refused-result": refused_lines[-1],
@@ -1538,8 +1549,9 @@ def test_x53_met_where_none_is_not_installed_the_copy_under_program_files_active
     assert words.startswith("no service of the name: RESULT: NOT INSTALLED (exit 3); the service from the copy under"
                             " Program Files: RESULT: ACTIVE (exit 0), its command command: \"C:\\Program Files\\")
     assert x53(statusfile().replace("\n", "\r\n"))[0] == check.MET and x53("\ufeff" + statusfile())[0] == check.MET
-    assert x53(statusfile(**{"active-command": '"c:\\program files\\R\\python.exe" -I -m raqib service run'}))[0] == \
-        check.MET
+    assert x53(statusfile(**{"active-command": 'command: "c:\\program files\\R\\python.exe" -I -m raqib service run'
+                                               ' (as the service manager holds it)'}))[0] == check.MET
+    assert x53(statusfile(**{"asked-by-administrator": "No"}))[0] == check.MET
     assert x53(statusfile(**{"refused-result": "RESULT: INSTALLED, NOT ACTIVE, NOT AS INSTALLED"}))[0] == check.MET
 
 
@@ -1563,6 +1575,15 @@ def test_x53_met_where_none_is_not_installed_the_copy_under_program_files_active
     ({"refused-words": "exit: 1066, the service's own number: 536870927, service.txt"}, "its words do not hold the"
                                                                                         " runner's words for 15"),
     ({"refused-words": check.NOT_ALONE_WORDS}, "its words do not name service.txt"),
+    # W-6: who asked, and the lines status's own
+    ({"asked-by-administrator": "yes"}, "status was not asked with no rights: asked-by-administrator is yes, not no"),
+    ({"asked-by-administrator": ""}, "asked-by-administrator is not said, not no"),
+    ({"asked-by-administrator": None}, "no asked-by-administrator"),
+    ({"active-command": '"C:\\Program Files\\R\\python.exe" -I -m raqib service run'}, "the line kept is not status's"
+                                                                                  " own line of the command"),
+    ({"active-command": 'command: "C:\\x" and "C:\\Program Files\\R\\p.exe" -I -m raqib service run (as the service'
+                        ' manager holds it)'}, "the line kept is not status's own line of the command"),
+    ({"refused-words": "%s; service.txt" % check.NOT_ALONE_WORDS}, "its words are not status's own line of the exit"),
     ({"none-exit": None}, "no none-exit"), ({"none-result": None}, "no none-result"),
     ({"active-exit": None}, "no active-exit"), ({"active-result": None}, "no active-result"),
     ({"active-command": None}, "no active-command"), ({"refused-exit": None}, "no refused-exit"),
