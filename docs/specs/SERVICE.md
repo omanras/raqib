@@ -799,14 +799,20 @@ search and no search mode given, and on one list (advapi32, dnsapi, dwmapi, iphl
 user32); on Windows it also finds each name of the list in System32. The one call that changes the search,
 SetDllDirectoryW with no folder at the entry (ADR-0007 CI-3), takes the folder searched first back to the system's
 own. The reading names three places a library is searched: the program's own folder, which the check walks as the code
-itself; System32; and folders the process itself added. Of the third, the test holds the ways it knows by which raqib/
-could add one, not every way (Amendment R: its first lines say what it does not yet hold, and a task of its own
-re-makes it as a list of what is allowed); nothing holds what the interpreter's own start adds (site, an `import` line
-of a *.pth file, sitecustomize), which the check walks as files and does not read for what it adds. Since Amendment Q
-(Q-4) the test also refuses a loader asked by index, ctypes' low loader and the class its loaders are made by, a
-loading call given more than its name, a search call's name written in a string, the environment written whole or by
-the setters it knows past `os.environ`, a table of names changed after it was written, a loader handed on as a value,
-and a second call of CI-3's call or one given a folder; what it still does not see is said in its own first lines. Not
+itself; System32; and folders the process itself added. Of the third, the test holds since Amendment R (R-3) every
+mention in raqib/ of a word by which a library can be loaded, the search changed, the environment set past
+`os.environ` or ctypes reached by another road - as a name, an attribute, an import, a keyword, a parameter or a whole
+word in a string, docstrings too - by file, function and count, compared whole and exactly, so that a mention more or
+fewer fails; and it holds the statement around each load and CI-3's function and `own.library_folder` word for word,
+every attribute taken of ctypes on one list, each table of names and each loader as written with every mention of its
+name, every use of a library's object, and every use of `os.environ` but a read of one name by its statement. It does
+not hold a word built from pieces at run time that is on no list, or the loads the interpreter itself makes outside
+raqib/; nothing holds what the interpreter's own start adds (site, an `import` line of a *.pth file, sitecustomize),
+which the check walks as files and does not read for what it adds. The refusals of Amendment Q (Q-4) stand beneath it:
+a loader asked by index, ctypes' low loader and the class its loaders are made by, a loading call given more than its
+name, a search call's name written in a string, the environment written whole or by the setters it knows past
+`os.environ`, a table of names changed after it was written, a loader handed on as a value, and a second call of
+CI-3's call or one given a folder. Not
 measured, and said: a network drive, a removable disk and a disc (their kinds are the system's own numbers, read in
 its documents, not seen); a letter the system's account has and the asker has not, or names otherwise; a folder
 mounted on a volume with no letter; whether a library's own dependencies are searched as the library is.

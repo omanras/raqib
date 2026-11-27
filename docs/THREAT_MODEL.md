@@ -2239,11 +2239,16 @@ collector that is slow, down or refusing never delays or loses a capture
   worked out at run time, and on Windows finds each in System32; ctypes'
   search as read in its source (not measured) names three places, never the
   PATH: the program's own folder, which the check walks; System32; and
-  folders the process itself added - of these the test holds the ways it
-  knows by which raqib/ could add one, not every way (its own first lines
-  say what it does not yet hold), and nothing holds what the interpreter's
-  own start adds (site,
-  an `import` line of a *.pth file, sitecustomize). On the plain road it
+  folders the process itself added - of these the test holds every mention in
+  raqib/ of a word by which a library is loaded, the search changed, the
+  environment set past os.environ or ctypes reached by another road, by file,
+  function and count, exactly, with the statement around each load and CI-3's
+  road word for word, so that any other fails; it does not hold a word built
+  from pieces at run time that is on no list, the loads the interpreter
+  itself makes outside raqib/, or whether a library's own dependencies are
+  searched as the library is (not measured), and nothing holds what the
+  interpreter's own start adds (site, an `import` line of a *.pth file,
+  sitecustomize). On the plain road it
   does not read what the system's own account would add to the path that the
   asker's does not (only the system writes there), a finder or hook a
   package installs (an editable install is met only as its *.pth file and

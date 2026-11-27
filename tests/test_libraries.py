@@ -1,52 +1,53 @@
-"""M12.4c2a (ADR-0013 Amendments P and Q, P-2, Q-4): every library Raqib loads by name, held by one list.
+"""M12.4c2a (ADR-0013 P-2, Q-4) and M12.4c2a2 (Amendment R, R-3): every library Raqib loads by name, held by one list;
+and every mention in raqib/ by which one could be loaded otherwise, held as it is.
 
 Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10; Amendment P), not measured: a
 library asked for by a bare name is searched with the system's default folders - the application's own folder,
 System32, and folders the process itself added - and not along the PATH or in the folder the process was started in.
-So this test reads every .py file of raqib/ by its syntax tree and finds every place a library is loaded: ctypes'
-classes (WinDLL, CDLL, OleDLL, PyDLL), its loaders (windll, cdll, oledll, pydll) by attribute and by LoadLibrary,
-ctypes.util.find_library, and each of Raqib's own loader functions that take a name (found by the scan: a load whose
-name is a parameter of the function that holds it; then every call of that function is read). It holds:
-- every name given is a string written in the code - followed through a name bound in its function to a table of
-  strings at the top of its module, assigned once and never changed after (no augmented assignment, no item stored
-  or deleted, no method that changes it, no second binding of its name), or failed - with no path separator and no
-  dot but a final `.dll`, and on one list (LIBRARIES); no library is loaded by a name worked out at run time;
-- a loading call is given its name and nothing more by position, and no `*` or `**`; no call gives a search mode
-  (winmode); a loader is never asked by index (windll["x"]); ctypes' low loader (_dlopen) and the class its loaders
-  are made by (LibraryLoader) are never named;
-- a class, loader or finder of ctypes', and each of Raqib's own loader functions and lambdas, is called where it is
-  named and never handed on as a value (ALLOWED_HANDED names where it may be: nowhere);
-- nothing adds a folder to the search, and no name of a search call (SEARCH) or of a setter of the environment past
-  os.environ (ENV_SET), nor ctypes' low loader's, is written in a string anywhere in raqib/ but where the test allows
-  it (ALLOWED_WORDS: own.py's words for CI-3's result); docstrings are not read for them;
-- nothing sets PATH: the environment is set only by an item stored in os.environ (or set by its setdefault), its
-  name followed to its callers as a loader's is, and never by os.environ.update, `|=`, a whole new os.environ,
-  os.putenv or SetEnvironmentVariableW;
-- the one call that takes a folder off the search, SetDllDirectoryW with no folder (ADR-0007 CI-3, raqib/cli.py), is
-  named and allowed as what it is, and held to its one road: called once in the function that holds it, with that
-  function's folder; that function named once, handed to own.library_folder; which calls it once, with None.
+
+The first hold (Scan; P-2, Q-4) reads every .py file of raqib/ by its syntax tree, finds every place a library is
+loaded (ctypes' classes, its loaders by attribute and by LoadLibrary, find_library, and Raqib's own loader functions
+and lambdas, whose callers give the names), and holds: every name is a string written in the code, followed through
+a table of strings written once, plain, and on one list (LIBRARIES); no search mode, no folder added, PATH never set;
+CI-3's one call (SetDllDirectoryW with no folder, raqib/cli.py) on its one road. It refuses the forms it knows.
+
+The hold on it (Mentions; R-3) is turned round: what is in the tree is held as it is, and anything else fails. Each
+table below is what the scan found in raqib/, printed by dump_held() and pasted, compared whole and exactly - a
+mention more fails, a mention fewer fails, a statement changed by one token fails:
+- E1 MENTIONS: every mention of a word of WORDS (by which a library is loaded, the search changed, the environment
+  set past os.environ, or ctypes and its loaders reached by another road) and of sys.modules - as a name, an
+  attribute, each part of an imported or aliased name, a keyword, a parameter, a def's name, and as a whole word in
+  every string and bytes constant, docstrings too - by (file, function, word): count. ENVIRON: every use of
+  os.environ but a read of one name (a subscript read, .get given a string written in the code, `in`), by file,
+  function and its statement's text.
+- E2 STATEMENTS: the statement around each mention in code of a loader's, a search call's or a setter's word, as
+  ast.unparse writes it. E3 CI3_TEXT, CI3_HANDOVER: CI-3's function in cli.main and own.library_folder, whole
+  (docstrings apart), and the one statement that hands the first to the second.
+- E4 CTYPES_ATTRS, CTYPES_IMPORTS, CTYPES_BOUND: every attribute taken of ctypes or ctypes.wintypes (through any name
+  an import, an assignment or an object's attribute binds to it), on one list; every import of ctypes or of a part
+  of it; every place a module of ctypes is bound, stored or handed on, by its statement.
+- E5 TABLES, LOADER_BODIES, E5_NAMES, NAMED: each table of names the first hold follows and each of Raqib's own
+  loaders, its value or body as written, and every mention of its name (in its own file by name; in any other as an
+  attribute, an imported name or a keyword), by file, function and count.
+- E6 HANDED_OBJECTS, REBOUND, OTHER_USES: an object a load gives is used by taking a function of it by name (an
+  attribute not beginning with `_`; getattr given a string written in the code, or a parameter every call of its
+  def gives one); handed to a call or kept on an object only where held, and followed there; its name bound again,
+  or put to any other use, only where held by its statement (autostart._windows_drive_kind, as the tree has it).
+ESCAPES: each form the two reviews found, put in a copy of the file it would live in, fails at its own line.
 On Windows only: each name of the list is a file in System32.
 
-What the scan does not see, and so does not fail on (ADR-0013 Q-4, said plainly): a call's name built from pieces at
-run time and given to getattr of an object that is not ctypes' own; a table changed by a function it is handed to; a
-module of ctypes bound to an attribute (api.ctypes.WinDLL) or by assignment, and what is loaded through it; exec,
-eval, importlib; loads the interpreter itself makes, outside raqib/ (ctypes' own windll.kernel32 at its import,
-_ctypes' dependencies, tkinter's libraries); folders the interpreter's own start adds to the search (site, a *.pth
-line, sitecustomize), which no test here reads; whether a library's own dependencies are searched as the library is
-(Amendment P: not measured).
-
-Not yet held, though Q-4 asked for it (the second review of the REDO, ADR-0013 R-3; a task of its own re-makes this
-hold as a list of every mention that is allowed, where today it is a list of the forms that are refused): a folder
-reaching CI-3's call through its parameter bound again inside the function that holds it; a loader lambda handed to a
-call inside its own binding line; a table of names changed from another module; a folder added by the interpreter's
-own low call (nt._add_dll_directory); ctypes reached by __import__ or sys.modules; a loader of ctypes' reached
-through an attribute of one (windll.LoadLibrary bound to a name, a class's __init__ or __base__, an instance's
-__class__); a function of a library asked by ordinal; the whole environment set by one call of the system's; a
-docstring read as a value.
+Not held, said plainly: loads the interpreter itself makes, outside raqib/ (ctypes' own windll.kernel32 at its
+import, _ctypes' dependencies, tkinter's libraries); folders the interpreter's own start adds to the search (site, a
+*.pth line, sitecustomize), which no test here reads; a word built from pieces at run time that is on no list (a
+name joined from parts and given to getattr, a name read from a file); whether a library's own dependencies are
+searched as the library is (Amendment P: not measured).
 """
 import ast
+import copy
 import os
+import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -104,11 +105,10 @@ class Scan:
         self.loads, self.loaders, self.search, self.env, self.faults = [], set(), set(), set(), []
         self.files, self.defs, self.setters = {}, {}, {}
         self.words, self.handed, self.ci3, self.lambdas = set(), set(), set(), []   # Q-4
+        self.load_nodes, self.loader_nodes, self.tables_read = [], {}, set()   # R-3: what the layers on it read
 
     def add(self, source, filename):
-        tree = ast.parse(source, filename)
-        parents = {c: n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
-        self.files[filename] = (tree, parents)
+        self.files[filename] = parsed(source, filename)
 
     # --- where a node is ---
     @staticmethod
@@ -147,13 +147,13 @@ class Scan:
                   and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)]
         if not values:
             return None, None
-        binds = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == name
+        binds = [n for n in nodes(tree) if isinstance(n, ast.Name) and n.id == name
                  and isinstance(n.ctx, (ast.Store, ast.Del))]
-        changed = [n for n in ast.walk(tree) if isinstance(n, (ast.Subscript, ast.Attribute))
+        changed = [n for n in nodes(tree) if isinstance(n, (ast.Subscript, ast.Attribute))
                    and isinstance(n.value, ast.Name) and n.value.id == name
                    and (isinstance(n.ctx, (ast.Store, ast.Del))
                         or isinstance(n, ast.Attribute) and n.attr in CHANGERS)]
-        named = [n for n in ast.walk(tree) if isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names]
+        named = [n for n in nodes(tree) if isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names]
         if len(values) != 1 or len(binds) != 1 or changed or named:
             return None, "a table of names changed after its one assignment (%s)" % name
         v = values[0]
@@ -191,6 +191,7 @@ class Scan:
                 values, changed = self.table(tree, it.id) if isinstance(it, ast.Name) else (None, None)
                 if values is None:
                     return None, changed or said
+                self.tables_read.update((f, it.id) for f, (t, _) in self.files.items() if t is tree)
                 got += values
             elif isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == expr.id for t in n.targets):
                 values, why = self.strings(n.value, None, tree)
@@ -206,7 +207,16 @@ class Scan:
     # --- the scan ---
     def run(self):
         for filename, (tree, parents) in sorted(self.files.items()):
-            self._file(filename, tree, parents)
+            key = (id(tree), filename, self.classes, self.loader_objects)
+            one = _SCANNED.get(key)   # one file's own reading, kept: a made-up tree re-reads only what it changes
+            if one is None:
+                one = _SCANNED[key] = Scan(self.classes, self.loader_objects)
+                one.files = {filename: (tree, parents)}
+                one._file(filename, tree, parents)
+            for k in ("loads", "faults", "lambdas", "load_nodes"):
+                getattr(self, k).extend(getattr(one, k))
+            for k in ("loaders", "search", "env", "words", "tables_read", "defs", "loader_nodes", "setters"):
+                getattr(self, k).update(getattr(one, k))
         for (filename, function), (name, kind) in sorted(self.defs.items()):   # a loader def: every call of it
             self._callers(name, filename, function, kind)
         self._handed()
@@ -218,7 +228,7 @@ class Scan:
 
     def _file(self, filename, tree, parents):
         mods, bound, utils, oses, environ, putenvs = set(), {}, set(), set(), set(), set()
-        for node in ast.walk(tree):
+        for node in nodes(tree):
             if isinstance(node, ast.Import):
                 for a in node.names:
                     top = a.name.split(".")[0]
@@ -261,9 +271,9 @@ class Scan:
             return isinstance(e, ast.Name) and e.id in environ or isinstance(e, ast.Attribute) and \
                 e.attr == "environ" and isinstance(e.value, ast.Name) and e.value.id in oses
 
-        said = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Expr)}   # docstrings: words, not values
-        heads = {id(c.func) for c in ast.walk(tree) if isinstance(c, ast.Call)}
-        for node in ast.walk(tree):
+        said = {id(n.value) for n in nodes(tree) if isinstance(n, ast.Expr)}   # docstrings: words, not values
+        heads = {id(c.func) for c in nodes(tree) if isinstance(c, ast.Call)}
+        for node in nodes(tree):
             if isinstance(node, ast.keyword) and node.arg == "winmode":
                 self._fault(filename, parents.get(node), "a search mode given (winmode=)")
             if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)) and id(node) not in said:
@@ -351,6 +361,7 @@ class Scan:
 
     def _load(self, filename, node, parents, form, name):
         self.loads.append((filename, self.where(node, parents), form, name))
+        self.load_nodes.append((filename, node))
 
     def _name(self, filename, call, parents, form, arg):
         scope = self.holder(call, parents)
@@ -376,6 +387,7 @@ class Scan:
                 self._fault(filename, scope, "a loader lambda not bound to one name in a function: not followed")
                 return
             self.loaders.add((filename, self.where(scope, parents)))
+            self.loader_nodes[(filename, self.where(scope, parents))] = (scope, names[0])
             self.lambdas.append((filename, fn, names[0], up))
             calls = [c for c in ast.walk(fn) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
                      and c.func.id == names[0]]
@@ -385,12 +397,13 @@ class Scan:
                 self._given(filename, c, "loader")
         else:                                # a def: every call of it, in every file, by its name
             self.loaders.add((filename, self.qual(scope, parents)))
+            self.loader_nodes[(filename, self.qual(scope, parents))] = (scope, scope.name)
             self.defs[(filename, self.qual(scope, parents))] = (scope.name, "loader")
 
     def _callers(self, name, filename, function, kind):
         found = 0
         for other, (tree, parents) in sorted(self.files.items()):
-            for c in ast.walk(tree):
+            for c in nodes(tree):
                 if not isinstance(c, ast.Call):
                     continue
                 f = c.func
@@ -426,10 +439,10 @@ class Scan:
         places += [(f, fn, bound, {name}, bound) for f, fn, name, bound in self.lambdas]
         for filename, top, bound, words, skip in places:
             parents = self.files[filename][1]
-            heads = {id(h) for c in ast.walk(top) if isinstance(c, ast.Call)
+            heads = {id(h) for c in nodes(top) if isinstance(c, ast.Call)
                      for h in (c.func.values if isinstance(c.func, ast.BoolOp) else [c.func])}
             inside = {id(x) for x in ast.walk(skip)} if skip is not None else set()
-            for n in ast.walk(top):
+            for n in nodes(top):
                 word = n.id if isinstance(n, ast.Name) else n.attr if isinstance(n, ast.Attribute) else None
                 if word in words and isinstance(n.ctx, ast.Load) and id(n) not in heads and id(n) not in inside:
                     key = (filename, self.where(n, parents), word)
@@ -448,7 +461,7 @@ class Scan:
                 continue
             tree, parents = self.files[filename]
             self.ci3.add(filename)
-            fns = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and self.qual(n, parents) == where]
+            fns = [n for n in nodes(tree) if isinstance(n, ast.FunctionDef) and self.qual(n, parents) == where]
             if len(fns) != 1:
                 self._fault(filename, None, "CI-3: the function %s that holds %s is not found once" % (where, word))
                 continue
@@ -466,7 +479,7 @@ class Scan:
                     or calls[0].keywords or [ast.unparse(x) for x in calls[0].args] != params:
                 self._fault(filename, fn, "CI-3: %s is read or called more than once, or given other than the one"
                                           " folder its function is given" % word)
-            refs = [(f, n) for f, (t, _) in sorted(self.files.items()) for n in ast.walk(t)
+            refs = [(f, n) for f, (t, _) in sorted(self.files.items()) for n in nodes(t)
                     if isinstance(n, ast.Name) and n.id == fn.name
                     or isinstance(n, ast.Attribute) and n.attr == fn.name]
             up = parents.get(refs[0][1]) if len(refs) == 1 else None
@@ -525,6 +538,833 @@ def scan_of(source, filename="raqib/made_up.py"):
     for name, text in sorted((source if isinstance(source, dict) else {filename: source}).items()):
         s.add(text, name)
     return s.run()
+
+
+# --- ADR-0013 R-3 (M12.4c2a2): what is in the tree, held as it is, mention by mention; anything else fails ---
+LOAD_WORDS = CLASSES + LOADERS + ("pythonapi", "LibraryLoader", "_dlopen", "dlopen", "_ctypes", "LoadLibrary",
+                                  "LoadLibraryW", "LoadLibraryA", "LoadLibraryExW", "LoadLibraryExA",
+                                  "LoadPackagedLibrary", "find_library", "find_msvcrt", "winmode")   # E1, E2
+SEARCH_WORDS = ("add_dll_directory", "_add_dll_directory", "AddDllDirectory", "RemoveDllDirectory",
+                "SetDllDirectoryW", "SetDllDirectoryA", "SetDefaultDllDirectories")   # E1, E2: the search changed
+ENV_WORDS = ("putenv", "_putenv", "_wputenv", "unsetenv", "environb", "SetEnvironmentVariableW",
+             "SetEnvironmentVariableA", "SetEnvironmentStringsW")   # E1, E2: the environment set past os.environ
+ROAD_WORDS = ("__import__", "importlib", "import_module", "__class__", "__base__", "__bases__", "__mro__",
+              "__subclasses__", "__doc__", "__dict__", "__getattribute__", "__builtins__", "builtins", "globals",
+              "vars", "locals", "exec", "eval", "compile")   # E1: ctypes and its loaders reached by another road
+WORDS = LOAD_WORDS + SEARCH_WORDS + ENV_WORDS + ROAD_WORDS
+SYS_MODULES = "sys.modules"   # E1: held as a word of its own (an attribute of sys, an imported name, a string)
+PATTERNS = {w: re.compile(r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(w)) for w in WORDS + (SYS_MODULES,)}
+STATEMENT_WORDS = LOAD_WORDS + SEARCH_WORDS + ENV_WORDS   # E2: where one is code, its statement is held
+CI3_FUNCTIONS = (("raqib/cli.py", "main.set_dll_directory_w"), ("raqib/own.py", "library_folder"))   # E3
+_PARSED, _NODES, _INDEX, _FACTS, _SCANNED = {}, {}, {}, {}, {}
+
+
+def parsed(source, filename):
+    """(tree, {child: parent}) of a source, parsed once (a made-up tree re-parses only the file it changes); its
+    nodes and the words its code writes are kept beside it (nodes(), index())."""
+    key = (filename, source)
+    if key not in _PARSED:
+        tree = ast.parse(source, filename)
+        every = list(ast.walk(tree))
+        _PARSED[key] = (tree, {c: n for n in every for c in ast.iter_child_nodes(n)})
+        _NODES[id(tree)], _INDEX[id(tree)] = every, {}
+        for n in every:
+            for word in named(n):
+                _INDEX[id(tree)].setdefault(word, []).append(n)
+    return _PARSED[key]
+
+
+def nodes(tree):
+    """ast.walk's nodes of a tree, from the list kept for a parsed file."""
+    return _NODES[id(tree)] if id(tree) in _NODES else list(ast.walk(tree))
+
+
+def index(tree):
+    """{word: [the nodes that write it as code]} of a parsed file."""
+    return _INDEX[id(tree)]
+
+
+def statement(node, parents):
+    while node is not None and not isinstance(node, ast.stmt):
+        node = parents.get(node)
+    return node
+
+
+def whole(fn):
+    """A def's text as ast.unparse writes it, its docstring apart (E3, E5)."""
+    fn = copy.deepcopy(fn)
+    if fn.body and isinstance(fn.body[0], ast.Expr) and isinstance(fn.body[0].value, ast.Constant) and \
+            isinstance(fn.body[0].value.value, str):
+        fn.body = fn.body[1:] or [ast.Pass()]
+    return ast.unparse(fn)
+
+
+def named(node):
+    """The words a node writes as code: a name, an attribute, a parameter, a keyword, each part of an imported or
+    aliased name, a def's or a class's name, a name an except, a global or a pattern binds."""
+    if isinstance(node, ast.Name):
+        return [node.id]
+    if isinstance(node, ast.Attribute):
+        return [node.attr]
+    if isinstance(node, ast.arg):
+        return [node.arg]
+    if isinstance(node, ast.alias):
+        return node.name.split(".") + ([node.asname] if node.asname else [])
+    if isinstance(node, ast.ImportFrom):
+        return node.module.split(".") if node.module else []
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return [node.name]
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        return list(node.names)
+    name = node.arg if isinstance(node, ast.keyword) else node.rest if isinstance(node, ast.MatchMapping) else \
+        node.name if isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) else None
+    return [name] if isinstance(name, str) else []
+
+
+class Mentions:
+    """R-3: the layers held on the first hold's scan (the same trees): every mention of WORDS (E1), the environment
+    used past a read of one name (E1), the statement around each load (E2), CI-3's road (E3), ctypes' attributes,
+    imports and bindings (E4), the tables and loaders (E5), and every use of a library's object (E6)."""
+
+    def __init__(self, scan=None):
+        self.scan, self.files = scan, scan.files if scan is not None else {}
+        self.words, self.lines = Counter(), {}                     # E1: {(file, function, word): count}, its lines
+        self.environ, self.statements, self.imports, self.bound, self.rebound = [], [], [], [], []
+        self.attrs, self.whole, self.handover = {}, {}, []         # E4: {"ctypes.X": [(file, line)]}; E3
+        self.tables, self.bodies, self.named, self.named_lines, self.names = {}, {}, Counter(), {}, set()   # E5
+        self.handed, self.handed_lines, self.other, self.faults = Counter(), {}, [], []  # E6
+
+    def run(self):
+        for f, (tree, parents) in sorted(self.files.items()):
+            one = _FACTS.get(id(tree))   # what one file holds of itself, kept for a made-up tree of one file more
+            if one is None:
+                one = _FACTS[id(tree)] = Mentions()
+                one._file(f, tree, parents)
+                one._ctypes(f, tree, parents)
+            self.words.update(one.words)
+            for mine, its in ((self.lines, one.lines), (self.attrs, one.attrs)):
+                for k, v in its.items():
+                    mine.setdefault(k, []).extend(v)
+            for mine, its in ((self.environ, one.environ), (self.statements, one.statements),
+                              (self.imports, one.imports), (self.bound, one.bound)):
+                mine.extend(its)
+        self._ci3()
+        self._tables_and_loaders()
+        seen, done = set(), set()
+        for f, node in self.scan.load_nodes:
+            if id(node) not in done:
+                done.add(id(node))
+                self._use(f, node, seen)
+        return self
+
+    @staticmethod
+    def _line(node, parents):
+        return getattr(node, "lineno", None) or getattr(statement(node, parents), "lineno", 0)
+
+    def _held(self, into, f, node, parents, done=None):
+        s = statement(node, parents)
+        if done is not None:
+            if id(s) in done:
+                return
+            done.add(id(s))
+        into.append((f, Scan.where(s, parents), ast.unparse(s), s.lineno))
+
+    def _count(self, f, node, parents, word):
+        key = (f, Scan.where(node, parents), word)
+        self.words[key] += 1
+        self.lines.setdefault(key, []).append(self._line(node, parents))
+
+    # --- E1, E2: every mention; the environment; the statement around a load ---
+    def _file(self, f, tree, parents):
+        imports = [a for n in nodes(tree) if isinstance(n, ast.Import) for a in n.names]
+        sys_names = {a.asname or "sys" for a in imports if a.name == "sys"}
+        os_names = {a.asname or "os" for a in imports if a.name == "os"} | {
+            "os" for a in imports if a.name.startswith("os.") and not a.asname}
+        environ_names = {a.asname or a.name for n in nodes(tree) if isinstance(n, ast.ImportFrom)
+                         and n.module == "os" for a in n.names if a.name == "environ"}
+        stated, env, words = set(), set(), index(tree)
+        for word in WORDS:
+            for node in words.get(word, ()):
+                self._count(f, node, parents, word)
+                if word in STATEMENT_WORDS:
+                    self._held(self.statements, f, node, parents, stated)
+        for node in nodes(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
+                text = node.value.decode("latin-1") if isinstance(node.value, bytes) else node.value
+                for word, pattern in PATTERNS.items():
+                    if word in text:
+                        for _ in pattern.finditer(text):
+                            self._count(f, node, parents, word)
+                continue
+            if isinstance(node, ast.Attribute) and node.attr == "modules" and isinstance(node.value, ast.Name) and \
+                    node.value.id in sys_names or isinstance(node, ast.ImportFrom) and node.module == "sys" and \
+                    any(a.name == "modules" for a in node.names):
+                self._count(f, node, parents, SYS_MODULES)
+            if isinstance(node, ast.Attribute) and node.attr == "environ" and isinstance(node.value, ast.Name) and \
+                    node.value.id in os_names or isinstance(node, ast.Name) and node.id in environ_names or \
+                    isinstance(node, ast.ImportFrom) and node.module == "os" and \
+                    any(a.name == "environ" for a in node.names):
+                if not self._read(node, parents):
+                    self._held(self.environ, f, node, parents, env)
+
+    @staticmethod
+    def _read(node, parents):
+        """os.environ read for one name: a subscript read, .get given a string written in the code, `in`."""
+        up = parents.get(node)
+        if isinstance(up, ast.Subscript) and up.value is node and isinstance(up.ctx, ast.Load):
+            return True
+        if isinstance(up, ast.Attribute) and up.value is node and up.attr == "get":
+            call = parents.get(up)
+            return isinstance(call, ast.Call) and call.func is up and not call.keywords and \
+                1 <= len(call.args) <= 2 and isinstance(call.args[0], ast.Constant) and \
+                isinstance(call.args[0].value, str) and not any(isinstance(a, ast.Starred) for a in call.args)
+        if isinstance(up, ast.Compare):
+            return any(c is node and isinstance(op, (ast.In, ast.NotIn)) for c, op in zip(up.comparators, up.ops))
+        return False
+
+    # --- E4: ctypes itself ---
+    def _ctypes(self, f, tree, parents):
+        names, via, done = {}, {"ctypes": "ctypes", "wintypes": "ctypes.wintypes"}, set()
+        for node in nodes(tree):
+            if isinstance(node, ast.Import) and any(a.name.split(".")[0] in ("ctypes", "_ctypes")
+                                                    for a in node.names):
+                self._held(self.imports, f, node, parents)
+                for a in node.names:
+                    if a.name.split(".")[0] in ("ctypes", "_ctypes"):
+                        names[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
+            elif isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] in ("ctypes",
+                                                                                                    "_ctypes"):
+                self._held(self.imports, f, node, parents)
+                for a in node.names:
+                    sub = "%s.%s" % (node.module, a.name)
+                    if sub in ("ctypes.wintypes", "ctypes.util"):
+                        names[a.asname or a.name] = sub
+                    self.attrs.setdefault(sub, []).append((f, node.lineno))
+
+        def module(e):
+            if isinstance(e, ast.Name):
+                return names.get(e.id)
+            if isinstance(e, ast.Attribute):
+                up = module(e.value)
+                if up == "ctypes" and e.attr in ("wintypes", "util"):
+                    return "ctypes." + e.attr
+                if up is None and e.attr in via:
+                    return via[e.attr]
+            return None
+
+        for _ in range(3):   # a module's name handed to a keyword, stored on an object, or bound by assignment
+            for node in nodes(tree):
+                if isinstance(node, ast.keyword) and node.arg and module(node.value):
+                    via.setdefault(node.arg, module(node.value))
+                if isinstance(node, ast.Assign):
+                    for t in node.targets:
+                        pairs = zip(t.elts, node.value.elts) if isinstance(t, ast.Tuple) and isinstance(
+                            node.value, ast.Tuple) and len(t.elts) == len(node.value.elts) else [(t, node.value)]
+                        for target, value in pairs:
+                            if module(value) and isinstance(target, ast.Attribute):
+                                via.setdefault(target.attr, module(value))
+                            elif module(value) and isinstance(target, ast.Name):
+                                names.setdefault(target.id, module(value))
+        for node in nodes(tree):
+            if isinstance(node, ast.Attribute) and module(node.value):
+                self.attrs.setdefault("%s.%s" % (module(node.value), node.attr), []).append((f, node.lineno))
+            up = parents.get(node)
+            if isinstance(node, (ast.Name, ast.Attribute)) and module(node) and not (
+                    isinstance(up, ast.Attribute) and up.value is node and isinstance(node.ctx, ast.Load)):
+                self._held(self.bound, f, node, parents, done)   # handed on, bound or stored: held by its statement
+
+    # --- E3: CI-3's road ---
+    def _ci3(self):
+        for f, w in CI3_FUNCTIONS:
+            if f in self.files:
+                tree, parents = self.files[f]
+                self.whole[(f, w)] = [n for n in nodes(tree) if isinstance(n, ast.FunctionDef)
+                                      and Scan.qual(n, parents) == w]
+        f, w = CI3_FUNCTIONS[0]
+        for g, (tree, parents) in sorted(self.files.items()):
+            for n in index(tree).get(w.split(".")[-1], ()):
+                if isinstance(n, (ast.Name, ast.Attribute)):
+                    self._held(self.handover, g, n, parents)
+
+    # --- E5: tables and loaders ---
+    def _tables_and_loaders(self):
+        """Each table the first hold followed a name to, and each loader it found: its value or body as written;
+        and every mention of its name - and of each name held (E5_NAMES), so that a table the first hold no longer
+        follows (changed, and so refused) is still counted where it is changed."""
+        for f, name in sorted(self.scan.tables_read | {k for k in TABLES if k[0] in self.files}):
+            values = [n.value for n in self.files[f][0].body if isinstance(n, ast.Assign)
+                      and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)]
+            self.tables[(f, name)] = " | ".join(ast.unparse(v) for v in values)
+            self.names.add((f, name))
+        for (f, w), (node, name) in sorted(self.scan.loader_nodes.items()):
+            self.bodies[(f, w)] = ast.unparse(node) if isinstance(node, ast.Lambda) else whole(node)
+            self.names.add((f, name))
+        names = self.names | set(E5_NAMES)
+        for g, (tree, parents) in sorted(self.files.items()):
+            for word in sorted({name for _, name in names}):
+                for node in index(tree).get(word, ()):
+                    if (g, word) in names or isinstance(node, (ast.Attribute, ast.alias, ast.keyword)):
+                        key = (g, Scan.where(node, parents), word)
+                        self.named[key] += 1
+                        self.named_lines.setdefault(key, []).append(self._line(node, parents))
+
+    # --- E6: a library's object ---
+    def _use(self, f, node, seen):
+        """Where an expression whose value is a library's object goes: a function of it taken by name, or handed to
+        a call (held by callee, and followed into a def of its file), or bound to a name (followed); else a fault."""
+        tree, parents = self.files[f]
+        up, here = parents.get(node), Scan.where(node, parents)
+        if isinstance(up, ast.Attribute) and up.value is node and not up.attr.startswith("_"):
+            return   # a function of it, taken by name
+        if isinstance(up, ast.Call) and any(a is node for a in up.args):
+            callee, i = ast.unparse(up.func), [k for k, a in enumerate(up.args) if a is node][0]
+            if callee == "getattr" and i == 0 and len(up.args) in (2, 3) and self._written(f, up.args[1]):
+                return
+            key = (f, here, callee)
+            self.handed[key] += 1
+            self.handed_lines.setdefault(key, []).append(up.lineno)
+            d = self._def(f, up, callee)
+            if d is not None and not any(isinstance(a, ast.Starred) for a in up.args[:i + 1]):
+                params = [p.arg for p in d.args.posonlyargs + d.args.args]
+                if i < len(params):
+                    self._bound(f, d, params[i], None, seen)
+            return
+        if isinstance(up, ast.keyword) and up.value is node and isinstance(parents.get(up), ast.Call):
+            key = (f, here, "%s(%s=)" % (ast.unparse(parents.get(up).func), up.arg))
+            self.handed[key] += 1
+            self.handed_lines.setdefault(key, []).append(up.value.lineno)
+            self._attribute(f, up.arg, seen)
+            return
+        target = self._target(node, parents)
+        if target is not None:
+            self._bound(f, self._scope(target[0], parents) or tree, target[1], target[0], seen)
+            return
+        if isinstance(up, ast.Assign) and up.value is node and len(up.targets) == 1 and \
+                isinstance(up.targets[0], ast.Attribute):   # kept on an object: held, and its attribute followed
+            key = (f, here, "%s=" % ast.unparse(up.targets[0]))
+            self.handed[key] += 1
+            self.handed_lines.setdefault(key, []).append(up.lineno)
+            self._attribute(f, up.targets[0].attr, seen)
+            return
+        self._held(self.other, f, node, parents)   # any other use: held by its statement, where the tree has it
+
+    def _attribute(self, f, attr, seen):
+        if (f, "." + str(attr)) not in seen:
+            seen.add((f, "." + str(attr)))
+            for n in index(self.files[f][0]).get(attr, ()):   # an object's attribute of that name, in its file
+                if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load):
+                    self._use(f, n, seen)
+
+    @staticmethod
+    def _scope(node, parents):
+        n = parents.get(node)
+        while n is not None and not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            n = parents.get(n)
+        return n
+
+    @staticmethod
+    def _target(node, parents):
+        """(the Assign, the name) where `node` is bound to one name, alone or in a tuple of the same length."""
+        up = parents.get(node)
+        if isinstance(up, ast.Assign) and up.value is node and len(up.targets) == 1 and \
+                isinstance(up.targets[0], ast.Name):
+            return up, up.targets[0].id
+        if isinstance(up, ast.Tuple) and isinstance(parents.get(up), ast.Assign) and parents.get(up).value is up:
+            a = parents.get(up)
+            i = [k for k, e in enumerate(up.elts) if e is node][0]
+            if len(a.targets) == 1 and isinstance(a.targets[0], ast.Tuple) and \
+                    len(a.targets[0].elts) == len(up.elts) and isinstance(a.targets[0].elts[i], ast.Name):
+                return a, a.targets[0].elts[i].id
+        return None
+
+    def _bound(self, f, scope, name, binding, seen):
+        if (f, id(scope), name) in seen:
+            return
+        seen.add((f, id(scope), name))
+        parents = self.files[f][1]
+        inside = {id(x) for x in ast.walk(binding)} if binding is not None else set()
+        for n in ast.walk(scope):
+            if isinstance(n, ast.Name) and n.id == name and id(n) not in inside:
+                if isinstance(n.ctx, ast.Load):
+                    self._use(f, n, seen)
+                else:   # its name bound again (or deleted): held by its statement
+                    self._held(self.rebound, f, n, parents)
+
+    def _def(self, f, call, callee):
+        """The def of this file a call by a plain name calls: in the function that makes the call, else at the top."""
+        tree, parents = self.files[f]
+        if not isinstance(call.func, ast.Name):
+            return None
+        scope = self._scope(call, parents)
+        for top in ([scope] if scope is not None else []) + [tree]:
+            body = ast.walk(top) if top is scope else iter(tree.body)
+            got = [n for n in body if isinstance(n, ast.FunctionDef) and n.name == callee]
+            if got:
+                return got[0]
+        return None
+
+    def _written(self, f, expr):
+        """A string written in the code: here, or a parameter every call of its def (in its file) gives as one."""
+        if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+            return True
+        tree, parents = self.files[f]
+        scope = self._scope(expr, parents)
+        if not isinstance(expr, ast.Name) or scope is None:
+            return False
+        params = [p.arg for p in scope.args.posonlyargs + scope.args.args]
+        if expr.id not in params or any(isinstance(n, ast.Name) and n.id == expr.id and not isinstance(
+                n.ctx, ast.Load) for n in ast.walk(scope)):
+            return False
+        i = params.index(expr.id)
+        calls = [c for c in nodes(tree) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                 and c.func.id == scope.name]
+        return bool(calls) and all(len(c.args) > i and not any(isinstance(a, ast.Starred) for a in c.args[:i + 1])
+                                   and isinstance(c.args[i], ast.Constant) and isinstance(c.args[i].value, str)
+                                   for c in calls)
+
+
+def scan_all(sources):
+    """(the first hold's scan, the layers on it) of {filename: source}."""
+    s = Scan()
+    for name, text in sorted(sources.items()):
+        s.add(text, name)
+    return s, Mentions(s.run()).run()
+
+
+_REAL = {}
+
+
+def real_sources():
+    """{filename: source} of every .py file of raqib/, read once."""
+    if not _REAL:
+        for path in sorted((ROOT / "raqib").rglob("*.py")):
+            _REAL[path.relative_to(ROOT).as_posix()] = path.read_text(encoding="utf-8")
+    return dict(_REAL)
+
+
+def _counted(out, found, lines, held, what):
+    for key in sorted(set(found) | set(held)):
+        if found.get(key, 0) > held.get(key, 0):
+            out += [(key[0], n, "%s: a mention more than held, %r: %d, held %d" % (what, key, found[key],
+                                                                                held.get(key, 0)))
+                    for n in sorted(set(lines.get(key) or [0]))]
+        elif found.get(key, 0) < held.get(key, 0):
+            out.append((key[0], 0, "%s: a mention fewer than held, %r: %d, held %d" % (what, key, found.get(key, 0),
+                                                                                    held[key])))
+
+
+def _listed(out, found, held, what):
+    got, kept = Counter((f, w, t) for f, w, t, _ in found), Counter(held)
+    for f, w, t, n in found:
+        if got[(f, w, t)] > kept[(f, w, t)]:
+            out.append((f, n, "%s: a statement not held, in %s: %s" % (what, w, t[:200])))
+    for (f, w, t), k in sorted((kept - got).items()):
+        out.append((f, 0, "%s: a held statement not found, in %s: %s" % (what, w, t[:200])))
+
+
+def problems(m):
+    """What the layers found that the held tables do not hold, or held that they did not find: [(file, line, why)],
+    each line where it was found (0: a held thing not found)."""
+    out = list(m.faults)
+    _counted(out, m.words, m.lines, MENTIONS, "E1")
+    _listed(out, m.environ, ENVIRON, "E1 (os.environ)")
+    _listed(out, m.statements, STATEMENTS, "E2")
+    for (f, w), text in sorted(CI3_TEXT.items()):
+        fns = m.whole.get((f, w), [])
+        if len(fns) != 1:
+            out.append((f, fns[1].lineno if len(fns) > 1 else 0, "E3: %s is not found once" % w))
+            continue
+        if whole(fns[0]) != text:
+            kept = {line.strip() for line in text.split("\n")}
+            changed = [s.lineno for s in ast.walk(fns[0]) if isinstance(s, ast.stmt) and s is not fns[0]
+                       and any(line.strip() not in kept for line in ast.unparse(s).split("\n"))]
+            out += [(f, n, "E3: %s is not held word for word" % w) for n in sorted(set(changed) or {fns[0].lineno})]
+    _listed(out, m.handover, CI3_HANDOVER, "E3 (the hand-over)")
+    for attr in sorted(set(m.attrs) - set(CTYPES_ATTRS)):
+        out += [(f, n, "E4: %s: an attribute of ctypes not on the list" % attr) for f, n in m.attrs[attr]]
+    out += [("", 0, "E4: %s: on the list, not found" % a) for a in sorted(set(CTYPES_ATTRS) - set(m.attrs))]
+    _listed(out, m.imports, CTYPES_IMPORTS, "E4 (an import)")
+    _listed(out, m.bound, CTYPES_BOUND, "E4 (ctypes bound or handed on)")
+    for key in sorted(set(m.tables) | set(TABLES)):
+        if m.tables.get(key) != TABLES.get(key):
+            out.append((key[0], 0, "E5: the table %s is not held as written: %s" % (key[1], m.tables.get(key))))
+    for key in sorted(set(m.bodies) | set(LOADER_BODIES)):
+        if m.bodies.get(key) != LOADER_BODIES.get(key):
+            out.append((key[0], 0, "E5: the loader in %s is not held as written: %s" % (key[1], m.bodies.get(key))))
+    if m.names != set(E5_NAMES):
+        out.append(("", 0, "E5: the tables and loaders found are not those held: %s" % sorted(m.names)))
+    _counted(out, m.named, m.named_lines, NAMED, "E5")
+    _counted(out, m.handed, m.handed_lines, HANDED_OBJECTS, "E6 (a library's object handed to)")
+    _listed(out, m.rebound, REBOUND, "E6 (a library's object's name bound again)")
+    _listed(out, m.other, OTHER_USES, "E6 (a library's object used otherwise)")
+    return out
+
+
+def _table(text):
+    """{(file, function, word): count} of a held table's lines, `file function word count` (no key twice)."""
+    out = {}
+    for line in text.strip().splitlines():
+        f, w, word, n = line.split()
+        assert (f, w, word) not in out, line
+        out[(f, w, word)] = int(n)
+    return out
+
+
+def _lit(s, indent):
+    """A string as adjacent literals, each under the line's width (for the held tables' text)."""
+    parts, chunk = [], ""
+    for c in s:
+        if len(repr(chunk + c)) > 112 - indent:
+            parts.append(repr(chunk))
+            chunk = ""
+        chunk += c
+    parts.append(repr(chunk))
+    return ("\n" + " " * indent).join(parts)
+
+
+def dump_held():   # not a test: prints what the layers find in raqib/, to be pasted as the held tables
+    m = scan_all(real_sources())[1]
+
+    def table(name, counts):
+        print("%s = _table(\"\"\"" % name)
+        for k in sorted(counts):
+            print("%s %s %s %d" % (k + (counts[k],)))
+        print("\"\"\")")
+
+    def listed(name, rows):
+        print("%s = (" % name)
+        for f, w, t in sorted(rows):
+            print("    (%r, %r,\n     %s)," % (f, w, _lit(t, 5)))
+        print(")")
+    table("MENTIONS", m.words)
+    listed("ENVIRON", [r[:3] for r in m.environ])
+    listed("STATEMENTS", [r[:3] for r in m.statements])
+    print("CI3_TEXT = {")
+    for k, fns in sorted(m.whole.items()):
+        print("    %r:\n        %s," % (k, _lit(whole(fns[0]), 8)))
+    print("}")
+    listed("CI3_HANDOVER", [r[:3] for r in m.handover])
+    print("CTYPES_ATTRS = (")
+    line = "   "
+    for a in sorted(m.attrs):
+        if len(line) + len(repr(a)) + 2 > 116:
+            print(line)
+            line = "   "
+        line += " %r," % a
+    print(line + "\n)")
+    listed("CTYPES_IMPORTS", [r[:3] for r in m.imports])
+    listed("CTYPES_BOUND", [r[:3] for r in m.bound])
+    print("TABLES = {")
+    for k, t in sorted(m.tables.items()):
+        print("    %r:\n        %s," % (k, _lit(t, 8)))
+    print("}\nLOADER_BODIES = {")
+    for k, t in sorted(m.bodies.items()):
+        print("    %r:\n        %s," % (k, _lit(t, 8)))
+    print("}")
+    table("NAMED", m.named)
+    table("HANDED_OBJECTS", m.handed)
+    listed("REBOUND", [r[:3] for r in m.rebound])
+    listed("OTHER_USES", [r[:3] for r in m.other])
+    print("# faults: %r" % (m.faults,))
+
+
+# --- the held tables (R-3): pasted from what dump_held() prints of raqib/, compared whole and exactly ---
+MENTIONS = _table("""
+raqib/app.py <module> importlib 1
+raqib/app.py Window._wide eval 1
+raqib/app.py _win_api.Api.DwmSetWindowAttribute windll 1
+raqib/app.py _win_api.Api.SetProcessDpiAwareness windll 1
+raqib/app.py probe_tk import_module 1
+raqib/app.py probe_tk importlib 1
+raqib/autostart.py <module> compile 2
+raqib/autostart.py _windows_drive_kind WinDLL 1
+raqib/autostart.py _windows_opener WinDLL 1
+raqib/cli.py <module> eval 5
+raqib/cli.py _parser eval 1
+raqib/cli.py cmd_eval eval 1
+raqib/cli.py main eval 1
+raqib/cli.py main.set_dll_directory_w SetDllDirectoryW 1
+raqib/cli.py main.set_dll_directory_w WinDLL 1
+raqib/discover.py <module> compile 10
+raqib/discover.py _merge_procs exec 1
+raqib/discover.py _programs_of exec 1
+raqib/discover.py parse_procevents exec 1
+raqib/etwnet.py <module> compile 1
+raqib/etwnet.py Api WinDLL 1
+raqib/etwnet.py Api.__init__ WinDLL 1
+raqib/event.py <module> compile 7
+raqib/forward.py <module> compile 8
+raqib/forward.py eventlog_dll WinDLL 1
+raqib/hooks/capture.py <module> globals 1
+raqib/hooks/capture.py _load_common importlib 3
+raqib/hooks/common.py <module> compile 14
+raqib/hooks/common.py _program_name builtins 1
+raqib/hooks/os_sysmon.py <module> compile 7
+raqib/host.py HostWatch._give_kept __dict__ 1
+raqib/host.py HostWatch._host_lines __dict__ 3
+raqib/host.py HostWatch._keep_child __dict__ 2
+raqib/host.py HostWatch.procevents_lines exec 1
+raqib/host.py child_names exec 1
+raqib/hostwin.py <module> compile 1
+raqib/hostwin.py Api WinDLL 1
+raqib/hostwin.py Api.__init__ WinDLL 1
+raqib/hostwin.py probe WinDLL 1
+raqib/install.py <module> compile 2
+raqib/install.py <module> exec 1
+raqib/install.py <module> globals 1
+raqib/link.py <module> compile 2
+raqib/notify.py <module> compile 1
+raqib/notify.py <module> exec 1
+raqib/overlay.py load_measured __import__ 1
+raqib/own.py library_folder SetDllDirectoryW 5
+raqib/procevents.py <module> exec 18
+raqib/procevents.py Reader.__init__ exec 1
+raqib/procevents.py Reader._missed_words exec 1
+raqib/procevents.py Reader._on_exec exec 1
+raqib/procevents.py Reader._read_exec exec 2
+raqib/procevents.py Reader._start exec 1
+raqib/procevents.py Reader._take exec 1
+raqib/procevents.py Reader.counts exec 2
+raqib/procevents.py parse exec 2
+raqib/procevents.py serve exec 1
+raqib/procevents.py stat_name exec 1
+raqib/ruleform.py <module> compile 2
+raqib/ruleform.py <module> exec 2
+raqib/rules/engine.py <module> compile 9
+raqib/rules/engine.py _predicate compile 1
+raqib/rules/engine.py compile_rule compile 1
+raqib/rules/fixturegen.py <module> compile 1
+raqib/rules/trace.py <module> compile 2
+raqib/rules/trace.py strict_problem eval 1
+raqib/rules/yamlite.py <module> compile 4
+raqib/service.py <module> compile 2
+raqib/tray.py _Api windll 1
+raqib/tray.py _Api.__init__ WinDLL 3
+raqib/tray.py _BoxApi.__init__ WinDLL 1
+raqib/ui.py Kernel32.__init__ WinDLL 1
+raqib/wincode.py <module> compile 8
+raqib/wincode.py <module> exec 2
+raqib/wincode.py _plain exec 6
+raqib/wincode.py plain_words exec 4
+raqib/winservice.py System._win WinDLL 2
+""")
+ENVIRON = (
+    ('raqib/app.py', 'Controller.open_page',
+     'environ = os.environ if self.options is None or self.options.environ is None else self.options.environ'),
+    ('raqib/app.py', 'run',
+     'environ = os.environ if options.environ is None else options.environ'),
+    ('raqib/autostart.py', '_sure',
+     'held = os.environ if environ is None else environ'),
+    ('raqib/autostart.py', 'default_folders',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/cli.py', '_gap_seconds',
+     'return silence.gap_seconds_from(os.environ)'),
+    ('raqib/cli.py', '_watch_setup',
+     'gap = silence.gap_seconds_from(os.environ)'),
+    ('raqib/cli.py', 'cmd_eval',
+     'result = evaluation.evaluate(events, _catalog(args.catalog), backends, args.threshold, args.window, silen'
+     'ce.gap_seconds_from(os.environ))'),
+    ('raqib/discover.py', 'collect_live',
+     'system_root, _ = notify.windows_root(os.environ)'),
+    ('raqib/doctor.py', 'checks',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/hooks/os_sysmon.py', 'read_live',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/hooks/os_sysmon.py', 'read_live_bounded',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/host.py', 'start',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/notify.py', 'Notifier.__init__',
+     'self.environ = dict(os.environ if environ is None else environ)'),
+    ('raqib/own.py', 'handed',
+     'out = dict(os.environ if environ is None else environ)'),
+    ('raqib/watch.py', 'open_page',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/watch.py', 'start',
+     'environ = os.environ if environ is None else environ'),
+    ('raqib/winservice.py', 'System.getenv',
+     'return os.environ.get(name)'),
+    ('raqib/winservice.py', 'System.setenv',
+     'os.environ[name] = value'),
+)
+STATEMENTS = (
+    ('raqib/app.py', '_win_api.Api.DwmSetWindowAttribute',
+     'fn = ctypes.windll.dwmapi.DwmSetWindowAttribute'),
+    ('raqib/app.py', '_win_api.Api.SetProcessDpiAwareness',
+     'fn = ctypes.windll.shcore.SetProcessDpiAwareness'),
+    ('raqib/autostart.py', '_windows_drive_kind',
+     "k = ctypes.WinDLL('kernel32')"),
+    ('raqib/autostart.py', '_windows_opener',
+     "k = ctypes.WinDLL('kernel32', use_last_error=True)"),
+    ('raqib/cli.py', 'main.set_dll_directory_w',
+     "fn = ctypes.WinDLL('kernel32', use_last_error=True).SetDllDirectoryW"),
+    ('raqib/etwnet.py', 'Api.__init__',
+     'loader = loader or (lambda name: ctypes.WinDLL(name, use_last_error=True))'),
+    ('raqib/forward.py', 'eventlog_dll',
+     'return ctypes.WinDLL(name, use_last_error=True)'),
+    ('raqib/hostwin.py', 'Api.__init__',
+     'loader = loader or (lambda name: ctypes.WinDLL(name, use_last_error=True))'),
+    ('raqib/hostwin.py', 'probe',
+     'loader = loader or (lambda name: ctypes.WinDLL(name, use_last_error=True))'),
+    ('raqib/tray.py', '_Api.__init__',
+     "kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)"),
+    ('raqib/tray.py', '_Api.__init__',
+     "shell32 = ctypes.WinDLL('shell32', use_last_error=True)"),
+    ('raqib/tray.py', '_Api.__init__',
+     "user32 = ctypes.WinDLL('user32', use_last_error=True)"),
+    ('raqib/tray.py', '_BoxApi.__init__',
+     "user32 = ctypes.WinDLL('user32', use_last_error=True)"),
+    ('raqib/ui.py', 'Kernel32.__init__',
+     "k = ctypes.WinDLL('kernel32', use_last_error=True)"),
+    ('raqib/winservice.py', 'System._win',
+     "adv = ctypes.WinDLL('advapi32', use_last_error=True)"),
+    ('raqib/winservice.py', 'System._win',
+     "k32 = ctypes.WinDLL('kernel32', use_last_error=True)"),
+)
+CI3_TEXT = {
+    ('raqib/cli.py', 'main.set_dll_directory_w'):
+        'def set_dll_directory_w(folder):\n    import ctypes\n    from ctypes import wintypes\n    fn = ctypes.'
+        "WinDLL('kernel32', use_last_error=True).SetDllDirectoryW\n    fn.argtypes, fn.restype = ([wintypes.LPC"
+        'WSTR], wintypes.BOOL)\n    if fn(folder):\n        return 1\n    raise ctypes.WinError(ctypes.get_last'
+        '_error())',
+    ('raqib/own.py', 'library_folder'):
+        'def library_folder(call, frozen=None, platform=None):\n    global LIBRARY_FOLDER\n    made = False\n  '
+        '  try:\n        if LIBRARY_FOLDER is not None or not _frozen(frozen) or (not _windows(platform)):\n   '
+        '         return None\n        made = True\n        try:\n            got = call(None)\n        except '
+        "Exception as exc:\n            result = 'SetDllDirectoryW(NULL) failed: %s' % _said(exc)\n        else"
+        ":\n            result = True if got else 'SetDllDirectoryW(NULL) returned %s' % _words(repr(got))\n   "
+        " except Exception as exc:\n        if made:\n            result = 'SetDllDirectoryW(NULL) was called, "
+        "its result could not be read: %s' % _said(exc)\n        else:\n            result = 'SetDllDirectoryW("
+        "NULL) was not called: %s' % _said(exc)\n    LIBRARY_FOLDER = result\n    return result",
+}
+CI3_HANDOVER = (
+    ('raqib/cli.py', 'main',
+     "if isinstance(own.library_folder(set_dll_directory_w), str):\n    try:\n        sys.stderr.write('raqib: "
+     "%s\\n' % own.library_folder_hole())\n        sys.stderr.flush()\n    except Exception:\n        pass"),
+)
+CTYPES_ATTRS = (
+    'ctypes.ArgumentError', 'ctypes.POINTER', 'ctypes.Structure', 'ctypes.Union', 'ctypes.WINFUNCTYPE',
+    'ctypes.WinDLL', 'ctypes.WinError', 'ctypes.addressof', 'ctypes.byref', 'ctypes.c_char_p', 'ctypes.c_int',
+    'ctypes.c_int32', 'ctypes.c_int64', 'ctypes.c_long', 'ctypes.c_size_t', 'ctypes.c_ssize_t', 'ctypes.c_uint',
+    'ctypes.c_uint16', 'ctypes.c_uint32', 'ctypes.c_uint64', 'ctypes.c_uint8', 'ctypes.c_ulong', 'ctypes.c_ushort',
+    'ctypes.c_void_p', 'ctypes.c_wchar_p', 'ctypes.cast', 'ctypes.create_string_buffer',
+    'ctypes.create_unicode_buffer', 'ctypes.get_last_error', 'ctypes.sizeof', 'ctypes.string_at', 'ctypes.windll',
+    'ctypes.wintypes', 'ctypes.wintypes.ATOM', 'ctypes.wintypes.BOOL', 'ctypes.wintypes.BYTE',
+    'ctypes.wintypes.DWORD', 'ctypes.wintypes.HANDLE', 'ctypes.wintypes.HBRUSH', 'ctypes.wintypes.HICON',
+    'ctypes.wintypes.HINSTANCE', 'ctypes.wintypes.HMENU', 'ctypes.wintypes.HMODULE', 'ctypes.wintypes.HWND',
+    'ctypes.wintypes.LPARAM', 'ctypes.wintypes.LPCWSTR', 'ctypes.wintypes.LPVOID', 'ctypes.wintypes.LPWSTR',
+    'ctypes.wintypes.MSG', 'ctypes.wintypes.POINT', 'ctypes.wintypes.UINT', 'ctypes.wintypes.ULONG',
+    'ctypes.wintypes.WCHAR', 'ctypes.wintypes.WORD', 'ctypes.wintypes.WPARAM',
+)
+CTYPES_IMPORTS = (
+    ('raqib/app.py', '_win_api',
+     'import ctypes'),
+    ('raqib/autostart.py', '_windows_drive_kind',
+     'from ctypes import wintypes'),
+    ('raqib/autostart.py', '_windows_drive_kind',
+     'import ctypes'),
+    ('raqib/autostart.py', '_windows_opener',
+     'from ctypes import wintypes'),
+    ('raqib/autostart.py', '_windows_opener',
+     'import ctypes'),
+    ('raqib/cli.py', 'main.set_dll_directory_w',
+     'from ctypes import wintypes'),
+    ('raqib/cli.py', 'main.set_dll_directory_w',
+     'import ctypes'),
+    ('raqib/etwnet.py', '<module>',
+     'import ctypes'),
+    ('raqib/forward.py', '<module>',
+     'import ctypes'),
+    ('raqib/hostwin.py', '<module>',
+     'import ctypes'),
+    ('raqib/tray.py', '_Api.__init__',
+     'from ctypes import wintypes as w'),
+    ('raqib/tray.py', '_Api.__init__',
+     'import ctypes'),
+    ('raqib/tray.py', '_BoxApi.__init__',
+     'from ctypes import wintypes as w'),
+    ('raqib/tray.py', '_BoxApi.__init__',
+     'import ctypes'),
+    ('raqib/ui.py', 'Kernel32.__init__',
+     'from ctypes import wintypes'),
+    ('raqib/ui.py', 'Kernel32.__init__',
+     'import ctypes'),
+    ('raqib/winservice.py', 'System._win',
+     'from ctypes import wintypes'),
+    ('raqib/winservice.py', 'System._win',
+     'import ctypes'),
+)
+CTYPES_BOUND = (
+    ('raqib/forward.py', 'EventLogApi.__init__',
+     "self.last_error = last_error or getattr(ctypes, 'get_last_error', None)"),
+    ('raqib/tray.py', '_Api.__init__',
+     'self.ctypes, self.w = (ctypes, w)'),
+    ('raqib/ui.py', 'Kernel32.__init__',
+     'self.ctypes, self.wintypes = (ctypes, wintypes)'),
+    ('raqib/winservice.py', 'System._win',
+     'self._api = types.SimpleNamespace(ctypes=ctypes, w=wintypes, adv=adv, k32=k32, status=SERVICE_STATUS, att'
+     'ributes=SECURITY_ATTRIBUTES, entry=SERVICE_TABLE_ENTRY, handler=handler_ex, main=service_main)'),
+    ('raqib/winservice.py', 'System.make_closed',
+     'ctypes, w = (api.ctypes, api.w)'),
+    ('raqib/winservice.py', 'System.read_drive',
+     'ctypes, k32 = (api.ctypes, api.k32)'),
+    ('raqib/winservice.py', 'System.read_place',
+     'ctypes, w, k32 = (api.ctypes, api.w, api.k32)'),
+)
+TABLES = {
+    ('raqib/hostwin.py', 'SYMBOLS'):
+        "{'kernel32': ('CreateToolhelp32Snapshot', 'Process32FirstW', 'Process32NextW', 'OpenProcess', 'QueryFu"
+        "llProcessImageNameW', 'GetProcessTimes', 'CloseHandle'), 'iphlpapi': ('GetExtendedTcpTable',), 'dnsapi"
+        "': ('DnsGetCacheDataTable', 'DnsFree', 'DnsQuery_W', 'DnsRecordListFree')}",
+    ('raqib/winservice.py', 'HOME_NAMES'):
+        "('HOME', 'USERPROFILE')",
+}
+LOADER_BODIES = {
+    ('raqib/etwnet.py', 'Api.__init__'):
+        'lambda name: ctypes.WinDLL(name, use_last_error=True)',
+    ('raqib/forward.py', 'eventlog_dll'):
+        'def eventlog_dll(name):\n    return ctypes.WinDLL(name, use_last_error=True)',
+    ('raqib/hostwin.py', 'Api.__init__'):
+        'lambda name: ctypes.WinDLL(name, use_last_error=True)',
+    ('raqib/hostwin.py', 'probe'):
+        'lambda name: ctypes.WinDLL(name, use_last_error=True)',
+}
+E5_NAMES = (("raqib/etwnet.py", "loader"), ("raqib/forward.py", "eventlog_dll"), ("raqib/hostwin.py", "SYMBOLS"),
+            ("raqib/hostwin.py", "loader"), ("raqib/winservice.py", "HOME_NAMES"))   # (file, name): E5's names
+NAMED = _table("""
+raqib/etwnet.py Api.__init__ loader 4
+raqib/forward.py <module> eventlog_dll 1
+raqib/forward.py EventLogApi.__init__ eventlog_dll 1
+raqib/forward.py Forwarder.__init__ loader 1
+raqib/forward.py Forwarder.eventlog_api loader 1
+raqib/hooks/capture.py _load_common loader 1
+raqib/hostwin.py <module> SYMBOLS 1
+raqib/hostwin.py Api.__init__ loader 6
+raqib/hostwin.py probe SYMBOLS 1
+raqib/hostwin.py probe loader 4
+raqib/winservice.py <module> HOME_NAMES 1
+raqib/winservice.py Runner._serve HOME_NAMES 1
+""")
+HANDED_OBJECTS = _table("""
+raqib/autostart.py _windows_opener share_opener 1
+raqib/etwnet.py Api.__init__ fn 7
+raqib/hostwin.py Api.__init__ fn 12
+raqib/hostwin.py probe hasattr 1
+raqib/tray.py _Api.__init__ fn 23
+raqib/ui.py Kernel32.__init__ self.k= 1
+raqib/winservice.py System._win types.SimpleNamespace(adv=) 1
+raqib/winservice.py System._win types.SimpleNamespace(k32=) 1
+""")
+REBOUND = (
+    ('raqib/autostart.py', '_windows_drive_kind',
+     'k = kernel32'),
+)
+OTHER_USES = (
+    ('raqib/autostart.py', '_windows_drive_kind',
+     'if k is None:\n    try:\n        import ctypes\n        from ctypes import wintypes\n        k = ctypes.W'
+     "inDLL('kernel32')\n        k.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]\n        k.GetDriveTypeW.restype"
+     ' = wintypes.UINT\n    except Exception:\n        return None'),
+)
 
 
 def plain_name(name):
@@ -703,3 +1543,118 @@ def test_p2_each_name_of_the_list_is_a_file_in_system32():
     for name in LIBRARIES:
         file = name if name.lower().endswith(".dll") else name + ".dll"
         assert (system32 / file).is_file(), name
+
+
+def edited(filename, anchor, lines, replace=False):
+    """({filename: source} of raqib/ with `lines` put after the one line that holds `anchor` - or in its place - at
+    its indentation (one deeper after a line that opens a block; at the end, at none, where anchor is None), the
+    number of the first line put)."""
+    sources = real_sources()
+    text = sources[filename].split("\n")
+    if anchor is None:
+        at, indent = len(text), ""
+    else:
+        found = [i for i, line in enumerate(text) if anchor in line]
+        assert len(found) == 1, (filename, anchor, found)
+        at = found[0]
+        indent = text[at][:len(text[at]) - len(text[at].lstrip())]
+        indent += "    " if not replace and text[at].rstrip().endswith(":") else ""
+        at += 0 if replace else 1
+    text[at:at + (1 if replace else 0)] = [indent + line for line in lines]
+    sources[filename] = "\n".join(text)
+    return sources, at + 1
+
+
+def test_r3_every_mention_in_raqib_is_held_exactly():
+    s, m = scan_all(real_sources())
+    assert not s.faults and problems(m) == [], problems(m)
+    assert set(MENTIONS) == set(m.words) and sum(MENTIONS.values()) == sum(m.words.values())   # E1: whole, exact
+    assert {w for _, _, w in MENTIONS} <= set(WORDS) | {SYS_MODULES} and len(set(WORDS)) == len(WORDS)
+    assert {(f, w) for f, w, _ in STATEMENTS} == {(f, w) for f, w, form in RAQIB_LOADS if form != "loader"} | \
+        RAQIB_LOADERS   # E2: a statement held at each load of ctypes', and at each of Raqib's own loaders
+    assert m.names == set(E5_NAMES) == {(f, n) for f, n in TABLES} | {
+        (f, n) for f, _, n in NAMED if (f, n) in m.names}   # E5: each table's and loader's name, as found
+    assert set(LOADER_BODIES) == RAQIB_LOADERS and {f for f, _ in TABLES} == {"raqib/hostwin.py",
+                                                                              "raqib/winservice.py"}
+    assert set(CI3_TEXT) == set(CI3_FUNCTIONS) and len(CI3_HANDOVER) == 1   # E3
+
+
+W32 = "raqib/winservice.py"    # System._win: where kernel32 is bound as k32
+K32 = 'k32 = ctypes.WinDLL("kernel32", use_last_error=True)'
+CLI_ARGS = "fn.argtypes, fn.restype = [wintypes.LPCWSTR], wintypes.BOOL"   # CI-3's function, before its call
+PROBE = "    out = {}"         # hostwin.probe, after its loader is bound
+DPI = "fn = ctypes.windll.shcore.SetProcessDpiAwareness"                    # app.py, a windll load
+ESCAPES = [   # (the review's finding, the file it would live in, the line it goes after (or in place of), its lines)
+    ("redo-1 a folder bound again in CI-3's function", "raqib/cli.py", CLI_ARGS, ['folder = folder or "C:\\\\x"']),
+    ("redo-2 a loader lambda handed on in its own binding line", "raqib/etwnet.py",
+     "loader = loader or (lambda name: ctypes.WinDLL(name, use_last_error=True))",
+     ["loader = loader or wrap(lambda name: ctypes.WinDLL(name, use_last_error=True))"], True),
+    ("redo-3 a table of names changed from another module", "raqib/doctor.py", None, ['hostwin.SYMBOLS["x"] = ()']),
+    ("redo-3 a table of names imported and updated", "raqib/doctor.py", None,
+     ["from raqib.hostwin import SYMBOLS", "SYMBOLS.update(x=())"]),
+    ("redo-4a the interpreter's own low call", "raqib/hostwin.py", PROBE, ["nt._add_dll_directory(path)"]),
+    ("redo-4b ctypes by __import__", "raqib/hostwin.py", PROBE, ['__import__("ctypes").WinDLL(path)']),
+    ("redo-4b _ctypes by __import__", "raqib/hostwin.py", PROBE, ['__import__("_ctypes").LoadLibrary(path)']),
+    ("redo-4b _ctypes by sys.modules", "raqib/hostwin.py", PROBE, ['low = sys.modules["_ctypes"]']),
+    ("redo-4c a loader's LoadLibrary bound to a name", "raqib/app.py", DPI,
+     ["f = ctypes.windll.LoadLibrary", "f(path)"]),
+    ("redo-4c a loader's LoadLibrary handed to map", "raqib/app.py", DPI, ["map(ctypes.windll.LoadLibrary, names)"]),
+    ("redo-4c a class's __base__", W32, K32, ["ctypes.WinDLL.__base__(path)"]),
+    ("redo-4c a class's __init__", W32, K32, ["ctypes.CDLL.__init__(obj, path)"]),
+    ("redo-4c an instance's __class__", W32, K32, ["k32.__class__(path)"]),
+    ("redo-4c type() of an instance", W32, K32, ["type(k32)(path)"]),
+    ("redo-4c an instance's __init__", W32, K32, ["k32.__init__(path)"]),
+    ("redo-4d a function asked by ordinal", W32, K32, ["first = k32[1]"]),
+    ("redo-4e the whole environment set by the system's call", W32, K32, ["k32.SetEnvironmentStringsW(block)"]),
+    ("redo-4f a docstring read as a value", W32, K32, ["getattr(k32, f.__doc__)"]),
+    ("redo-15 CI-3's call in a loop", "raqib/cli.py", CLI_ARGS, ["for _ in range(2): fn(folder)"]),
+    ("first-9 a loader asked by index", "raqib/app.py", DPI, ['k = ctypes.windll["kernel32"]']),
+    ("first-9 ctypes' low loader", "raqib/hostwin.py", PROBE, ["ctypes._dlopen(path, 0)"]),
+    ("first-9 winmode by position", "raqib/tray.py", 'kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)',
+     ['kernel32 = ctypes.WinDLL("kernel32", 0, None, False, True, 0)'], True),
+    ("first-9 winmode by **", "raqib/ui.py", 'k = ctypes.WinDLL("kernel32", use_last_error=True)',
+     ['k = ctypes.WinDLL("kernel32", **kw)'], True),
+    ("first-9 a search call's name as a string in getattr", W32, K32, ['getattr(k32, "LoadLibraryW")(path)']),
+    ("first-9 getattr of os's add_dll_directory", "raqib/hostwin.py", PROBE, ['getattr(os, "add_dll_directory")']),
+    ("first-9 os.environ |=", "raqib/own.py", "    out = dict(os.environ if environ is None else environ)",
+     ['os.environ |= {"X": "y"}']),
+    ("first-9 a table changed after its assignment", "raqib/hostwin.py", None, ['SYMBOLS["x"] = ()']),
+    ("first-9 a loader handed on as a value", "raqib/hostwin.py", PROBE, ["register(loader)"]),
+    ("first-9 ctypes.LibraryLoader", "raqib/hostwin.py", PROBE, ["k = ctypes.LibraryLoader(ctypes.WinDLL).k"]),
+    ("first-9 a module of ctypes on an attribute", W32, "        ctypes, k32 = api.ctypes, api.k32",
+     ["api.ctypes.WinDLL(path)"]),
+]
+ESCAPES = [e if len(e) == 5 else e + (False,) for e in ESCAPES]
+
+
+@pytest.mark.parametrize("finding, filename, anchor, lines, replace", ESCAPES, ids=[e[0] for e in ESCAPES])
+def test_r3_each_escape_the_reviews_found_fails_for_its_line(finding, filename, anchor, lines, replace):
+    sources, at = edited(filename, anchor, lines, replace)
+    s, m = scan_all(sources)
+    found = problems(m)
+    assert [p for p in found if p[0] == filename and p[1] == at], (finding, at, found, s.faults)
+
+
+NOT_VACUOUS = [   # (the file, the line it goes after (or in place of), its lines, in place, the reason it fails)
+    ("raqib/hostwin.py", PROBE, ['why = "exec"'], False, "E1: a mention more than held"),
+    ("raqib/overlay.py", 'data = __import__("json").load(f)', ["data = json.load(f)"], True,
+     "E1: a mention fewer than held"),
+    ("raqib/tray.py", 'user32 = ctypes.WinDLL("user32", use_last_error=True)\n        shell32',
+     None, True, "E2: a statement not held"),
+    (W32, K32, ["ctypes.memmove(a, b, 1)"], False, "E4: ctypes.memmove: an attribute of ctypes not on the list"),
+]
+
+
+@pytest.mark.parametrize("filename, anchor, lines, replace, why", NOT_VACUOUS)
+def test_r3_the_held_tables_are_not_vacuous(filename, anchor, lines, replace, why):
+    if lines is None:   # one token changed: True to False in the second user32 load of tray.py
+        sources = real_sources()
+        text = sources[filename]
+        assert text.count(anchor) == 1
+        at = text[:text.index(anchor)].count("\n") + 1
+        sources[filename] = text.replace(anchor, anchor.replace("True", "False", 1))
+    else:
+        sources, at = edited(filename, anchor, lines, replace)
+    found = problems(scan_all(sources)[1])
+    assert [p for p in found if why in p[2] and p[1] in (at, 0)], found
+    assert all(p[1] in (at, 0) for p in found), found   # for that reason, at that line, and nothing else
