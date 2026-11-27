@@ -264,7 +264,155 @@ def read_handle(path):
     return "%s; %s" % (kind, out)
 
 
+OWNED = "O:BAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"   # the closed list, and the administrators named as the owner
+
+
+def make_owned(path):
+    """Make the folder closed AND with its owner named in the one call that makes it."""
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    sd, size = wintypes.LPVOID(), wintypes.ULONG()
+    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.ULONG)]
+    if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(OWNED, 1, ctypes.byref(sd), ctypes.byref(size)):
+        return "the text was not taken: error %d" % ctypes.get_last_error()
+    sa = SECURITY_ATTRIBUTES(ctypes.sizeof(SECURITY_ATTRIBUTES), sd, False)
+    k32.CreateDirectoryW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(SECURITY_ATTRIBUTES)]
+    ok = k32.CreateDirectoryW(path, ctypes.byref(sa))
+    return "made" if ok else "not made: error %d" % ctypes.get_last_error()
+
+
+# --- the service made, read, started, stopped and removed by the system's own calls (no outside program) ----------
+class SERVICE_DESCRIPTION(ctypes.Structure):
+    _fields_ = [("lpDescription", wintypes.LPWSTR)]
+
+
+class SC_ACTION(ctypes.Structure):
+    _fields_ = [("Type", ctypes.c_int), ("Delay", wintypes.DWORD)]
+
+
+class SERVICE_FAILURE_ACTIONS(ctypes.Structure):
+    _fields_ = [("dwResetPeriod", wintypes.DWORD), ("lpRebootMsg", wintypes.LPWSTR), ("lpCommand", wintypes.LPWSTR),
+                ("cActions", wintypes.DWORD), ("lpsaActions", ctypes.POINTER(SC_ACTION))]
+
+
+class QUERY_SERVICE_CONFIG(ctypes.Structure):
+    _fields_ = [("dwServiceType", wintypes.DWORD), ("dwStartType", wintypes.DWORD),
+                ("dwErrorControl", wintypes.DWORD), ("lpBinaryPathName", wintypes.LPWSTR),
+                ("lpLoadOrderGroup", wintypes.LPWSTR), ("dwTagId", wintypes.DWORD),
+                ("lpDependencies", wintypes.LPWSTR), ("lpServiceStartName", wintypes.LPWSTR),
+                ("lpDisplayName", wintypes.LPWSTR)]
+
+
+class SERVICE_STATUS_PROCESS(ctypes.Structure):
+    _fields_ = [("dwServiceType", wintypes.DWORD), ("dwCurrentState", wintypes.DWORD),
+                ("dwControlsAccepted", wintypes.DWORD), ("dwWin32ExitCode", wintypes.DWORD),
+                ("dwServiceSpecificExitCode", wintypes.DWORD), ("dwCheckPoint", wintypes.DWORD),
+                ("dwWaitHint", wintypes.DWORD), ("dwProcessId", wintypes.DWORD), ("dwServiceFlags", wintypes.DWORD)]
+
+
+def _scm():
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    adv.OpenSCManagerW.restype = wintypes.HANDLE
+    adv.OpenSCManagerW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+    adv.OpenServiceW.restype = wintypes.HANDLE
+    adv.OpenServiceW.argtypes = [wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD]
+    adv.CreateServiceW.restype = wintypes.HANDLE
+    adv.CreateServiceW.argtypes = [wintypes.HANDLE, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+                                   wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPCWSTR,
+                                   wintypes.LPCWSTR, wintypes.LPVOID, wintypes.LPCWSTR, wintypes.LPCWSTR,
+                                   wintypes.LPCWSTR]
+    adv.ChangeServiceConfig2W.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID]
+    adv.QueryServiceConfigW.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+                                        ctypes.POINTER(wintypes.DWORD)]
+    adv.QueryServiceStatusEx.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD,
+                                         ctypes.POINTER(wintypes.DWORD)]
+    adv.StartServiceW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID]
+    adv.ControlService.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(SERVICE_STATUS)]
+    adv.DeleteService.argtypes = [wintypes.HANDLE]
+    adv.CloseServiceHandle.argtypes = [wintypes.HANDLE]
+    return adv
+
+
+def svc(what, name, binpath=None):
+    """install | query | start | stop | remove, by the system's own calls; says what each answered."""
+    adv = _scm()
+    err = ctypes.get_last_error
+    manager = adv.OpenSCManagerW(None, None, 0x1 | 0x2)   # CONNECT | CREATE_SERVICE
+    if not manager:
+        print("the service manager was not opened: error %d" % err())
+        return 1
+    try:
+        if what == "install":
+            h = adv.CreateServiceW(manager, name, "Raqib: the watch of this host (probe)", 0xF01FF, 0x10, 2, 1,
+                                   binpath, None, None, None, None, None)   # own process, auto start, the system
+            if not h:
+                print("not made: error %d" % err())
+                return 1
+            print("made")
+            d = SERVICE_DESCRIPTION("Raqib's watch of this host, as a service of the system's (a probe).")
+            print("description: %s" % ("set" if adv.ChangeServiceConfig2W(h, 1, ctypes.byref(d)) else "error %d" % err()))
+            actions = (SC_ACTION * 3)(SC_ACTION(1, 5000), SC_ACTION(1, 5000), SC_ACTION(1, 5000))
+            f = SERVICE_FAILURE_ACTIONS(86400, None, None, 3, actions)
+            print("started again after an end that was no Stop: %s"
+                  % ("set" if adv.ChangeServiceConfig2W(h, 2, ctypes.byref(f)) else "error %d" % err()))
+            delayed = wintypes.BOOL(True)
+            print("its start at boot delayed: %s"
+                  % ("set" if adv.ChangeServiceConfig2W(h, 3, ctypes.byref(delayed)) else "error %d" % err()))
+            adv.CloseServiceHandle(h)
+            return 0
+        h = adv.OpenServiceW(manager, name, 0xF01FF)
+        if not h:
+            print("the service was not opened: error %d" % err())
+            return 1
+        try:
+            if what == "query":
+                need = wintypes.DWORD()
+                adv.QueryServiceConfigW(h, None, 0, ctypes.byref(need))
+                buf = ctypes.create_string_buffer(need.value)
+                if adv.QueryServiceConfigW(h, buf, need.value, ctypes.byref(need)):
+                    c = ctypes.cast(buf, ctypes.POINTER(QUERY_SERVICE_CONFIG)).contents
+                    print("as the system holds it: type 0x%x, start %d, runs as %s, its command: %s"
+                          % (c.dwServiceType, c.dwStartType, c.lpServiceStartName, c.lpBinaryPathName))
+                else:
+                    print("its making was not read: error %d" % err())
+                st, need = SERVICE_STATUS_PROCESS(), wintypes.DWORD()
+                if adv.QueryServiceStatusEx(h, 0, ctypes.byref(st), ctypes.sizeof(st), ctypes.byref(need)):
+                    print("its state: %d, pid %d, exit %d, its own exit %d"
+                          % (st.dwCurrentState, st.dwProcessId, st.dwWin32ExitCode, st.dwServiceSpecificExitCode))
+                else:
+                    print("its state was not read: error %d" % err())
+            elif what == "start":
+                print("start: %s" % ("asked" if adv.StartServiceW(h, 0, None) else "error %d" % err()))
+            elif what == "stop":
+                st = SERVICE_STATUS()
+                print("stop: %s" % ("asked, state %d" % st.dwCurrentState if adv.ControlService(h, 1, ctypes.byref(st))
+                                    else "error %d" % err()))
+            elif what == "remove":
+                print("remove: %s" % ("done" if adv.DeleteService(h) else "error %d" % err()))
+        finally:
+            adv.CloseServiceHandle(h)
+        return 0
+    finally:
+        adv.CloseServiceHandle(manager)
+
+
+def survey(paths):
+    """Each path's kind, owner and list, read through one handle on its name."""
+    for path in paths:
+        print("%s\n    %s" % (path, read_handle(path)))
+    return 0
+
+
 def main(argv):
+    if len(argv) == 3 and argv[1] == "--make-owned":
+        print("made closed with its owner named: %s" % make_owned(argv[2]))
+        print("by its handle: %s" % read_handle(argv[2]))
+        return 0
+    if len(argv) >= 4 and argv[1] == "--svc":
+        return svc(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
+    if len(argv) >= 3 and argv[1] == "--survey":
+        return survey(argv[2:])
     if len(argv) == 3 and argv[1] == "--make":
         print("made closed in one call: %s" % make_closed(argv[2]))
         print("by its handle: %s" % read_handle(argv[2]))

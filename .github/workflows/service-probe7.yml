@@ -1,0 +1,46 @@
+name: service-probe7
+# Probe only (never merged): measured before ADR-0013's ruling on the install - the service by the system's own
+# calls; a folder made with its owner named, from two shells; who owns and may write the Python a service would run.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_probe7.ps1, .github/workflows/service-probe7.yml]
+permissions:
+  contents: read
+jobs:
+  service:
+    name: the install's calls (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib
+        shell: pwsh
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -m pip install --disable-pip-version-check -q .
+          raqib --version
+      - name: a folder made with its owner named, from PowerShell
+        shell: pwsh
+        run: |
+          python tools\rig\svc_probe.py --make "C:\ProgramData\RaqibProbe7p-default"
+          python tools\rig\svc_probe.py --make-owned "C:\ProgramData\RaqibProbe7p-named"
+      - name: the same from Git's bash
+        shell: bash
+        run: |
+          python tools/rig/svc_probe.py --make 'C:\ProgramData\RaqibProbe7b-default' | sed -E 's/S-1-5-21-[0-9-]+/S-1-5-21-<a user>/g'
+          python tools/rig/svc_probe.py --make-owned 'C:\ProgramData\RaqibProbe7b-named' | sed -E 's/S-1-5-21-[0-9-]+/S-1-5-21-<a user>/g'
+      - name: the service by the system's own calls; who owns the Python
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_probe7.ps1"
