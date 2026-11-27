@@ -928,6 +928,16 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert all("%s: " % key in installs for key in check.INSTALL_KEYS)
     assert "tools\\rig\\service_install.ps1 -Out $env:RUNNER_TEMP\\service-install" in windows
     assert "--service-install $env:RUNNER_TEMP\\service-install\\service-install.txt" in windows
+    # ZB (X55): one service from a copy made large, started by the system's own call and by net start; it ends no
+    # process, and what it keeps is every key the reader asks for
+    points = (ROOT / "tools" / "rig" / "service_point.ps1").read_text(encoding="utf-8")
+    assert points.isascii() and "pip install" not in points and "taskkill" not in points
+    assert "Stop-Process" not in points and "-I -m raqib service run" in points
+    assert "sc.exe start $name" in points and "net start $name" in points and "sc.exe queryex $name" in points
+    assert 'Join-Path $env:ProgramFiles "RaqibRigPoint"' in points and "sc.exe delete $name" in points
+    assert all("%s: " % key in points for key in check.POINT_KEYS)
+    assert "tools\\rig\\service_point.ps1 -Out $env:RUNNER_TEMP\\service-point" in windows
+    assert "--service-point $env:RUNNER_TEMP\\service-point\\service-point.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1731,4 +1741,82 @@ def test_x54_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
     assert row(["--service-install", str(tmp_path / "install.txt")]) == check.MET
     assert row(["--service-install", str(tmp_path / "bom.txt")]) == check.MET
     assert row(["--service-install", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP
+
+
+# --- X55 (ADR-0013 ZB, M12.4c2b3): the service raises its check-point while its check walks -------------------------
+def pointfile(**kw):
+    _, taken = service_lines()
+    taken = taken.replace("in 0.31 s: ", "in 9.42 s: ")
+    keys = {"names-added": "100000", "point-highest": "4", "point-wait": "60000", "point-state": "Running",
+            "point-text": taken, "net-exit": "0", "net-seconds": "10.1", "net-state": "Running", "net-text": taken}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x55(text):
+    ((ident, state, words),) = check.read_service_point(text)
+    assert ident.startswith("X55 ") and ident == check.SERVICE_POINT_NAME
+    return state, words
+
+
+def test_x55_met_where_a_check_point_above_0_was_read_and_net_start_ended_with_0():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import winservice
+    assert check.POINT_WAIT == winservice.CHECK_WAIT_HINT == 60000   # the wait told with every raising (ZB-1)
+    assert check.POINT_SECONDS.search("raqib service run: " + winservice.CHECK_HEAD % 9.42 + ": x").group(1) == "9.42"
+    state, words = x55(pointfile())
+    assert state == check.MET, words
+    assert words.startswith("while it started the system said a check-point up to 4 with a wait of 60000 ms (the"
+                            " check lasted 9.42 s over 100000 names added); net start ended with 0 after 10.1 s, the"
+                            " service running: raqib service run: its own code, checked at this start")
+    assert x55(pointfile(**{"point-highest": "1"}))[0] == check.MET
+    assert x55(pointfile().replace("\n", "\r\n"))[0] == check.MET and x55("\ufeff" + pointfile())[0] == check.MET
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"point-highest": "0"}, "no check-point above 0 was read while it started (read: 0; the check's line says it"
+                             " lasted 9.42 s - a check shorter than the time between two raisings raises none)"),
+    ({"point-highest": ""}, "no check-point above 0 was read while it started (read: nothing;"),
+    ({"point-highest": "many"}, "no check-point above 0 was read while it started (read: many;"),
+    ({"point-wait": "5000"}, "the wait the system said with the raised check-point is 5000, not 60000 ms"),
+    ({"point-wait": ""}, "the wait the system said with the raised check-point is not said, not 60000 ms"),
+    ({"point-state": "Stopped"}, "started by the system's own call: its state is Stopped, not Running"),
+    ({"net-state": "Start Pending"}, "started by net start: its state is Start Pending, not Running"),
+    ({"net-state": ""}, "started by net start: its state is not said, not Running"),
+    ({"net-exit": "2"}, "net start ended with 2, not 0"),
+    ({"net-exit": ""}, "net start ended with nothing said, not 0"),
+    ({"point-text": "raqib service check: the code a service would run is the system's alone"},
+     "started by the system's own call: its text file's line is not the runner's own"),
+    ({"net-text": ""}, "started by net start: its text file's line is not the runner's own"),
+    ({"net-text": "raqib service run: its own code, checked at this start by this process (ADR-0013 T-1), in 9.00 s:"
+                  " raqib service check: NOT the system's alone: C:\\x, y"},
+     "started by net start: its text file's line holds no pass's sentence with its counts"),
+] + [({key: None}, "no %s" % key) for key in check.POINT_KEYS])
+def test_x55_missed_for_each_thing_not_found(kw, said):
+    state, words = x55(pointfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x55_missed_where_the_file_is_empty_and_n_a_where_none_was_given():
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x55(text) == (check.MISSED, "missing: the service's file is empty or was not written (silence is a"
+                                           " finding)")
+    assert x55(None) == (check.SKIP, "no service started over a long check was given (--service-point)")
+    assert x55(object())[0] == check.MISSED   # never raises
+
+
+def test_x55_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "point.txt").write_text(pointfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X55 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-point", str(tmp_path / "point.txt")]) == check.MET
+    assert row(["--service-point", str(tmp_path / "none.txt")]) == check.MISSED
     assert row([]) == check.SKIP
