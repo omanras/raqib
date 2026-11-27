@@ -2189,7 +2189,7 @@ collector that is slow, down or refusing never delays or loses a capture
   system's; a place on another volume, or one with a file held open by
   another process; Windows before the runners' versions.
 - **What the check of the code does not read (`raqib service check`;
-  ADR-0013 Amendments K and M).** On Windows `raqib service check` says
+  ADR-0013 Amendments K to O).** On Windows `raqib service check` says
   whether the code a service would run is the system's alone, by the owners
   and lists of the packed program's folder, whole, or, for a plain
   interpreter asked with `-I`, of its folder, its base's, its prefixes, the
@@ -2227,13 +2227,18 @@ collector that is slow, down or refusing never delays or loses a capture
   of it that is there, as the code itself: whoever may add the missing thing
   decides what runs - so python.org's default folder for all users, one
   folder below Program Files, is refused where signed-in users may add a
-  folder to the drive's root, and one folder deeper it is taken. Not
-  measured: a removable or shared drive, a machine joined to a domain,
-  Program Files with lists an administrator changed, a file the system
-  itself marks as a reparse point; whether `-I` reads the registry's paths,
-  the Store's Python, an embedded distribution, Python older than 3.10, the
-  names the interpreter looks for on a real machine, and whether bytecode
-  caches are written when an administrator asks.
+  folder to the drive's root, and one folder deeper it is taken. The names
+  are made from the paths as the interpreter says them, for its folder, its
+  base executable's and its base prefix; a packed runtime of Python 3.14 or
+  later, which reads a venv file above the program's folder though its home
+  is set, is refused until the packed road judges that name. Not measured: a
+  removable or shared drive, a machine joined to a domain, Program Files
+  with lists an administrator changed, a file the system itself marks as a
+  reparse point; whether `-I` reads the registry's paths on x64 or after
+  3.11 (on ARM64 with 3.11.9 it did not), the Store's Python, an embedded
+  distribution, Python older than 3.10, the names the interpreter looks for
+  on a real machine, and whether bytecode caches are written when an
+  administrator asks.
 
 ## 7. Platform
 

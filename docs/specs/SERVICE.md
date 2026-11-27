@@ -643,6 +643,25 @@ users (`C:\Program Files\Python311`, one folder below Program Files) has the dri
 it is refused on a machine whose root lets signed-in users add a folder (GitHub's do: `(A;;LC;;;AU)`, measured, K);
 one folder deeper (`C:\Program Files\NAME\Python311`) it is taken.
 
+**What Amendment O added, and what the names rest on.** The three names are judged for the interpreter's base prefix
+too, where that is neither of the two folders: the interpreter takes a venv's build tree from the home its
+`pyvenv.cfg` names, and the base prefix is that folder whatever the interpreter says its base executable is (O-1).
+"Two folders above" is the interpreter's own compiled-in value, read in its build files at the four versions (`..\..`;
+another build of Python may hold another, and is not known). The names are made from the paths as the interpreter says
+them, not resolved: a letter given to a folder is read as a drive of its own (below), and a link on the way is a
+reparse point and refused. A `._pth` file beside the runtime library is inside a walked folder where the library lies
+beside the interpreter, which is not asked. Read: Modules/getpath.py at 3.11.9, 3.12.10, 3.13.9 and 3.14.0,
+Lib/site.py at 3.11.9 and 3.12.10; not read: the start of Python 3.10 and older (another file; Raqib asks for 3.11),
+the C code beneath, the venv launcher. A packed runtime is another case: where the program that embeds the interpreter
+sets its home, the venv file, the `._pth` file and the build tree are not looked for (read in the same source and in
+the packer's, PyInstaller 6.11.1) - up to Python 3.13. From 3.14 on the venv file is read though the home is set (read
+in 3.14.0), and the packed road does not judge that name yet: a packed runtime that says 3.14 or later, or says no
+version the check can read, is refused with those words (O-2). Asked on GitHub's Windows machines (Amendment O's field
+run): python.org's install for all users where its installer put it (3.11.9, ARM64), and a copy of a Python one folder
+below Program Files (x64), were refused for `C:\Modules\Setup.local` - on those machines the folder `C:\Modules` is
+there and gives signed-in users modify; the same trees one folder deeper were taken; a venv with its base at the first
+place was refused for its base, with its base one folder deeper taken.
+
 **Who runs the check (Amendment N, N-2).** On the plain road the check is run by the code it judges: the interpreter
 that says the pass has already run its site and the `import` lines of its *.pth files, as every start of it does,
 and has imported Raqib from the tree it judges. So the check is a reading of a tree as its own code tells it: a gate
@@ -742,10 +761,12 @@ on the asker's path and is walked; one under the system account's own key is not
 a finder or hook a package installs (an editable install is met only as its *.pth file and the package's folder); what
 an `import` line of a *.pth file would do (the file is the system's alone, and that is all that is said); whether site
 would skip a *.pth file (one marked hidden, or a name beginning with a dot, is read even so; a name ending in `.PTH`,
-which site does not read either, is judged as code only). Not measured: whether `-I` reads the registry's paths at
-all; python.org's installer with a plain user's writes tried against it (they were tried against the copy); the
-Store's Python (its interpreter is a reparse point: refused); an embedded distribution with a `._pth` file; Python
-older than 3.10; what a real Windows answers when a name below a file is opened (2 or 3: judged by that file where it
-was taken as the code itself; another number: refused as not read); N-1's three names on a real machine (read in the
-interpreter's source only); whether bytecode caches are written when an administrator asks; a packer other than the
+which site does not read either, is judged as code only). Measured since (ARM64, 3.11.9): a path under the
+interpreter's PythonPath key, the user's or the machine's, is on the path without `-I` and not with it. Not measured:
+whether `-I` reads the registry's paths on x64 or on a later version; python.org's installer with a plain user's
+writes tried against it (they were tried against the copy); the Store's Python (its interpreter is a reparse point:
+refused); an embedded distribution with a `._pth` file; Python older than 3.11; what a real Windows answers when a
+name below a file is opened (2 or 3: judged by that file where it was taken as the code itself; another number:
+refused as not read); what the interpreter does with N-1's three names on a real machine (read in its source only: no
+probe puts such a file there); whether bytecode caches are written when an administrator asks; a packer other than the
 one read.

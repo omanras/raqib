@@ -367,10 +367,12 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
     "es\\Setup.local` two folders above it, so python.org's default folder for all users (`C:\\Program Fi"
     "les\\Python311`) is refused on a machine whose drive's root lets signed-in users add a folder, as Gi"
     "tHub's does.",
-    "Put a Python a service will run one folder deeper instead, as `C:\\Program Files\\NAME\\Python311`, "
-    "where it is taken.",
-    "The plain road is held by tests on the owners and lists measured of a Python under Program Files; th"
-    "e names the interpreter itself looks for were read in its source, not measured.",
+    "Put a Python a service will run one folder deeper instead, as `C:\\Program Files\\NAME\\Python311`.",
+    "Asked on GitHub's Windows machines, python.org's install for all users was refused where its installer"
+    " put it and taken one folder deeper, a venv likewise by where its base is.",
+    "What the interpreter does with those names was read in its source, not measured.",
+    "A Raqib packed with Python 3.14 or later is refused for now: that runtime reads `pyvenv.cfg` above the"
+    " program's folder, and the packed road does not judge it yet.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK

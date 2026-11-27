@@ -264,7 +264,8 @@ class Machine:
 
     def __init__(self, names=None, lists=None, platform="win32", packed=True, program=PROGRAM, modules=MODULES,
                  isolated=True, no_site=False, base=None, prefix=None, base_prefix=None, path=(), package=None,
-                 files=None, exec_prefix=None, base_exec_prefix=None):
+                 files=None, exec_prefix=None, base_exec_prefix=None, version=(3, 12)):
+        self._version = version
         base_names = {p: (a, t) for p, a, t, _ in measured()["x64"]}
         self.names = {ntpath.normcase(p): v for p, v in dict(base_names, **(names or {})).items()}
         self.lists = {ntpath.normcase(p): v for p, v in dict(TREE_LISTS, **(lists or {})).items()}
@@ -321,6 +322,9 @@ class Machine:
 
     def packed(self):
         return self._packed
+
+    def version(self):
+        return self._version
 
     def program(self):
         return self._program
@@ -665,7 +669,8 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
                   "| 1 | a name is not the system's alone, or was not read |",
                   "| 2 | not Windows, or a plain interpreter not started with `-I` or started with `-S` |",
                   "**What Amendment M measured, and by what.**",
-                  "Not measured: whether `-I` reads the registry's paths",
+                  "Not measured: whether `-I` reads the registry's paths on x64 or on a later version",
+                  "**What Amendment O added, and what the names rest on.**", "is refused with those words (O-2)",
                   "**What Amendment K measured, and by what.**", "Not read: rights a user holds apart from any list",
                   "Not measured: a denying entry on a real file", "python.org's installer for all users",
                   "cut at 200 characters",
@@ -697,7 +702,7 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
     said = " ".join(commands.split())
     assert "Run `raqib service check` on Windows before a service of Windows is made to run" in said
     threat = flat("docs/THREAT_MODEL.md")
-    assert "**What the check of the code does not read (`raqib service check`; ADR-0013 Amendments K and M).**" \
+    assert "**What the check of the code does not read (`raqib service check`; ADR-0013 Amendments K to O).**" \
         in threat
     assert "whoever may add the missing thing decides what runs" in threat and "never passed (exit 2)" in threat
     assert "backup and restore, taking ownership, debugging programs" in threat
@@ -912,6 +917,37 @@ def test_n1_a_venv_whose_base_is_one_folder_below_program_files_is_refused_one_f
     bad, counts = wincode.check(m)
     assert bad is None and (counts["own"], counts["own_there"], counts["base"], counts["alone"]) == (4, 1, 1, 2)
     own_reads(m)
+
+
+def test_o1_the_base_prefixs_names_are_judged_where_no_base_executable_names_its_folder():
+    """O-1: the interpreter keys a venv's build tree on the home its pyvenv.cfg names, which is the base prefix; the
+    check asks the base prefix too, so a base executable unnamed, or said as the venv's own, hides nothing."""
+    rows, given = road("venv", places={})              # the venv and its base where measured
+    for base in (None, given["program"]):
+        m = plain("venv", places={}, base=base)
+        name, words = refused(m)
+        assert name == "C:\\Modules\\Setup.local" and "there, C:\\, judged for it" in words, (base, name, words)
+        assert words.endswith("the interpreter's base prefix %s)" % given["base_prefix"]), words
+    m = plain("venv", places={COPY_AT: COPY}, base=None)   # the base one folder deeper: taken, its names asked
+    bad, counts = wincode.check(m)
+    assert bad is None and counts["base"] == 0 and counts["own"] == 4, (bad, counts)
+    bad, counts = wincode.check(plain("copy"))             # a plain install: the base prefix is its own folder
+    assert bad is None and counts["own"] == 3
+
+
+@pytest.mark.parametrize("version", [(3, 14), (3, 15), (4, 0), None, "3.12", (3,), (3, 12, 1), (3.0, 12), (True, 12)])
+def test_o2_a_packed_runtime_of_3_14_or_later_or_of_no_known_version_is_refused_and_nothing_read(version):
+    m = Machine(version=version)
+    bad, counts = wincode.check(m)
+    assert bad[0] == PROGRAM and "pyvenv.cfg" in bad[1] and "from 3.14 on" in bad[1] and "O-2" in bad[1], bad
+    assert m.reads == [] and m.listed == [] and counts == {"folders": 0, "files": 0, "above": 0}
+
+
+@pytest.mark.parametrize("version", [(3, 11), (3, 12), (3, 13)])
+def test_o2_a_packed_runtime_older_than_3_14_is_walked_as_before(version):
+    bad, counts = wincode.check(Machine(version=version))
+    assert bad is None and counts == wincode.check(Machine())[1] and wincode.PACKED_BELOW == (3, 14)
+    assert wincode.check(plain("copy", version=(3, 14)))[0] is None   # the plain road judges that name (N-1)
 
 
 def test_n1_a_pyvenv_cfg_there_in_the_folder_above_is_judged_as_a_file_taken_and_counted_or_refused():
@@ -1229,6 +1265,8 @@ def test_m_the_real_system_objects_answers_are_the_running_interpreters(tmp_path
     assert s.isolated() is bool(sys.flags.isolated) and s.no_site() is bool(sys.flags.no_site)
     assert s.base_executable() == getattr(sys, "_base_executable", None) and s.sys_path() == list(sys.path)
     assert s.prefix() == sys.prefix and s.base_prefix() == sys.base_prefix
+    assert s.exec_prefix() == sys.exec_prefix and s.base_exec_prefix() == sys.base_exec_prefix
+    assert s.version() == tuple(sys.version_info[:2]) and len(s.version()) == 2
     assert s.package_dir() == ntpath.dirname(raqib.__file__) and Path(s.package_dir()) == Path(raqib.__file__).parent
     f = tmp_path / "x.pth"
     f.write_bytes(b"0123456789")

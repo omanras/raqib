@@ -754,3 +754,44 @@ with it. On x64 the installer ended with 0 and installed nothing (the machine ho
   by the asker (finding 11). Not measured: N-1's three names on a real machine (read in the source only); the
   registry's paths on x64 and on a version after 3.11; whether bytecode caches are written by an asking
   administrator; a packer other than the one read.
+
+## Amendment O (the Table, 2026-11-27) - the review of M12.4c1b REDO (docs/review/2026-11-27-M12.4c1b-redo.md) and its field run: lands
+The field's word on 66c9d5d (the probe branch c2f8854; GitHub's Windows machines, x64 and ARM64): the gate green on
+six jobs and the rig green, X49 and X50 MET; the check's tests passed on both. python.org's install for all users
+where its installer put it (3.11.9, ARM64; on x64 a copy of a Python one folder below Program Files, the installer
+having installed nothing there): refused for `C:\Modules\Setup.local` - and the refusal named the folder
+`C:\Modules`, which is there on those machines and gives signed-in users modify. The same tree one folder deeper:
+taken (3270 names in 0.9 s; the copy 11140 in 1.3 s). A venv whose base is at the first place: refused, naming the
+base executable's folder; with its base one folder deeper: taken. The *.pth lines, the package file users may
+modify and the registry's keys read as before the REDO. Nothing was put anywhere that an interpreter reads at its
+start: what the interpreter does with those names stays read in its source.
+The second reviewer read the interpreter's source line by line and found N-1's three names the whole list under
+`-I`; verdict NEXT. Ruled, and done by the Table's hand:
+- O-1 (a venv's home; finding 2). The interpreter takes a venv's build tree from the home its `pyvenv.cfg` names,
+  not from what it says its base executable is. The base prefix is that folder. So N-1's three names are judged
+  for the base prefix too, where it is neither the interpreter's folder nor the base executable's. FOR: no venv
+  hides its base's place behind a base executable left unnamed or said as the venv's own.
+- O-2 (the packed road and Python 3.14; finding 4). N said none of the three names is looked for where the
+  interpreter's home was set. True of the venv file up to 3.13 only: in 3.14.0 it is read though the home is set,
+  and the prefix follows it. The packer the rig pins knows Python up to 3.13, so nothing taken so far is touched;
+  but the packed road does not judge that name, so a packed runtime that says 3.14 or later - or no version the
+  check can read - is refused with those words, until a task makes the packed road judge it. MUST NOT TOUCH: the
+  packed road for 3.11 to 3.13, as landed.
+- O-3 (what N-1 rests on, said; findings 1, 3, 5, 6). "Two folders above" is the interpreter's compiled-in value,
+  now read in its build files at the four versions. The names are made from the paths as the interpreter says
+  them, not resolved (a letter given to a folder: L-3, refused with the install). A `._pth` file beside the
+  runtime library is covered only where the library lies beside the interpreter. Read: getpath.py at four
+  versions, site.py at two; not read: Python 3.10's start, the C code beneath, the venv launcher. "One folder
+  deeper it is taken" is now the field's word, and the documents say it as that.
+- O-4 (kept, and recorded). N-1 judges more than a venv's start reads - the folder above the base's, the two above
+  the venv's own - and so refuses a venv directly under a drive's root that its start would not endanger: kept,
+  it errs toward refusal (finding 8). A pyvenv.cfg found above an interpreter makes that folder its prefix, which
+  is then walked whole (finding 9). The pass counts among its files and folders the interpreter's own names that
+  are there (finding 7). The REDO builder's eight questions stand as built (the first number of the pass is the
+  sum the rig reads; "walked as entries"; the order of judging; one branch of the walk that cannot be reached).
+  Two test lines that changed which reading they look up, with the same text, were not named in the questions
+  file (finding 11).
+- O-5 (lands, and next). M12.4c1b lands as 0.12.0 after the gate, the rig and one more field run on the commit to
+  be merged. Next: M12.4c2 (K-9), with: the drive's device (L-3), the test of the libraries loaded by name, the
+  packed road judging the venv file's name for 3.14 on (O-2), and the service's command for a plain interpreter
+  written with `-I` (M-1).

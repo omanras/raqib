@@ -5,6 +5,51 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.12.0 - 2026-11-27
+
+What is new:
+- `raqib service check` now also judges a Raqib that a plain Python runs on Windows (ADR-0013 Amendments M to O),
+  not only a packed one. Ask it with the interpreter the service would use, started the way the service will
+  start it: the interpreter's path, then `-I -m raqib service check`. Asked any other way it exits 2 and says that
+  command.
+- It walks everything that interpreter would load from: its own folder, a venv's base, every entry of its path,
+  the lines of its *.pth files, and Raqib's own folder. A place on the path that does not exist yet is judged by
+  the folder that would hold it: whoever may create it decides what runs.
+- It also judges three names the interpreter itself looks for at every start outside its own folder - a venv
+  file in the folder above, and a build tree's marker and library two folders above. This was read in Python's
+  own source (3.11 to 3.14), not measured. The consequence is plain and said in the refusal: a Python where
+  python.org's installer for all users puts it (one folder below Program Files) is refused on a machine whose
+  drive's root lets signed-in users add a folder, which is the default measured. One folder deeper
+  (`C:\Program Files\NAME\Python311`) it is taken.
+- Measured on GitHub's Windows machines, x64 and ARM64: python.org's install for all users refused where its
+  installer put it, the same tree one folder deeper taken (about 3300 names in under a second), a venv judged
+  by where its base is, a *.pth line that leads to a folder a user could create refused, one file opened to
+  users refused.
+- The pass now says what it is: the check is run by the code it judges, so it is a gate against a tree put in
+  the wrong place, not a verdict on a tree someone already changed. Ask it first as a plain user; it needs no
+  rights.
+- The rig asks it of a Python under Program Files and of its own Python at every run (X50).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window, the Linux service or a packed Raqib on Python 3.11 to 3.13. A Raqib
+  packed with Python 3.14 or later is now refused by the check until its road is walked: that Python reads a
+  venv file above the program's folder.
+
+Not measured:
+- What the interpreter does with the three names on a real machine: read in its source only, and no test puts
+  such a file anywhere. The check's own answers on real machines were measured.
+- Whether `-I` keeps the registry's paths off the interpreter's path on x64 and on versions after 3.11 (on
+  ARM64 with 3.11.9 it did).
+- Python 3.10's start, the Store's Python, an embedded distribution, another build of Python than python.org's.
+- Nothing installs a service of Windows yet, so nothing asks the check before a service runs; a person does.
+- Still as 0.11.0 says: a machine joined to a domain, a removable or shared drive, a drive letter given to a
+  folder, rights a user holds apart from any access list.
+
 ## 0.11.0 - 2026-11-27
 
 What is new:

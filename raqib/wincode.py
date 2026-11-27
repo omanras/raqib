@@ -90,6 +90,7 @@ NULL_LIST = "NO_ACCESS_CONTROL"
 KINDS = ("A", "D")              # allowing, denying: no other kind is judged
 PLAIN_MAX = 259                 # characters of a path the system opens plainly (MAX_PATH, less its end)
 SAID_MAX = 200                  # characters of a name or a text said; a cut is marked "..."
+PACKED_BELOW = (3, 14)          # O-2: the packed road is walked for a runtime older than this; from it on, refused
 ROLE_CODE = "as the code itself (K-2)"
 ROLE_ABOVE = "as a folder above it (K-3)"
 CODE_MAY = "the code itself may give any other name only reading and executing"
@@ -486,6 +487,14 @@ def check(system):
     why = path_refused(program)
     if why:
         return done((_said(program), "the program's path %s" % why))
+    version = system.version()
+    if (not isinstance(version, tuple) or len(version) != 2 or not all(type(n) is int for n in version)
+            or version >= PACKED_BELOW):
+        return done((_said(program), "packed with a Python that says its version as %s: from %d.%d on the runtime"
+                                     " reads a venv file (pyvenv.cfg) in the folder above the program's though its"
+                                     " home is set (ADR-0013 O-2), and the packed road does not judge that name yet,"
+                                     " so it is never said to be the system's alone"
+                                     % ((_said(repr(version), 40),) + PACKED_BELOW)))
     root, modules = ntpath.dirname(program), system.modules()
     if modules is None:
         return done((_said(root), "the packed runtime does not say where its modules are (sys._MEIPASS): what would"
@@ -591,8 +600,11 @@ def _plain(system, walk, program):
         bad, _ = walk.road(top, what, False)
         if bad:
             return done(bad)
+    named = roots[:len(folders)]
+    if ntpath.normcase(prefixes[1]) not in [ntpath.normcase(f) for f in folders]:
+        named.append((prefixes[1], "the interpreter's base prefix"))   # O-1: a venv's home, whatever names its base
     judged = set()
-    for folder, what in roots[:len(folders)]:   # N-1: judged as an entry is, counted apart from the entries
+    for folder, what in named:                  # N-1: judged as an entry is, counted apart from the entries
         for name, which in own_names(folder):
             if ntpath.normcase(name) in judged:
                 continue
@@ -734,6 +746,9 @@ class System:
 
     def modules(self):
         return getattr(sys, "_MEIPASS", None)
+
+    def version(self):                       # O-2
+        return tuple(sys.version_info[:2])
 
     def read(self, path):
         if self._reader is None:

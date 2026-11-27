@@ -583,9 +583,12 @@ interpreter looks at every start for `pyvenv.cfg` in the folder above its own an
 `Modules\Setup.local` two folders above it, so python.org's default folder for all users
 (`C:\Program Files\Python311`) is refused on a machine whose drive's root lets signed-in users add a
 folder, as GitHub's does. Put a Python a service will run one folder deeper instead, as `C:\Program
-Files\NAME\Python311`, where it is taken. The plain road is held by tests on the owners and lists
-measured of a Python under Program Files; the names the interpreter itself looks for were read in
-its source, not measured. It is a reading at one moment: run it again after anything there changes.
+Files\NAME\Python311`. Asked on GitHub's Windows machines, python.org's install for all users was
+refused where its installer put it and taken one folder deeper, a venv likewise by where its base
+is. What the interpreter does with those names was read in its source, not measured. A Raqib packed
+with Python 3.14 or later is refused for now: that runtime reads `pyvenv.cfg` above the program's
+folder, and the packed road does not judge it yet. It is a reading at one moment: run it again after
+anything there changes.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

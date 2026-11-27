@@ -1642,7 +1642,7 @@ def cmd_forward(args, out):
 
 
 def cmd_service(args, out):
-    """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its WALK_MAX) only; the
+    """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its three bounds) only; the
     watch does not know it. `run` (Amendment E, M12.4a): raqib/winservice.py, imported here only, the runner of the
     host watch as a service of Windows."""
     if args.action == "run":
