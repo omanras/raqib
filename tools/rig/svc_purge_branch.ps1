@@ -4,6 +4,7 @@
 # a user outside the administrators' group (made for the run, removed after it). Each link points at a folder of
 # this probe's own, whose one file is checked afterwards. It makes one folder under Program Files, one service by
 # Raqib's own install, and names under ProgramData\Raqib, and removes them all. It ends no process.
+# Asked a second time, of the branch after the review's fixes (ADR-0013 ZF).
 $ErrorActionPreference = "Continue"
 function Flat($lines) { ((($lines -join " | ") -replace "S-1-5-21-[0-9-]+", "S-1-5-21-<a user>") -replace "\s+", " ").Trim() }
 function Cut($s, $n) { if ($null -eq $s) { "" } else { $s.Substring(0, [Math]::Min($n, $s.Length)) } }
