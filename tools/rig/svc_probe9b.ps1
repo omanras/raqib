@@ -8,7 +8,9 @@ function Mask($s) { $s -replace "S-1-5-21-[0-9-]+", "S-1-5-21-<a user>" }
 function Whole { process { "WHOLE " + (Mask $_) } }
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 "Pythons the machine already holds: $((Get-ChildItem 'C:\hostedtoolcache\windows\Python' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', ')"
-foreach ($ver in "3.13.5", "3.14.0") {
+# a line of versions the machine does not already hold (a newer one of the same line stopped the two before)
+$vers = if ($arch -eq "arm64") { @("3.11.9") } else { @("3.10.11") }
+foreach ($ver in $vers) {
   "=== python.org's installer, $ver $arch, for all users, to its own default folder"
   $inst = "$env:RUNNER_TEMP\python-$ver.exe"; $log = "$env:RUNNER_TEMP\python-$ver.log"
   try { Invoke-WebRequest "https://www.python.org/ftp/python/$ver/python-$ver-$arch.exe" -OutFile $inst -ErrorAction Stop } catch { "NOT fetched: $(Cut $_.Exception.Message 200)"; continue }
@@ -17,7 +19,7 @@ foreach ($ver in "3.13.5", "3.14.0") {
   $home9 = (Get-ChildItem "C:\Program Files" -Directory -Filter "Python3*" | Select-Object -First 1).FullName
   if (-not $home9) {
     "nothing under Program Files; the log's lines that say why:"
-    Get-Content $log -ErrorAction SilentlyContinue | Select-String "rror|ail|lready|newer|locked|Detect" | Select-Object -Last 12 | ForEach-Object { "    " + (Cut (Mask $_.Line) 260) }
+    Get-Content $log -ErrorAction SilentlyContinue | Select-String "rror|ail|lready|newer|locked" | Select-Object -Last 12 | ForEach-Object { "    " + (Cut (Mask $_.Line) 260) }
     continue
   }
   $py = "$home9\python.exe"
