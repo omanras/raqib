@@ -296,7 +296,17 @@ no command, raqib prints its usage and exits 2.
       (one of the two forms Raqib's install writes), type, start, account,
       state and exit; exit 0 running as installed, 1 not running or not as
       installed, 3 not installed, not Raqib's or not known (ADR-0013
-      Amendment V).
+      Amendment V). On Windows install and remove make and remove the service RaqibWatch by the service
+      manager's own calls, as an administrator (ADR-0013 Amendment X): install asks `raqib service check`'s
+      check of its own code first and makes nothing from a tree it refuses, nor where the place under
+      ProgramData is one the service would refuse, nor over a service of the name that is there; it makes the
+      service for this very program (packed) or interpreter (with -I), its description beginning with
+      Raqib's mark, to be started again by the system after an end that was no Stop, starts it (--no-start:
+      not) and says status's lines; exit 0 made and active or made with --no-start, 1 refused or failed (what
+      was made said). remove
+      stops and removes Raqib's service only (one without the mark is not touched, 1), asks for the name
+      again (exit 0 gone or nothing installed, 1 not yet gone) and leaves the record; --purge on Windows is
+      not built (exit 2).
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -728,7 +738,12 @@ def _parser():
                          " not as installed, 3 not installed or not known); on Windows, by the service manager's own"
                          " calls, the service RaqibWatch: Raqib's mark, its command, type, start and account, its"
                          " state and its exit (exit 0 running as installed, 1 not running or not as installed, 3 not"
-                         " installed, not Raqib's or not known; ADR-0013 Amendment V); run (Windows, run by the"
+                         " installed, not Raqib's or not known; ADR-0013 Amendment V); on Windows, install (an"
+                         " administrator) makes the service RaqibWatch by the service manager's own calls - the"
+                         " check of its own code first, nothing made from a tree it refuses - starts it and says"
+                         " status's lines (exit 0 made and active, or made with --no-start; 1 refused or failed), and remove stops and"
+                         " removes Raqib's service only, the record kept (exit 0 gone or nothing installed, 1 not"
+                         " Raqib's or not yet gone; ADR-0013 Amendment X); run (Windows, run by the"
                          " system's service"
                          " manager only): the host watch as a service of Windows, its record in Raqib under"
                          " ProgramData, closed to all but the system and the administrators (ADR-0013 Amendment"
@@ -741,9 +756,9 @@ def _parser():
                          " 1 not or not read, the name said, 2 not Windows, or a plain interpreter not started with"
                          " -I or started with -S; ADR-0013 Amendments K and M)")
     sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
-                                                            " started")
+                                                            " started (Windows: make the service; not started)")
     sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"
-                                                         " /var/lib/raqib and nothing else")
+                                                         " /var/lib/raqib and nothing else (Linux only)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -1657,8 +1672,10 @@ def cmd_service(args, out):
     service of Windows, imported here, by raqib/wincode.py and in raqib/winmanager.py's status (for told and the
     runner's numbers). `check` (Amendment K, M12.4c1): raqib/wincode.py,
     imported here and in raqib/winservice.py's System.own_check (the check at every start of the service, ADR-0013
-    U-4). `status` on Windows (Amendment V, M12.4c2b2a): raqib/winmanager.py, imported here only; on Linux status is
-    raqib/service.py's, as before."""
+    U-4). `status` on Windows (Amendment V, M12.4c2b2a): raqib/winmanager.py, imported here and in
+    raqib/wininstall.py's functions (the install reads its own work back through it); on Linux status is
+    raqib/service.py's, as before. `install` and `remove` on Windows (Amendment X, M12.4c2b2b): raqib/wininstall.py,
+    imported here only; on Linux they are raqib/service.py's, as before."""
     if args.action == "run":
         from raqib import winservice
         return winservice.cli_run(args, out)
@@ -1670,6 +1687,12 @@ def cmd_service(args, out):
         try:
             return winmanager.cli_run(args, out)
         except winmanager.Refused as exc:
+            raise UsageError(str(exc))
+    if args.action in ("install", "remove") and sys.platform == "win32":   # X-2: the system's own calls
+        from raqib import wininstall
+        try:
+            return wininstall.cli_run(args, out)
+        except wininstall.Refused as exc:
             raise UsageError(str(exc))
     from raqib import service
     try:

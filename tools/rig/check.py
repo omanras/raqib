@@ -8,7 +8,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--events-check FILE] [--packed FILE]
                               [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
                               [--service-check-plain FILE] [--service-check-drive FILE] [--service-refused FILE]
-                              [--service-status FILE] [--summary FILE] [--strict]
+                              [--service-status FILE] [--service-install FILE] [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
@@ -93,6 +93,15 @@ with a command holding `-I -m raqib service run` and a path under Program Files,
 beginning `RESULT: INSTALLED, NOT ACTIVE` and words holding the runner's words for 15 and `service.txt`; a byte-order
 mark before the first key is read past; MISSED with words for each thing not found, a file given and missing
 included; n/a where none was given.
+--service-install: what the rig's Windows job kept of `raqib service install | remove` (ADR-0013 X-7, M12.4c2b2b):
+FILE holds lines `key: value` (refused-exit, refused-words, refused-status: the install from the job's own Python and
+status asked after it; install-exit, install-result, installed-status, asked-by-administrator: the install from the
+copy under Program Files and status asked after it by a user with no rights; remove-exit, remove-result,
+removed-status: the remove and status asked after it). X54 MET only where the first made nothing (exit 1, words
+holding the check's refusal, status `RESULT: NOT INSTALLED`), the second ran (exit 0, the install's own RESULT line of
+a service made and ACTIVE, status `RESULT: ACTIVE` asked by no administrator) and the remove left nothing (exit 0,
+`RESULT: removed`, status `RESULT: NOT INSTALLED`); a byte-order mark before the first key is read past; MISSED with
+words for each thing not found, a file given and missing included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1562,6 +1571,70 @@ def read_service_status(text):
         return [(name, MISSED, "the service status cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_INSTALL_NAME = ("X54 `raqib service install` on Windows makes nothing from the job's own Python (the check's"
+                        " refusal, 1), makes the service from the copy under Program Files and it runs (0, ACTIVE as a"
+                        " user with no rights reads it), and `raqib service remove` leaves nothing (0, NOT"
+                        " INSTALLED)")
+INSTALL_KEYS = ("asked-by-administrator", "refused-exit", "refused-words", "refused-status", "install-exit",
+                "install-result", "installed-status", "installed-command", "remove-exit", "remove-result",
+                "removed-status")
+CHECK_REFUSED = "raqib service check: NOT the system's alone: "   # winservice.REFUSED_SAID's head (a test ties)
+INSTALL_DONE = "RESULT: installed and started: raqib service status answers ACTIVE"   # wininstall.DONE (a test ties)
+REMOVE_DONE = "RESULT: removed"                                                       # wininstall.REMOVED
+
+
+def read_service_install(text):
+    """X54 (ADR-0013 X-7, M12.4c2b2b): what the rig's Windows job kept of `raqib service install | remove`: the
+    install from the job's own Python (refused-exit, refused-words, refused-status: status asked after it), the one
+    from the copy under Program Files (install-exit, install-result, installed-status: status asked after it by a user
+    with no rights, asked-by-administrator: no), and the remove (remove-exit, remove-result, removed-status). text: the
+    FILE's text (None: not given). MET only where refused-exit is 1, refused-words holds CHECK_REFUSED and
+    refused-status is `RESULT: NOT INSTALLED`; install-exit 0, install-result INSTALL_DONE, installed-status
+    `RESULT: ACTIVE` and installed-command status's own line of a command under Program Files (STATUS_COMMAND); remove-exit 0, remove-result REMOVE_DONE and removed-status `RESULT: NOT INSTALLED`; a byte-order
+    mark before the first key is read past. MISSED with words for each thing not found; n/a where none was given. It
+    never raises."""
+    name = SERVICE_INSTALL_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no service install was given (--service-install)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the install file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in INSTALL_KEYS if key not in got]
+        if "asked-by-administrator" in got and got["asked-by-administrator"].strip().lower() != "no":
+            missing.append("status of the installed service was not asked with no rights: asked-by-administrator is"
+                           " %s, not no" % (got["asked-by-administrator"][:40] or "not said"))
+        for key, want, of in (("refused-exit", 1, "the install from the job's own Python"),
+                              ("install-exit", 0, "the install from the copy under Program Files"),
+                              ("remove-exit", 0, "the remove")):
+            if key in got and _int(got[key]) != want:
+                missing.append("%s: exit %s, not %d" % (of, got[key][:40] or "not said", want))
+        for key, want, of in (("refused-status", "RESULT: NOT INSTALLED", "status after the install from the job's"
+                               " own Python"),
+                              ("install-result", INSTALL_DONE, "the install from the copy under Program Files"),
+                              ("installed-status", "RESULT: ACTIVE", "status of the installed service"),
+                              ("remove-result", REMOVE_DONE, "the remove"),
+                              ("removed-status", "RESULT: NOT INSTALLED", "status after the remove")):
+            if key in got and got[key] != want:
+                missing.append("%s: %s, not %s" % (of, got[key][:200] or "nothing", want))
+        command = got.get("installed-command", "")
+        if "installed-command" in got and not STATUS_COMMAND.fullmatch(command):   # Y-6: which copy was installed
+            missing.append("the installed service: the line kept is not status's own line of the command, a quoted"
+                           " path under Program Files and then %s (%s)" % (STATUS_PLAIN, command[:200]))
+        words = got.get("refused-words", "")
+        if "refused-words" in got and CHECK_REFUSED not in words:
+            missing.append("the install from the job's own Python: its words do not hold the check's refusal, %s"
+                           " (%s)" % (CHECK_REFUSED.strip(), words[:200]))
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "the install from the job's own Python made nothing (exit 1): %s; then status: RESULT: NOT"
+                 " INSTALLED; the install from the copy under Program Files: %s (exit 0), status with no rights:"
+                 " RESULT: ACTIVE; the remove: %s (exit 0), then status: RESULT: NOT INSTALLED" % (
+                     words[:300], INSTALL_DONE, REMOVE_DONE))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the service install cannot be read (%s)" % type(exc).__name__)]
+
+
 def read_check(text, name, counts_said, option, second):
     """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
     names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
@@ -1820,6 +1893,7 @@ def main(argv=None):
     p.add_argument("--service-check-drive")
     p.add_argument("--service-refused")
     p.add_argument("--service-status")
+    p.add_argument("--service-install")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1868,6 +1942,9 @@ def main(argv=None):
     # X53 (ADR-0013 V-5): the same, of `raqib service status` asked with no rights at three moments
     asked = a.service_status
     rows += read_service_status(None if asked is None else (text(asked) if os.path.isfile(asked) else ""))
+    # X54 (ADR-0013 X-7): the same, of `raqib service install | remove` and status asked after each
+    made = a.service_install
+    rows += read_service_install(None if made is None else (text(made) if os.path.isfile(made) else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

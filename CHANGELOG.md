@@ -5,6 +5,48 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.16.0 - 2026-11-27
+
+What is new:
+- `raqib service install` and `raqib service remove` now work on Windows, by the system's own calls (ADR-0013
+  Amendments X and Y). With this, the watch as a service of Windows is installed, asked and removed by Raqib's
+  own commands, as on Linux.
+- The install asks `raqib service check` of its own code first and makes nothing from a tree the check
+  refuses: this is where a tree that is not the system's alone is kept from being made a service at all. The
+  check is still run by the code it judges, so install from a copy that was never a user's to change.
+- It makes the service `RaqibWatch` for the very program or interpreter that runs it (a plain interpreter is
+  asked with `-I`, as the service runs it), with Raqib's mark, an automatic start, and the system told to start
+  it again 5 s, 30 s and then every 300 s after an end that was no Stop; it starts it, waits for it to run or
+  stop, and says `raqib service status`'s own lines.
+- It never changes a service of the name that is there: Raqib's is to be removed first, another's is said and
+  left. To update over a running service: remove, then install.
+- It makes no folder for the record: the service makes it at its first start, as the system. Where the folder
+  is already there and the service would refuse it, the install says so and makes no service.
+- A path that holds a quote, a percent sign or a character that is not printable is not written into the
+  service's command.
+- The remove stops and removes Raqib's service only, asks for the name again, and leaves the record where it
+  is, saying where.
+- Measured on GitHub's Windows machines, x64 and ARM64, by an administrator and by a user outside the
+  administrators' group: every refusal above with nothing made, the install from a copy under Program Files
+  (a plain interpreter and a packed program) running within two seconds, the remove leaving nothing. The rig
+  asks both at every run (X54).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window or the Linux service. A service of Windows made by hand keeps running
+  and is not changed; to have it as Raqib's install makes it, remove it by hand and install.
+
+Not measured:
+- A start at boot: the service is set to start automatically, and the machines measured are not restarted.
+- A machine joined to a domain; a remove while the service starts, or while another program holds it open.
+- What the system does with a percent sign in a service's command: read in its documents, and refused.
+- Removing the record with the service is not built on Windows: the remove leaves it and says where it is.
+- `raqib service status` does not yet read the start-again settings the install makes.
+
 ## 0.15.0 - 2026-11-27
 
 What is new:

@@ -916,6 +916,16 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert "raqib-service/1 " in asked and "sc.exe description $name $mark" in asked
     assert "tools\\rig\\service_status.ps1 -Out $env:RUNNER_TEMP\\service-status" in windows
     assert "--service-status $env:RUNNER_TEMP\\service-status\\service-status.txt" in windows
+    # X-7, Y-6 (X54): Raqib's own install and remove asked by the job; status after each by a user with no rights
+    installs = (ROOT / "tools" / "rig" / "service_install.ps1").read_text(encoding="utf-8")
+    assert installs.isascii() and "pip install" not in installs and "taskkill" not in installs
+    assert "New-Service" not in installs and "sc.exe description" not in installs   # the install's own making
+    assert "-I -m raqib service $action" in installs and '"install"' in installs and '"remove"' in installs
+    assert "-m raqib service status" in installs and "New-LocalUser -Name $user" in installs
+    assert "Remove-LocalUser -Name $user" in installs and "S-1-5-32-544" in installs
+    assert all("%s: " % key in installs for key in check.INSTALL_KEYS)
+    assert "tools\\rig\\service_install.ps1 -Out $env:RUNNER_TEMP\\service-install" in windows
+    assert "--service-install $env:RUNNER_TEMP\\service-install\\service-install.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1616,4 +1626,97 @@ def test_x53_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
     assert row(["--service-status", str(tmp_path / "status.txt")]) == check.MET
     assert row(["--service-status", str(tmp_path / "bom.txt")]) == check.MET
     assert row(["--service-status", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP
+
+
+# --- X54 (ADR-0013 X-7, M12.4c2b2b): `raqib service install | remove` on Windows, by the system's own calls ---------
+def installfile(**kw):
+    """What the rig's job keeps: the install from the job's own Python (the placeholder `user`) refused by the check,
+    the one from the copy under Program Files made and ACTIVE, the remove; status's RESULT after each."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wininstall, winservice
+    refused = "  " + winservice.REFUSED_SAID % ("C:\\Users\\user\\rig\\python.exe", "as the code itself (K-2): ...")
+    keys = {"asked-by-administrator": "no", "refused-exit": "1", "refused-words": refused.strip(),
+            "refused-status": "RESULT: NOT INSTALLED", "install-exit": "0", "install-result": "RESULT: %s"
+            % wininstall.DONE, "installed-status": "RESULT: ACTIVE",
+            "installed-command": 'command: "C:\\Program Files\\RaqibRigInstall\\Py\\python.exe" -I -m raqib service'
+                                 ' run (as the service manager holds it)', "remove-exit": "0",
+            "remove-result": "RESULT: %s" % wininstall.REMOVED, "removed-status": "RESULT: NOT INSTALLED"}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x54(text):
+    ((ident, state, words),) = check.read_service_install(text)
+    assert ident.startswith("X54 ") and ident == check.SERVICE_INSTALL_NAME
+    return state, words
+
+
+def test_x54_met_where_the_users_tree_made_nothing_the_copy_under_program_files_ran_and_the_remove_left_nothing():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wininstall, winservice
+    assert check.CHECK_REFUSED == winservice.REFUSED_SAID.split("%s")[0]
+    assert check.INSTALL_DONE == "RESULT: " + wininstall.DONE and check.REMOVE_DONE == "RESULT: " + wininstall.REMOVED
+    state, words = x54(installfile())
+    assert state == check.MET, words
+    assert words.startswith("the install from the job's own Python made nothing (exit 1): raqib service check: NOT"
+                            " the system's alone: C:\\Users\\user\\rig\\python.exe")
+    assert x54(installfile().replace("\n", "\r\n"))[0] == check.MET and x54("\ufeff" + installfile())[0] == check.MET
+    assert x54(installfile(**{"asked-by-administrator": "No"}))[0] == check.MET
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"refused-exit": "0"}, "the install from the job's own Python: exit 0, not 1"),
+    ({"refused-exit": ""}, "the install from the job's own Python: exit not said, not 1"),
+    ({"refused-words": "raqib service check: the code a service would run is the system's alone: checked 5"},
+     "its words do not hold the check's refusal"),
+    ({"refused-status": "RESULT: INSTALLED, NOT ACTIVE"},
+     "status after the install from the job's own Python: RESULT: INSTALLED, NOT ACTIVE, not RESULT: NOT INSTALLED"),
+    ({"install-exit": "1"}, "the install from the copy under Program Files: exit 1, not 0"),
+    ({"install-result": "RESULT: installed, NOT ACTIVE as raqib service status reads it (INSTALLED, NOT ACTIVE);"
+                        " it stays"}, "the install from the copy under Program Files: RESULT: installed, NOT ACTIVE"),
+    ({"installed-status": "RESULT: ACTIVE, NOT AS INSTALLED"}, "status of the installed service: RESULT: ACTIVE, NOT"
+                                                               " AS INSTALLED, not RESULT: ACTIVE"),
+    ({"asked-by-administrator": "yes"}, "was not asked with no rights: asked-by-administrator is yes, not no"),
+    ({"asked-by-administrator": ""}, "asked-by-administrator is not said, not no"),
+    ({"remove-exit": "1"}, "the remove: exit 1, not 0"),
+    ({"remove-result": "RESULT: marked for removal, not yet gone"}, "the remove: RESULT: marked for removal, not yet"
+                                                                    " gone, not RESULT: removed"),
+    ({"removed-status": "RESULT: INSTALLED, NOT ACTIVE"}, "status after the remove: RESULT: INSTALLED, NOT ACTIVE,"
+                                                          " not RESULT: NOT INSTALLED"),
+    # Y-6: which copy was installed - status's own line of the command, a path under Program Files
+    ({"installed-command": 'command: "C:\\Users\\user\\rig\\python.exe" -I -m raqib service run (as the service'
+                           ' manager holds it)'}, "the line kept is not status's own line of the command"),
+    ({"installed-command": '"C:\\Program Files\\R\\python.exe" -I -m raqib service run'},
+     "the line kept is not status's own line"),
+] + [({key: None}, "no %s" % key) for key in check.INSTALL_KEYS])
+def test_x54_missed_for_each_thing_not_found(kw, said):
+    state, words = x54(installfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x54_missed_where_the_file_is_empty_and_n_a_where_none_was_given():
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x54(text) == (check.MISSED, "missing: the install file is empty or was not written (silence is a"
+                                           " finding)")
+    assert x54(None) == (check.SKIP, "no service install was given (--service-install)")
+    assert x54(object())[0] == check.MISSED   # never raises
+
+
+def test_x54_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "install.txt").write_text(installfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    (tmp_path / "bom.txt").write_text("\ufeff" + installfile(), encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X54 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-install", str(tmp_path / "install.txt")]) == check.MET
+    assert row(["--service-install", str(tmp_path / "bom.txt")]) == check.MET
+    assert row(["--service-install", str(tmp_path / "none.txt")]) == check.MISSED
     assert row([]) == check.SKIP

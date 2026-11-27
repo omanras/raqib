@@ -487,7 +487,12 @@ def test_e1_e4_the_module_is_imported_nowhere_but_in_cmd_service():
                     where.append((path.name, fn.name, ast.unparse(node)))
         assert not [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))
                     and "winmanager" in ast.unparse(n)], path
-    assert where == [("cli.py", "cmd_service", "from raqib import winmanager")]
+    assert where[0] == ("cli.py", "cmd_service", "from raqib import winmanager")   # M12.4c2b2b (X-2): and the
+    assert sorted({(f, i) for f, _, i in where[1:]}) == [   # install's functions, which read its own work back
+        ("wininstall.py", "from raqib import wincode, winmanager, winservice"),
+        ("wininstall.py", "from raqib import winmanager"),
+        ("wininstall.py", "from raqib import winmanager, winservice")]
+    assert all(f == "wininstall.py" for f, _, _ in where[1:]) and len(where) >= 4   # and nowhere else
 
 
 STRUCTURES = {   # as the system documents them (winsvc.h), each field by its name and type, in order
@@ -646,23 +651,25 @@ def args(action="status", **kw):
 
 
 def test_e4_status_on_windows_goes_to_the_new_module_on_linux_to_service_as_before(monkeypatch):
+    from raqib import wininstall   # M12.4c2b2b (ADR-0013 X-2): install and remove on Windows are its own
     got = []
     monkeypatch.setattr(winmanager, "cli_run", lambda a, out: got.append(("win", a.action)) or 7)
     monkeypatch.setattr(service, "cli_run", lambda a, out: got.append(("linux", a.action)) or 5)
+    monkeypatch.setattr(wininstall, "cli_run", lambda a, out: got.append(("wininstall", a.action)) or 6)
     monkeypatch.setattr(cli.sys, "platform", "win32")
     assert cli.cmd_service(args(), io.StringIO()) == 7
-    assert cli.cmd_service(args("install"), io.StringIO()) == 5
-    assert cli.cmd_service(args("remove"), io.StringIO()) == 5
+    assert cli.cmd_service(args("install"), io.StringIO()) == 6
+    assert cli.cmd_service(args("remove"), io.StringIO()) == 6
     monkeypatch.setattr(cli.sys, "platform", "linux")
     assert cli.cmd_service(args(), io.StringIO()) == 5
-    assert got == [("win", "status"), ("linux", "install"), ("linux", "remove"), ("linux", "status")]
+    assert got == [("win", "status"), ("wininstall", "install"), ("wininstall", "remove"), ("linux", "status")]
 
 
 def test_e4_on_windows_install_and_remove_answer_as_today_and_statuss_flags_are_refused(monkeypatch):
     monkeypatch.setattr(cli.sys, "platform", "win32")
-    for action in ("install", "remove"):
-        with pytest.raises(cli.UsageError) as caught:
-            cli.cmd_service(args(action), io.StringIO())
+    for action in ("install", "remove"):   # the Linux command's own refusal, asked of it (M12.4c2b2b: on Windows
+        with pytest.raises(service.Refused) as caught:   # cmd_service turns them to raqib/wininstall.py)
+            service.cli_run(args(action), io.StringIO(), system=SimpleNamespace(platform=lambda: "win32"))
         assert str(caught.value) == "raqib service %s: Linux only (systemd); this is win32" % action
     for kw, words in (({"no_start": True}, "raqib service: --no-start is install's only"),
                       ({"purge": True}, "raqib service: --purge is remove's only")):
@@ -686,7 +693,7 @@ def test_e4_the_help_and_the_docstrings_say_both_and_where_wincode_is_imported()
         assert words in said, words
     doc = " ".join(cli.cmd_service.__doc__.split())
     assert "raqib/wincode.py, imported here and in raqib/winservice.py's System.own_check" in doc and "U-4" in doc
-    assert "raqib/winmanager.py, imported here only" in doc
+    assert "raqib/winmanager.py, imported here and in raqib/wininstall.py's functions" in doc   # M12.4c2b2b
     assert "import wincode" in ast.unparse(next(n for n in ast.walk(ast.parse((ROOT / "raqib" / "winservice.py")
                                                                               .read_text(encoding="ascii")))
                                                 if isinstance(n, ast.FunctionDef) and n.name == "own_check"))
