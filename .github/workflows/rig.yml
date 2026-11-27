@@ -24,7 +24,10 @@
 # and of the one in the job's own folder; X49 says whether the first was taken and the second refused. The check
 # changes nothing; the copy is removed by the run. A plain interpreter (ADR-0013 M-6, M12.4c1b): the job copies
 # its own Python, Raqib in it, into Program Files (tools/rig/service_check_plain.ps1) and asks the copy and its own
-# Python, each with -I; X50 says whether the copy was taken and the job's own Python refused.
+# Python, each with -I; X50 says whether the copy was taken and the job's own Python refused. The drive
+# (ADR-0013 P-3, M12.4c2a): the job gives a letter to the folder of a packed copy in Program Files
+# (tools/rig/service_check_drive.ps1) and asks the copy through it; X51 says whether it was refused for what the
+# letter names. The letter and the copy are removed by the run.
 name: rig
 
 on:
@@ -107,6 +110,10 @@ jobs:
         if: always()
         shell: pwsh
         run: tools\rig\service_check_plain.ps1 -Out $env:RUNNER_TEMP\service-check-plain
+      - name: the same question through a letter given to the packed copy's folder (X51)
+        if: always()
+        shell: pwsh
+        run: tools\rig\service_check_drive.ps1 -Packed $env:RUNNER_TEMP\service-check\pack\dist\raqib -Out $env:RUNNER_TEMP\service-check-drive
       - name: the autostart places read by Raqib itself beside a second run of the stand-in (X37)
         if: always()
         shell: pwsh
@@ -114,7 +121,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-check-plain $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --service-run $env:RUNNER_TEMP\service-again\service-run.txt --service-check $env:RUNNER_TEMP\service-check\service-check.txt --service-check-plain $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt --service-check-drive $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt --service-events $env:RUNNER_TEMP\service-again\service-events.jsonl --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -128,6 +135,7 @@ jobs:
           Copy-Item $env:RUNNER_TEMP\service-again rig-out\service-again -Recurse -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-check\service-check.txt rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\service-check-plain\service-check-plain.txt rig-out -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\service-check-drive\service-check-drive.txt rig-out -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:

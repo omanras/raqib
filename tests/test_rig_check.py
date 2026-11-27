@@ -885,6 +885,12 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert plain.isascii() and "pip install" not in plain and "PyInstaller" not in plain
     assert "-I -m raqib service check" in plain and "tools\\rig\\service_check_plain.ps1" in windows
     assert ("--service-check-plain $env:RUNNER_TEMP\\service-check-plain\\service-check-plain.txt" in windows)
+    # P-3 (X51): the same packed copy asked through a letter given to its folder; the letter taken back
+    drive = (ROOT / "tools" / "rig" / "service_check_drive.ps1").read_text(encoding="utf-8")
+    assert drive.isascii() and "pip install" not in drive and "PyInstaller" not in drive
+    assert 'subst "${letter}:" $system' in drive and 'subst "${letter}:" /D' in drive and "service check" in drive
+    assert "tools\\rig\\service_check_drive.ps1 -Packed $env:RUNNER_TEMP\\service-check\\pack\\dist\\raqib" in windows
+    assert ("--service-check-drive $env:RUNNER_TEMP\\service-check-drive\\service-check-drive.txt" in windows)
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
