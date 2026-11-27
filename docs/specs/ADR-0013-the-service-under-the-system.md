@@ -643,3 +643,50 @@ the Table's hand:
   M12.4c1b, a plain interpreter's road (its folder whole, a venv's base and the venv, every entry of the `-I`
   path, the lines of *.pth files as on Linux), on the measurements above; then M12.4c2 (K-9), with the drive's
   device and the test of the libraries loaded by name.
+
+## Amendment M (the Table, 2026-11-27) - M12.4c1b: the check's road for a plain interpreter
+K-5 refused a Raqib that a plain interpreter runs until a Python for all users was measured. Measured since (the
+probe branch cf233f5 and 4de9aec; GitHub's Windows machines; the texts are tests/fixtures/wincode/python.txt):
+python.org's installer for all users (3.10.11 on x64, 3.11.9 on ARM64) puts the interpreter under Program Files,
+everything of it owned by the system or the administrators, Program Files' list inherited, no reparse point;
+asked with `-I`, its whole path lies in its own folder (its zip, which is not there; DLLs; Lib; the folder; its
+site folder), and its site folder holds one *.pth file of one `import` line. A copy of a Python an administrator
+put under Program Files reads the same; a venv made from it under Program Files adds its own folder and site
+folder to the base's four entries and names the base in pyvenv.cfg and in the base executable. Without `-I` the
+path begins with the folder the interpreter was started in and the user's site is on. A plain user's six writes
+into the copy and the venv and one renaming were refused. The watch ran as a service from the copy by `"...
+python.exe" -I -m raqib service run`.
+- M-1 (asked as the service will be run). The service's command for a plain interpreter is the interpreter, `-I`,
+  `-m raqib service run` (measured; M12.4c2 writes it). So the check takes a plain interpreter only where it was
+  itself started with `-I` and with its site (no `-S`): then the path it walks is the path the service gets.
+  Otherwise exit 2, with the words to ask it by: the interpreter's own path, `-I -m raqib service check`. FOR: one
+  path, read from the running interpreter, never worked out. MUST NOT TOUCH: the packed road (K-5), which stays
+  as it is and is chosen first.
+- M-2 (what is walked, each by K-2 and whole, the folders above each by K-3 as L-1 left it). The folder the
+  interpreter is in; where the interpreter says a base executable in another folder (a venv), that folder too; the
+  interpreter's prefix and its base prefix; every entry of its path; the folder of the raqib package. An entry
+  that is a folder is walked whole; one that is a file is judged as itself. Each real folder is walked once, and
+  WALK_MAX bounds the whole walk.
+- M-3 (an entry that is not there). The path names things that do not exist (the zip of the library; a line of a
+  *.pth file). Whoever may add the missing thing decides what runs, so the deepest folder of it that exists is
+  judged as the code itself (K-2: nobody but the system may add to it), itself only, and the folders above that
+  by K-3. FOR: `C:\made-later\x` on a path is refused because signed-in users may add a folder to `C:\`.
+- M-4 (*.pth files, as on Linux). In every entry that is a folder, each *.pth file is read only once it was found
+  the system's alone, whole and at most PTH_MAX bytes; a byte outside printable ASCII, tab, LF and CR refuses
+  (AD-4); its lines that are paths, by site's own rule (not blank, not `#`, not `import`), are made whole against
+  the entry and become entries, there or not (M-3). Nothing of a *.pth file is run. An `import` line is code that
+  the file's owner put there: the file was found the system's alone, and no more is said of it.
+- M-5 (the words and the exits). Exit 0 with the counts: names by kind, entries, entries not there, *.pth files
+  read and their lines taken as entries, folders above. Exit 1 with the first name refused, its role and why, as
+  now; an entry that is not there is said as such with the folder judged for it. Exit 2: not Windows; a plain
+  interpreter not started with `-I`, or started with `-S`.
+- M-6 (a claim on the rig, the Table's wiring after the task lands). The rig's Windows job copies its Python under
+  Program Files as an administrator would, installs Raqib into the copy, and asks the copy with `-I` and the job's
+  own Python with `-I`; X50 is MET where the first is 0 and the second 1 with the name refused said.
+- Not read, and said so: what the system's own account would add to the path that the asker's does not (a path
+  the registry gives under the asking user's own key is on the asker's path and is walked; one under the system
+  account's own key is not seen - only the system writes there); a finder or hook a package installs (an editable
+  install is met only as its *.pth file and the package's folder). Not measured: whether `-I` reads the
+  registry's paths at all; python.org's installer with a plain user's writes tried against it (tried against the
+  copy); the Store's Python (its interpreter is a reparse point: refused); an embedded distribution with a `._pth`
+  file; Python older than 3.10.
