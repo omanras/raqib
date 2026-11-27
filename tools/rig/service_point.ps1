@@ -1,6 +1,6 @@
 # The rig's service of Windows, started over a long check (ADR-0013 ZB; X55). On GitHub's throwaway Windows
 # machine it copies this job's Python under Program Files as an administrator would, one folder deeper, adds
-# 100000 empty files to the copy so that the check of its own code walks for several seconds, and makes a service
+# 150000 empty files to the copy so that the check of its own code walks for several seconds, and makes a service
 # that runs `python -I -m raqib service run` from it. It starts the service twice: once by the system's own call,
 # asking the system every 200 ms what it says of the service while it starts (the highest check-point read); and
 # once by `net start`, a command that waits for the start by the check-point. It keeps what tools/rig/check.py
@@ -24,7 +24,7 @@ $place = Join-Path $env:ProgramData "Raqib"
 $own = (Get-Command python).Source
 $holder = Join-Path $env:ProgramFiles "RaqibRigPoint"   # N-1: the interpreter two folders below Program Files
 $copy = Join-Path $holder "Py\python.exe"
-$added = 100000
+$added = 150000
 function Svc { Get-CimInstance Win32_Service -Filter "Name='$name'" }
 function Line {   # the runner's one line of the check, user SIDs masked, on one line
   $l = Get-Content "$place\service.txt" -ErrorAction SilentlyContinue | Where-Object { $_ -match "its own code, checked at this start" } | Select-Object -First 1

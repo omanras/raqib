@@ -2207,7 +2207,11 @@ collector that is slow, down or refusing never delays or loses a capture
   While its check walks, the system refuses a Stop to its caller (measured:
   error 1052), for as long as the walk takes, and a start command that waits
   for the check-point to move gave up after about 20 s of a walk of 32 s
-  while the service went on to run. Not measured: a disk slower than those;
+  while the service went on to run - until the runner raised its
+  check-point while the check walks (ADR-0013 Amendments ZB to ZD):
+  since then that command waited the whole walk and took the start,
+  measured over walks of 15 to 42 s, and the rig reads it at every run
+  (X55). Not measured: a check that never ends; a disk slower than those;
   a place whose list is closed in meaning but written otherwise (refused, by
   the letter); a place on a volume that keeps no owners; a shutdown of the
   machine; a start at boot; a start that outlasts the wait it told; another

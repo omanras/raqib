@@ -1586,6 +1586,55 @@ def test_zb3_a_raising_whose_thread_cannot_be_begun_is_one_line_and_the_check_ru
                                 else (STOPPED, 0, 0))
 
 
+@pytest.mark.parametrize("end", ["refused", "raised"])
+def test_zd1_a_raising_in_flight_at_the_checks_end_that_fails_first_is_said_only_after_15_is_set(end, tmp_path,
+                                                                                                monkeypatch):
+    """ADR-0013 ZD-1: the raising 3 is in the system's call when the check ends and then is not taken - the first
+    failure of this start. Its line is the thread's, and it is written only once the refusal's number is set."""
+    m = Machine(tmp_path, place=thing())
+    raisings(m, hold=3, answer=lambda point: None if point < 3 else False)   # 1 and 2 taken, 3 held and not taken
+    m.own_fn = walking(3, end)
+    code, runner = beating(m, monkeypatch)
+    assert code == 2 and m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)
+    said = [(x[1], x[3]) for x in m.log if isinstance(x, tuple) and x[0] == "line" and "check-point" in x[1]]
+    assert [w for w, _ in said] == [(POINT_FAILED % (3, NOT_TAKEN))[len("raqib service run: "):],
+                                    (TAKEN % (2, 2))[len("raqib service run: "):],
+                                    (FAILED_AFTER % 0)[len("raqib service run: "):]]
+    assert all(number == winservice.EXIT_NOT_ALONE for _, number in said)   # U-3: the thread's own line too
+
+
+def test_zd2_a_clock_or_an_answer_that_cannot_be_read_is_a_refusal_never_a_pass_and_the_raising_is_closed(
+        tmp_path, monkeypatch):
+    """ADR-0013 ZD-2: an answer whose own words raise an interrupt when they are asked for ends STOPPED with 15 and
+    its one line, the raising closed; a clock that fails after a pass leaves the pass a pass, its seconds unsaid."""
+    class Bad:
+        def __repr__(self):
+            raise KeyboardInterrupt()
+    m = Machine(tmp_path, place=thing())
+    m.own_fn = lambda machine: Bad()
+    code, runner = beating(m, monkeypatch)
+    assert runner.checked.is_set() and not runner.raise_lock.locked()
+    assert code == 2 and m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)
+    assert RUNNING not in [s for s, _, _ in m.points]
+    (line,) = [x for x in runner_lines(m) if x.startswith(HEAD % 0)]
+    assert "an answer of a form this runner does not know (Bad: its repr failed: KeyboardInterrupt)" in line
+    assert "no watch is begun" in line
+
+    m = Machine(tmp_path, place=thing())
+    real, reads = m.clock, []
+
+    def clock():
+        reads.append(1)
+        if len(reads) == 2:             # the read after the check
+            raise RuntimeError("no clock")
+        return real()
+    monkeypatch.setattr(m, "clock", clock)
+    code, runner = beating(m, monkeypatch)
+    assert code == 0 and runner.checked.is_set() and not runner.raise_lock.locked()
+    assert RUNNING in [s for s, _, _ in m.points]
+    assert [x for x in runner_lines(m) if x.startswith(HEAD % 0)]   # the pass's line, its seconds 0.00
+
+
 @pytest.mark.parametrize("before", ["taken", "failed"])
 def test_zc2_where_the_bound_passes_one_line_the_start_goes_on_once_the_call_returns_and_late_writes_nothing(
         before, tmp_path, monkeypatch):
@@ -1603,7 +1652,8 @@ def test_zc2_where_the_bound_passes_one_line_the_start_goes_on_once_the_call_ret
     m.own_fn = walking(2)
     code, runner = beating(m, monkeypatch)                    # beating waits for the thread (finding 8)
     assert code == 0 and said.is_set() and not runner.raising.is_alive()
-    assert m.points == BEFORE + RAISED[:2] + AFTER            # RUNNING only once the held call returned
+    assert m.points == BEFORE + RAISED[:2] + AFTER            # the order the statuses were told in (a status is
+    # recorded as its call begins: that RUNNING waits for the held call to return is the lock's, not shown here)
     assert runner.points_failed == (1 if before == "taken" else 2)   # the late failure is counted, never said
     lines = runner_lines(m)
     check = next(i for i, x in enumerate(lines) if x.startswith(HEAD % 0))
@@ -1664,7 +1714,7 @@ def test_zc3_after_check_raise_max_seconds_of_beats_no_more_is_raised_one_line_a
     lines = runner_lines(m)
     assert lines[1:4] == [
         "raqib service run: the check-point is raised no more: 0.05 s of beats have passed while the check walks"
-        " (CHECK_RAISE_MAX, ADR-0013 ZC-3); whoever waits sees it stop; the check goes on", TAKEN % (3, 3),
+        " (CHECK_RAISE_MAX, ADR-0013 ZC-3); the check-point told stops here; the check goes on", TAKEN % (3, 3),
         HEAD % 0 + winservice.PASS_SAID % "the pass's words"]
 
 

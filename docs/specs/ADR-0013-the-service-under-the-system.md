@@ -1422,3 +1422,38 @@ start` over a walk longer than 32.4 s; a check that never ends.
   value of the module's.
 - ZC-7 (the rig, and landing). X55 is wired (a094b15). M12.4c2b3 lands as 0.18.0 after the fixes' gate, the
   gate's Windows jobs on the commit to be merged, and X55 read as met in the rig's Windows log.
+
+## Amendment ZD (the Table, 2026-11-27) - M12.4c2b3's fixes reviewed (NEXT, eight findings, all low) and asked on real Windows; lands as 0.18.0
+The packet is docs/review/2026-11-27-M12.4c2b3-fixes.md. Asked of the fixes' commit 41c0a35 on real Windows (the
+probe branch 075b909; x64 and ARM64; about 157000 names): `net start` ended with exit 0 and "was started
+successfully" after 42.3 s on x64 - that run's machine walked for 40 s, the longest yet - and after 32.3 s on
+ARM64; Start-Service took the start after 42.0 s and 31.9 s. On the rig (41c0a35, x64, 100000 files added): the
+walk took 6 s, the highest check-point read while it started was 2 with the wait of 60 s, and `net start` ended
+with 0 after 7.6 s - X55 met, 38 claims met and none missed. Not measured: a raising the system does not take; a
+check that never ends, and what a command that waits does once the check-point stops; the Table's own small
+fixes below, which are asked on real Windows before the merge.
+- ZD-1 (no line of the raising's before the number; finding 1, and the builder's first reading). The builder
+  read ZC-1 as the lines the raising's end writes, and that reading is taken for a failure said while the check
+  still walks: no answer exists then, so no number can come before it. For a raising in the system's call when
+  the check ends it is not enough, so the window is closed: at the check's end the runner first takes the lock
+  the raising's thread writes under - waiting at most the beat and 5 s, so that a write that never returns holds
+  nothing up - then closes the raising, works out the answer, sets a refusal's number, and only then lets the
+  lock go. On the road where the check ended by an exception this is done before that exception's words are made
+  (finding 5).
+- ZD-2 (nothing unread makes a pass; finding 2). The clock is read inside what closes the raising, so a clock
+  that fails is the check's refusal; a clock that fails after the check leaves the seconds unsaid and the answer
+  as it is; an answer whose reading raises is a refusal that says so; and on every road out of those lines that
+  is not a pass the number is 15. A repr that raises anything at all is said as that.
+- ZD-3 (counted and said in one hold; findings 3 and 6). A failure is counted, and its line written or not,
+  under one hold of the lock, so the count's line never speaks of a first that is not in the file; and where the
+  raising's end itself failed, the thread writes no line after the check's.
+- ZD-4 (words; findings 4, 7 and 8). The line at the bound says the check-point told stops there, and no more
+  than that. The test that named an order it did not show says what it shows. ZC-4's "as every exception's are"
+  is narrowed to the raising's road: `_status`'s own line, the control's, the runner's last words and the text
+  file's lost write keep an exception's words as they come - recorded for a small task of its own, not changed
+  here.
+- ZD-5 (the rig's margin). X55's copy is made with 150000 files, not 100000: the rig's machine walked 100000 in
+  6 s, and a walk shorter than two beats would read as a claim missed for a reason that is no fault.
+- ZD-6 (lands). M12.4c2b3 lands as 0.18.0 after the gate on the tree to be merged, its Windows jobs, X55 read as
+  met in the rig's Windows log, and the field run of the commit to be merged. Next of the service on Windows:
+  the record removed with the service (M12.4c2b4). Then the queue.

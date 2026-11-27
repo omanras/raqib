@@ -68,8 +68,8 @@ one higher than the last tried (1, 2, 3 and on) and CHECK_WAIT_HINT, under the s
 nothing once a Stop was asked or STOPPED told, nor after CHECK_RAISE_MAX seconds of beats (ZC-3: a check that hung
 is not told as progress for ever; one line at that moment, and the check goes on). The check's end closes it at
 once: no raising begins after it, and a raising already in the system's call finishes; RUNNING and STOPPED are told
-under the lock that call holds, so always after it (ZC-2). The answer is then worked out with nothing written, a
-refusal's number set (ZC-1), and only then is the thread waited for, at most the beat and CHECK_END_MORE seconds,
+under the lock that call holds, so always after it (ZC-2). The answer is then worked out with no line written,
+the raising's held back too (ZD-1), a refusal's number set (ZC-1), and only then is the thread waited for, at most the beat and CHECK_END_MORE seconds,
 and its lines written; where that bound passes, one line says so and the start goes on once the call returns. Its
 lines: where at least one raising was taken, how many and the last check-point taken; a raising the system did not
 take, or that raised an exception, said in one line, the first, at once, and the count of those after it in one
@@ -81,9 +81,11 @@ names; its check-point 0), `net start` gave up after 17.7 s and 19.8 s and said 
 which then ran; of a candidate never merged (ZB), it waited the whole walk and ended with 0 after 25.2 s and 32.4 s;
 of this raising as first built (Amendment ZC, the same tree), the system said the check-point 1 at 2.4 to 2.5 s, 2
 at 4.2 to 4.4 s and on, each with the wait of 60 s, then RUNNING with 0, and `net start` ended with 0 after 15.3 s
-(x64) and 32.4 s (ARM64). The fixes of Amendment ZC are not yet asked on a real machine. Not measured: a raising the
-system does not take; `net start` over a walk longer than 32.4 s or than the wait told; a beat other than 2 s; what
-`net start`'s own rule is; a check that hangs. The raising makes no walk faster.
+(x64) and 32.4 s (ARM64); of it with Amendment ZC's fixes (Amendment ZD, the same tree), `net start` ended with 0
+after 42.3 s (x64, that run's machine walking for 40 s) and 32.3 s (ARM64). Not measured: a raising the system does
+not take; `net start` over a walk longer than 42.3 s or than the wait told; a beat other than 2 s; what `net
+start`'s own rule is; a check that hangs, and what a command that waits does once the check-point stops. The
+raising makes no walk faster.
 
 Every call of the system (the platform, the environment, the dispatcher, the handler's registration, the status,
 the interrupt, the place's making and its one read, the text file's beginning, the check of its own code, the state
@@ -459,7 +461,7 @@ def _form_said(value):
     """T-1: an answer of a form the runner does not know, said by its form: its type, and its repr cut to 200."""
     try:
         said = repr(value)
-    except Exception as exc:   # a repr that fails is said so; nothing comes out of it
+    except BaseException as exc:   # a repr that fails is said so; nothing comes out of it (ZD-2)
         said = "its repr failed: %s" % type(exc).__name__
     return "%s: %s" % (type(value).__name__, _cut(said, 200))
 
@@ -879,36 +881,58 @@ class Runner:
         where it passed (one line: the pass's sentence), else False with self.code EXIT_NOT_ALONE and one line: the
         whole refusal, an answer of a form not known, or an exception out of the check (its trace first). ZB, ZC-1:
         while it runs, the check-point is raised by a thread of its own, begun just before it (the clock read after)
-        and closed the moment it ends; the answer is worked out with nothing written and a refusal's number set,
-        and only then is the thread waited for and its lines written, then the check's own line. Whatever the
+        and closed the moment it ends; the answer is worked out with no line written - the raising's held back until
+        then (ZD-1) - and a refusal's number set, and only then is the thread waited for and its lines written, then
+        the check's own line. A clock or an answer that cannot be read never makes a pass (ZD-2). Whatever the
         raising's end raises is one line where one can be written: the answer and the exit stand."""
         raising = self._begin_raising()     # ZB-2: just before the check
-        began = self.system.clock()         # ZC-1: after it, so the check's seconds are the check's own
-        trace, got, said = "", None, None
+        trace, got, said, why, began, held = "", None, None, "", None, False
+        head = CHECK_HEAD % 0.0
         try:
-            got = self.system.own_check()
-        except BaseException as exc:   # T-1, U-3: whatever ends the check is a refusal (15); no Stop is raised here
-            trace = traceback.format_exc()
-            why = "the check ended by %s" % _exc_said(exc)
+            try:
+                began = self.system.clock()     # ZC-1: after the thread is begun: the check's seconds are its own
+                got = self.system.own_check()
+            except BaseException as exc:   # T-1, U-3: whatever ends the check (or its clock) is a refusal (15)
+                held = self._close_raising()    # ZD-1: at once on this road too, before its words are made
+                trace = traceback.format_exc()
+                why = "the check ended by %s" % _exc_said(exc)
+            finally:
+                if not self.checked.is_set():
+                    held = self._close_raising()    # ZC-1: closed at once: none begins after the check's end
+            try:
+                lasted = self.system.clock() - began
+                head = CHECK_HEAD % (lasted if lasted == lasted else 0.0)
+            except BaseException:          # ZD-2: a clock that fails leaves the seconds unsaid (0.00), never the answer
+                pass
+            if not trace:
+                try:
+                    known = type(got) is tuple and len(got) == 4 and type(got[1]) is dict and type(got[2]) is list
+                    bad, words = (got[0], got[3]) if known else (None, None)
+                    if known and bad is None and type(words) is str:
+                        said = PASS_SAID % _cut(words)
+                    elif (known and words is None and type(bad) is tuple and len(bad) == 2
+                          and all(type(x) is str for x in bad)):
+                        why = REFUSED_SAID % (_cut(bad[0]), _cut(bad[1]))
+                    else:
+                        why = "the check gave an answer of a form this runner does not know (%s)" % _form_said(got)
+                except BaseException as exc:   # ZD-2: an answer that cannot be read is a refusal, never a pass
+                    said, why = None, "the check's answer could not be read (%s)" % type(exc).__name__
+            if said is None:
+                self.code = EXIT_NOT_ALONE   # first: nothing below, the raising's lines included, can leave a
+                # refusal told as another number (U-3, ZC-1)
         finally:
-            self.checked.set()          # ZC-1: the raising closed at once: none begins after the check's end
-        lasted = self.system.clock() - began
-        head = CHECK_HEAD % (lasted if lasted == lasted else 0.0)
-        if not trace:
-            known = type(got) is tuple and len(got) == 4 and type(got[1]) is dict and type(got[2]) is list
-            bad, words = (got[0], got[3]) if known else (None, None)
-            if known and bad is None and type(words) is str:
-                said = PASS_SAID % _cut(words)
-            elif known and words is None and type(bad) is tuple and len(bad) == 2 and all(type(x) is str for x in bad):
-                why = REFUSED_SAID % (_cut(bad[0]), _cut(bad[1]))
-            else:
-                why = "the check gave an answer of a form this runner does not know (%s)" % _form_said(got)
-        if said is None:
-            self.code = EXIT_NOT_ALONE   # first: nothing below, the raising's lines included, can leave a refusal
-            # told as another number (U-3, ZC-1)
+            if said is None:
+                self.code = EXIT_NOT_ALONE   # ZD-2: on any road out of the lines above that is not a pass
+            if held:
+                self.raise_lock.release()
         try:
             self._end_raising(raising)
         except BaseException as exc:   # ZC-1: nothing out of the raising's end replaces the check's answer
+            try:
+                with self.raise_lock:
+                    self.raise_late = True      # ZD-3: the raising writes no line after the check's
+            except BaseException:
+                pass
             try:
                 self._note("the raising of the check-point could not be ended as ruled (%s); the check's answer and"
                            " the exit stand (ADR-0013 ZC-1)" % _exc_said(exc))
@@ -923,6 +947,15 @@ class Runner:
             why += "; what was not read is never the system's"
         self._note("%s: %s; no watch is begun; the system is told %s" % (head, why, told(self.code)))
         return False
+
+    def _close_raising(self):
+        """ZC-1, ZD-1: the check has ended. The raising's lines are held back first - the lock its thread writes
+        under, waited for at most the beat and CHECK_END_MORE s so that a write that never returns holds nothing up
+        - and then the raising is closed: none begins after this, and no line of one in flight is written until the
+        answer is worked out and a refusal's number set. Returns whether the lock is held."""
+        held = self.raise_lock.acquire(True, self.beat + CHECK_END_MORE)
+        self.checked.set()
+        return held
 
     def _begin_raising(self):
         """ZB-2, ZB-3: the thread that raises the check-point while the check walks, begun; where it cannot be
@@ -956,8 +989,8 @@ class Runner:
         while not self.checked.wait(self.beat):
             if (point + 1) * self.beat > CHECK_RAISE_MAX:
                 self._raising_said("the check-point is raised no more: %.2f s of beats have passed while the check"
-                                   " walks (CHECK_RAISE_MAX, ADR-0013 ZC-3); whoever waits sees it stop; the check"
-                                   " goes on" % CHECK_RAISE_MAX)
+                                   " walks (CHECK_RAISE_MAX, ADR-0013 ZC-3); the check-point told stops here; the"
+                                   " check goes on" % CHECK_RAISE_MAX)
                 return
             point += 1
             failed = []
@@ -975,12 +1008,15 @@ class Runner:
                 why = failed[0] if failed else "the system did not take it"
             except Exception as exc:
                 why = "it raised %s" % _exc_said(exc)
-            with self.raise_lock:
-                self.points_failed += 1
-                first = self.points_failed == 1
-            if first:
-                self._raising_said("the check-point %d, raised while the check walks, failed: %s; said once (ADR-0013"
-                                   " ZB-3): those after it are counted and said when the check is over" % (point, why))
+            try:
+                with self.raise_lock:       # ZD-3: counted, and its line written or not, in one hold
+                    self.points_failed += 1
+                    if self.points_failed == 1 and not self.raise_late:
+                        self._note("the check-point %d, raised while the check walks, failed: %s; said once"
+                                   " (ADR-0013 ZB-3): those after it are counted and said when the check is over"
+                                   % (point, why))
+            except BaseException:
+                pass
 
     def _raising_said(self, words):
         """ZC-2: one line of the raising's thread, written only while the end has not given up on it."""
