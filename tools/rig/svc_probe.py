@@ -404,6 +404,28 @@ def survey(paths):
     return 0
 
 
+def drives(paths):
+    """Each root's kind as the system says it, its file system, and whether that keeps lists (persistent ACLs)."""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
+    k32.GetDriveTypeW.restype = wintypes.UINT
+    kinds = {0: "unknown", 1: "no root", 2: "removable", 3: "fixed", 4: "remote", 5: "cdrom", 6: "ramdisk"}
+    for root in paths:
+        kind = k32.GetDriveTypeW(root)
+        name, fs = ctypes.create_unicode_buffer(261), ctypes.create_unicode_buffer(261)
+        serial, longest, flags = wintypes.DWORD(), wintypes.DWORD(), wintypes.DWORD()
+        ok = k32.GetVolumeInformationW(root, name, 261, ctypes.byref(serial), ctypes.byref(longest),
+                                       ctypes.byref(flags), fs, 261)
+        told = ("file system %s, flags 0x%08x, lists kept (0x8): %s" % (fs.value, flags.value, bool(flags.value & 8))
+                if ok else "volume not read: error %d" % ctypes.get_last_error())
+        target = ctypes.create_unicode_buffer(1024)
+        got = k32.QueryDosDeviceW(root[:2], target, 1024)
+        print("%s kind %d (%s); %s; device %s" % (root, kind, kinds.get(kind, "?"), told,
+                                                target.value if got else "not read: error %d"
+                                                % ctypes.get_last_error()))
+    return 0
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "--make-owned":
         print("made closed with its owner named: %s" % make_owned(argv[2]))
@@ -411,6 +433,8 @@ def main(argv):
         return 0
     if len(argv) >= 4 and argv[1] == "--svc":
         return svc_call(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
+    if len(argv) >= 3 and argv[1] == "--drive":
+        return drives(argv[2:])
     if len(argv) >= 3 and argv[1] == "--survey":
         return survey(argv[2:])
     if len(argv) == 3 and argv[1] == "--make":
