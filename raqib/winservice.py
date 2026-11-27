@@ -36,9 +36,18 @@ text file. Each refusal, a watch that ended without being asked, an exception ou
 runner's own is STOPPED with the system's service-specific exit and a number of its own, EXIT_BASE + n (AF-3; the
 list: EXIT_WORDS, docs/specs/SERVICE.md).
 
+The watch before (ADR-0013 AH-2, M12.4b): after RUNNING and before the watch, the runner asks raqib/host.py's
+holder() whether another host watch's state still holds the place (unfinished, its heartbeat fresh: a watch ended
+from outside leaves such a state). Where it does, one line of the text file says so and the runner waits for that
+heartbeat to go stale - the state's own staleness less its age, plus one second, never more than HELD_WAIT_MAX -
+asking again every HELD_ASK_EVERY; then it starts the watch, which says the watch before as a hole of its own
+(AH-1). A Stop during the wait ends it at once: no watch is begun, the system is told 0. A state still fresh after
+the wait is a living watch: the watch's own refusal stands (20). Not held, stale, or a heartbeat that cannot be
+parsed: no wait and no line (the watch refuses the last itself, D-6).
+
 Every call of the system (the platform, the environment, the dispatcher, the handler's registration, the status,
-the interrupt, the place's making and its one read, the text file's beginning, and the watch's own entry) goes
-through one object, System; a test hands its own, so no test needs Windows, a service manager or ProgramData.
+the interrupt, the place's making and its one read, the text file's beginning, the state of the watch before, the
+clock and the wait, and the watch's own entry) goes through one object, System; a test hands its own, so no test needs Windows, a service manager or ProgramData.
 ctypes is imported inside System, at its first call of Windows, never at the module's import. Nothing runs at
 import. The standard library only; no program is started; no network. One folder is made, the place; one name is
 read, the place's.
@@ -52,6 +61,7 @@ import re
 import signal
 import sys
 import threading
+import time
 import traceback
 import types
 
@@ -127,6 +137,9 @@ EXIT_WORDS = {
     EXIT_RUNNER_FAILED: "an exception of the runner's own (not the watch's)",
 }
 WATCH_RESULTS = (0, 1, 3)       # clean, an alarm, incomplete: no failure of the service
+HELD_FRESH = "fresh"            # raqib/host.py HELD_FRESH: holder()'s word for a state another watch still holds
+HELD_WAIT_MAX = 60.0            # AH-2: seconds waited at most for the state of the watch before to go stale
+HELD_ASK_EVERY = 1.0            # AH-2: seconds between two asks during that wait
 
 
 class Refusal(Exception):
@@ -301,6 +314,20 @@ class System:
             pass
         return open(path, "xb")
 
+    # --- the watch before (AH-2) ---
+    def held(self, place):
+        """raqib/host.py's holder() of the place's host folder (the watch's own, HOME being the place), at the
+        wall clock: whether another host watch still holds it, and what was read."""
+        from raqib import host
+        return host.holder(home=place, wall=time.time)
+
+    def clock(self):
+        return time.monotonic()
+
+    def pause(self, seconds, stop):
+        """Waits `seconds`, or until `stop` (a threading.Event) is set: True where it is set (a Stop: at once)."""
+        return stop.wait(seconds)
+
     # --- the watch ---
     def watch(self, argv, out):
         from raqib import cli   # Raqib's own entry (ADR-0007 CI-3)
@@ -315,6 +342,11 @@ def _say(text):
         sys.stderr.flush()
     except Exception:
         pass
+
+
+def _printable(value):
+    """A value read from a state, as one short line of printable text."""
+    return "".join(c if c.isprintable() else "?" for c in str(value))[:80]
 
 
 def _drive_path(text):
@@ -637,8 +669,34 @@ class Runner:
         with self.lock:
             if not self.stop_asked.is_set():
                 self._status(RUNNING)
+        self._wait_for(place)
         self.outcome = self._watch()
         self._finish()
+
+    def _wait_for(self, place):
+        """AH-2: where the state of another host watch still holds the place, one line, then a wait of the state's
+        own staleness less its age plus one second (at most HELD_WAIT_MAX), asked again every HELD_ASK_EVERY, until
+        it is no longer held fresh, the wait is over, or a Stop comes (at once: the watch is then not begun)."""
+        if self.stop_asked.is_set():
+            return
+        held = self.system.held(place)
+        if held.get("held") != HELD_FRESH:
+            return
+        wait = min(max(held["stale"] - held["age"], 0) + 1.0, HELD_WAIT_MAX)
+        self._note("another host watch's state still holds the place (run %s, pid %s, heartbeat %.0f s ago, stale"
+                   " after %g s): it was ended without its end, or it still watches; waiting up to %.1f s for it to"
+                   " go stale, asked again every %g s, then the watch" % (
+                       _printable(held.get("run")), _printable(held.get("pid")), max(held["age"], 0), held["stale"],
+                       wait, HELD_ASK_EVERY))
+        began = self.system.clock()
+        while True:
+            left = wait - (self.system.clock() - began)
+            if left <= 0:
+                return
+            if self.system.pause(min(HELD_ASK_EVERY, left), self.stop_asked):
+                return          # a Stop: _watch() begins nothing
+            if self.system.held(place).get("held") != HELD_FRESH:
+                return
 
     def _finish(self):
         """The end of the watch's call: its exit decided, its trace and the runner's last line written. Once -

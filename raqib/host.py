@@ -473,6 +473,52 @@ def host_dir(home=None):
     return os.path.join(home or os.path.expanduser("~"), ".raqib", DIR_NAME)
 
 
+HELD_NONE, HELD_FRESH, HELD_STALE, HELD_UNPARSED = "none", "fresh", "stale", "unparsed"   # holder()'s answers
+UNENDED = "watch-unended"   # ADR-0013 AH-1: the hole of a watch started over a state another watch left unfinished
+
+
+def holder(home=None, wall=None, path=None):
+    """ADR-0013 AH-1, AH-2 (M12.4b): whether another host watch holds a
+    home, read from the state it writes (path, or the state file of home's
+    host folder) at wall() (default time.time), by the test every watch
+    makes at its start (D-6). It never raises and writes nothing. A dict:
+    held HELD_NONE where there is no state that can be read, where the
+    state is finished, or where it is no host watch's (why says which);
+    HELD_UNPARSED where it is unfinished and its heartbeat cannot be
+    parsed; else HELD_FRESH where the heartbeat's age is at most the
+    state's own stale_after_seconds (STALE_SECONDS where it holds no
+    number) and HELD_STALE where it is older. run, pid and heartbeat are
+    as the state holds them (None where there is no state's); beat is the
+    heartbeat in seconds of the wall clock, age the seconds from it to
+    wall(), stale the staleness read."""
+    path = path or os.path.join(host_dir(home), ROUNDS_NAME) + STATE_SUFFIX
+    got = {"held": HELD_NONE, "why": None, "path": path, "run": None, "pid": None, "heartbeat": None, "beat": None,
+           "age": None, "stale": None}
+    try:
+        with open(path, encoding="ascii") as f:
+            other = json.load(f)
+    except FileNotFoundError:
+        return dict(got, why="no state")
+    except (OSError, ValueError) as exc:
+        return dict(got, why="the state cannot be read (%s)" % type(exc).__name__)
+    if not (isinstance(other, dict) and other.get("mode") == HOST):
+        return dict(got, why="the state is no host watch's")
+    got.update(run=other.get("run"), pid=other.get("pid"), heartbeat=other.get("heartbeat"))
+    if other.get("finished"):
+        return dict(got, why="the state is finished")
+    try:
+        beat = datetime.datetime.strptime(str(other.get("heartbeat")), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except ValueError:
+        return dict(got, held=HELD_UNPARSED, why="the heartbeat cannot be parsed")
+    stale = other.get("stale_after_seconds")
+    stale = stale if isinstance(stale, (int, float)) and not isinstance(stale, bool) else STALE_SECONDS
+    age = (wall or time.time)() - beat
+    fresh = age <= stale
+    return dict(got, held=HELD_FRESH if fresh else HELD_STALE, beat=beat, age=age, stale=stale,
+                why="unfinished, its heartbeat %s" % ("fresh" if fresh else "stale"))
+
+
 def iso(moment):
     moment = moment.astimezone(datetime.timezone.utc)
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (moment.microsecond // 1000)
@@ -2388,12 +2434,18 @@ class HostWatch:
         self.suspect_index = {}      # K-4: tree key -> its opaque per-run index (the session id sent)
         self.suspect_unfit = {}      # K-2: tree key -> the sources said "not sendable"
         self.suspect_hold = False    # K-1: a call failed: continued calls wait for the next R-th round
-        self._refuse_second()
+        held = self._refuse_second()
         try:
             os.makedirs(self.dir, exist_ok=True)
         except OSError as exc:
             raise HostError("cannot create %s: %s" % (self.dir, exc.strerror or exc))
         self.seq = self.first_seq = self._resume()
+        if held["held"] == HELD_STALE:   # ADR-0013 AH-1: the watch before ended without its end; once, at the start
+            self._hole(self.t0, UNENDED, "the host watch before this one, run %s (pid %s), ended without its end:"
+                       " its state %s was left unfinished, its last heartbeat %s; nothing was watched from this home"
+                       " for %d s, from that heartbeat to this start (a watch ended from outside, a crash or a power"
+                       " loss)" % (_safe(held["run"]), _safe(held["pid"]), self.state_path,
+                                   _safe(str(held["heartbeat"])[:40]), int(max(held["age"], 0))))
 
     # --- one host watch per home; seqs continue (C-2) ----------------------------
 
@@ -2402,29 +2454,20 @@ class HostWatch:
         not finished and its heartbeat is fresh (stale after its own
         stale_after_seconds, as every watch reads it), or (D-6) its
         heartbeat cannot be parsed. Two watches started in the same instant
-        both find no state: a recorded hole (D-6)."""
-        try:
-            with open(self.state_path, encoding="ascii") as f:
-                other = json.load(f)
-        except (OSError, ValueError):
-            return
-        if not (isinstance(other, dict) and other.get("mode") == HOST and not other.get("finished")):
-            return
-        try:
-            beat = datetime.datetime.strptime(str(other.get("heartbeat")), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
-                tzinfo=datetime.timezone.utc).timestamp()
-        except ValueError:   # D-6: an unknown state is not clearance (A3)
+        both find no state: a recorded hole (D-6). ADR-0013 AH-1: what
+        holder() read is returned (an unfinished, stale state is said as a
+        hole of this run by __init__)."""
+        held = holder(path=self.state_path, wall=self.wall_clock)
+        if held["held"] == HELD_UNPARSED:   # D-6: an unknown state is not clearance (A3)
             raise HostError("the host watch state %s holds a heartbeat that cannot be parsed (%s) and is not"
                             " finished: another raqib watch --host may be watching this home; one host watch per"
                             " home; stop it, or remove that file once no host watch runs" % (
-                                self.state_path, _safe(str(other.get("heartbeat"))[:40])))
-        stale = other.get("stale_after_seconds")
-        stale = stale if isinstance(stale, (int, float)) and not isinstance(stale, bool) else STALE_SECONDS
-        age = self.wall_clock() - beat
-        if age <= stale:
+                                self.state_path, _safe(str(held["heartbeat"])[:40])))
+        if held["held"] == HELD_FRESH:
             raise HostError("another raqib watch --host is watching this home (run %s, pid %s, heartbeat %.0f s"
                             " ago): one host watch per home; stop it first (%s)" % (
-                                _safe(other.get("run")), _safe(other.get("pid")), max(age, 0), self.state_path))
+                                _safe(held["run"]), _safe(held["pid"]), max(held["age"], 0), self.state_path))
+        return held
 
     def _resume(self):
         """The last seq of rounds.jsonl, read from its last good line at the

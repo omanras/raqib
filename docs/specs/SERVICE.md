@@ -124,7 +124,11 @@ The watched agent, running as a person without rights, cannot stop, restart or c
 Root can, and root is also any user with sudo (a password it knows, none asked, or a ticket still valid) and any
 user a polkit rule lets manage units: an agent running as such a user can stop it. A watch made to exit comes
 back after 5 s, a gap each time; systemd counts the restarts (NRestarts) and `raqib service status` says the
-count. A watch's exit status 1 is its own ALARM at its end, or an error; the journal says which
+count. A watch ended from outside (killed, not stopped) leaves its state unfinished, and a watch refuses to start
+while that state's heartbeat is not older than its `stale_after_seconds` (30 s): the unit's next starts are refused
+and systemd starts it again every 5 s until one passes (read in the code, as ADR-0013 Amendment H says; not measured
+on Linux). The watch that passes says the one before as a hole of its own run, `watch-unended` (AH-1, below under
+Windows): the gap is in the record and in the events, not only in the journal. A watch's exit status 1 is its own ALARM at its end, or an error; the journal says which
 (`journalctl -u raqib-watch.service`). A stop after a finding reads as `failed` to systemd, since the watch's own
 exit is 1 then; this stays for S1, and `raqib service remove` clears it (`systemctl reset-failed`). A user who is
 root by sudo or polkit can also change the unit or Raqib's code: a change of the unit shows in status (NOT AS
@@ -266,12 +270,12 @@ unit that could not be stopped is not removed.
 ADR-0013 Amendment E (AE-1, AE-3, AE-4), Amendment F (AF-1 to AF-4, which replace AE-2's closing of a folder that
 exists) and Amendment G (AG-1, AG-2). This is the first part of S4: on Windows the host watch runs as a service of the
 system's, by the standard library alone (ctypes; no new dependency), in raqib/winservice.py. Installing, removing and
-asking the state of the service are not here yet, and neither is what a watch started again after a killed one does
-(AE-6); until they are, the line above that there is nothing for Windows is true of `install`, `remove` and `status`
-only. Four sources are named below and nothing else is called measured: Amendment E (a candidate of 150 lines in the
-same shape, not this runner), Amendment F's field run of c125f62 (the first builder's runner, as a real service),
-Amendment F's measurements (the calls this runner makes, by a probe), and Amendment G (this runner's own field run as
-a real service, f8af8f5, and two measurements more by a probe).
+asking the state of the service are not here yet (M12.4c); until they are, the line above that there is nothing for
+Windows is true of `install`, `remove` and `status` only. Five sources are named below and nothing else is called
+measured: Amendment E (a candidate of 150 lines in the same shape, not this runner), Amendment F's field run of
+c125f62 (the first builder's runner, as a real service), Amendment F's measurements (the calls this runner makes, by
+a probe), Amendment G (this runner's own field run as a real service, f8af8f5, and two measurements more by a probe),
+and Amendment H (the runner of M12.4a ended from outside, by a probe; before the wait below was built).
 
 **The shape.** `raqib service run` is the command the system's service manager runs; nobody else. Its process hands
 the system its service table (StartServiceCtrlDispatcherW) in a second thread, and runs the watch in the main thread
@@ -410,6 +414,38 @@ file inside a folder closed afterwards, as said above; and the same administrato
 the administrators when started from PowerShell and owned by the user himself when started from Git's bash - the
 service is started by the system, and the folder it made was the administrators' in every run.
 
+**The watch before (AH-1, AH-2; M12.4b).** A service ended from outside (its process killed) leaves the watch's
+state unfinished, its heartbeat fresh for 30 s. Amendment H measured it (the probe branch 02de365; GitHub's Windows
+machines, x64 and ARM64; the runner of M12.4a, before this was built): with the system told to start the service again
+after 2 s, the system said so (event 7031) and started it, the new watch refused ("another raqib watch --host is
+watching this home (run ..., pid ..., heartbeat 3 s ago): one host watch per home; stop it first"), ended with 2, and
+the service read Stopped and was not started again. Read in the code and not measured: a watch refuses an unfinished
+state until its heartbeat is older than the state's own `stale_after_seconds` (30 s), by the heartbeat alone, and
+(before M12.4b) a watch that started over a stale unfinished state took the home and said nothing of the watch before
+it. Built in M12.4b, on every system: one function of raqib/host.py, `holder()`, reads whether another host watch
+holds a home (nothing held: no state, a finished state, a state that is no host watch's; held and fresh; unfinished
+and stale; a heartbeat that cannot be parsed), and both the watch's own refusal (unchanged, in the same words) and the
+runner rest on it. AH-1: a host watch that starts over an unfinished, stale state says one hole of its own run at its
+start, of the kind `watch-unended`, in these words: "the host watch before this one, run RUN (pid PID), ended without
+its end: its state PATH was left unfinished, its last heartbeat HEARTBEAT; nothing was watched from this home for N s,
+from that heartbeat to this start (a watch ended from outside, a crash or a power loss)" - N the whole seconds from
+that heartbeat to this start, as the wall clock reads them. It is a hole, not a blind spot: the watch's result is not
+clean (exit 3 where nothing else makes it 1), and it is written to the events file once, as every hole is. None where
+there was no state, where the state was finished, or where the watch is refused. AH-2: after RUNNING and before the
+watch, the runner asks `holder()` of the place; where another watch's state still holds it, fresh, one line of the
+text file says the run, the pid, the heartbeat's age and how long it will wait ("another host watch's state still
+holds the place (run ..., pid ..., heartbeat 4 s ago, stale after 30 s): ...; waiting up to 27.0 s for it to go
+stale, asked again every 1 s, then the watch"), and it waits the state's own staleness less its age, plus one second,
+never more than 60 s, asking again every second, and then starts the watch, which says AH-1's hole. The service reads
+RUNNING while it waits (AF-2's order kept). A Stop during the wait ends it at once: no watch is begun, the system is
+told 0, and the text file has AF-4's line ("the watch was stopped before it gave a report (it was not begun)"). A
+state still fresh after the wait is a living watch: the watch is started and its own refusal stands (20). Not held,
+stale, or a heartbeat that cannot be parsed: no wait and no line (the watch refuses the last itself). The wait goes
+through the system's object (winservice.System: `held`, `clock`, `pause`); the runner's tests use a stand-in's clocks
+and no real second. Not yet run on a real machine: the Table runs it as a service on GitHub's Windows machines after
+it lands; the rig's claim X48 reads that run (`tools/rig/check.py --service-run RUNFILE --service-events
+EVENTSFILE`; the job's wiring is the Table's).
+
 **What was not measured.** A place whose list is closed in meaning but written otherwise (refused, by the letter); a
 place on a volume that keeps no owners; an owner written as a whole SID and not as SY or BA (refused with 13, by the
 letter); a Stop that comes while the service is still START_PENDING; a RUNNING the system does not take (the service
@@ -420,6 +456,7 @@ folder closed after he put it there; reparse points of other kinds than a juncti
 unfinished state; M12.4b's); a watch that ignores its interrupt (M12.4b's); a shutdown of the machine (the control was
 not sent); a service's start at boot; the manager's limit of 30 s under a slow start; another account than the
 system's; a place on another volume, or one with a file held open by another process; Windows before the runners'
-versions. A watch started while the one before left its state unfinished, and how long the service waits then, are
-M12.4b's; the install, its start at boot, the system told to start it again, a refusal where the code it would run is
+versions. Of the watch before (Amendment H): a power loss; a machine's shutdown without a Stop; a clock set back
+between the heartbeat and the start (the seconds said are then wrong, and said as read); taking over at once where the
+process the state names is gone (recorded, not ruled). The install, its start at boot, the system told to start it again, a refusal where the code it would run is
 not the system's alone, and the event log are M12.4c's.

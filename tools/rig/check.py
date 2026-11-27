@@ -6,6 +6,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
                               [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
                               [--events-check FILE] [--packed FILE]
+                              [--service-run RUNFILE] [--service-events EVENTSFILE]
                               [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
@@ -48,6 +49,12 @@ MISSED otherwise, an answer given and missing or empty included (n/a where the r
 (ADR-0007 CG-3, M17.2a): X47 its PROCESS EVENTS section says rounds asked N (at least 3) and answered N, no line says
 the helper ended or was started again, and no tree of its report is the packed program itself; MISSED otherwise, a
 report given and missing or empty included; n/a off Linux, or where no report was given.
+--service-run, --service-events: what the rig's Windows job kept of the service ended from outside and started again
+by the system (ADR-0013 AH-3, M12.4b): RUNFILE holds lines `key: value` (killed-pid, again-pid, again-seconds,
+state), EVENTSFILE the place's events.jsonl. X48 MET where the service ran again (state Running, again-pid a number
+other than killed-pid, again-seconds at most 90) and the events hold two runs of a host watch, the later with the
+hole watch-unended whose words name the earlier run's id, the earlier with no end; MISSED with words for each thing
+not found, a file given and missing included; n/a where neither file was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1153,6 +1160,116 @@ def read_packed(report, platform):
         return [(name, MISSED, "the packed watch's report cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_AGAIN_NAME = ("X48 a service of Windows ended from outside runs again with another pid, and its next watch says"
+                      " the one before ended without its end")
+AGAIN_SECONDS_MAX = 90     # AH-3: the seconds from the end from outside to the service running again, at most
+UNENDED_KIND = "watch-unended"   # raqib/host.py UNENDED: the hole of a watch started over a state left unfinished
+UNENDED_RUN = re.compile(r"the host watch before this one, run (\S+) \(pid ")
+
+
+def _run_lines(text):
+    """The `key: value` lines of a RUNFILE, as a dict (the last of a key wins); other lines are not read."""
+    got = {}
+    for line in str(text).replace("\r\n", "\n").splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip():
+            got[key.strip().lower()] = value.strip()
+    return got
+
+
+def _int(text):
+    try:
+        return int(str(text).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def read_service_again(runfile, events):
+    """X48 (ADR-0013 AH-3, M12.4b): what the rig's Windows job kept of the service it ended from outside. runfile:
+    the RUNFILE's text (None: not given); events: the place's events.jsonl (None: not given). MET where the RUNFILE
+    says the service ran again (state Running, again-pid a number other than killed-pid, again-seconds at most
+    AGAIN_SECONDS_MAX) and the events hold two runs of a host watch, the later with the hole UNENDED_KIND whose words
+    name the earlier run's id, the earlier with no end. MISSED with words for each thing not found; n/a where neither
+    was given. It never raises."""
+    name = SERVICE_AGAIN_NAME
+    try:
+        if runfile is None and events is None:
+            return [(name, SKIP, "no service run was given (--service-run, --service-events)")]
+        missing = []
+        if runfile is None or not str(runfile).strip():
+            missing.append("the run's file is %s (silence is a finding)" % ("not given" if runfile is None else "empty"))
+        else:
+            run = _run_lines(runfile)
+            killed, again, seconds = _int(run.get("killed-pid")), _int(run.get("again-pid")), run.get("again-seconds")
+            if run.get("state") != "Running":
+                missing.append("the service's state is %s, not Running" % (run.get("state") or "not said"))
+            if killed is None:
+                missing.append("no killed-pid that is a number (%s)" % (run.get("killed-pid") or "not said"))
+            if again is None:
+                missing.append("no again-pid that is a number (%s)" % (run.get("again-pid") or "not said"))
+            elif again == killed:
+                missing.append("again-pid %d is killed-pid: the service did not run again with another pid" % again)
+            try:
+                secs = float(seconds)
+            except (TypeError, ValueError):
+                secs = None
+            if secs is None or secs != secs:
+                missing.append("no again-seconds that is a number (%s)" % (seconds or "not said"))
+            elif secs > AGAIN_SECONDS_MAX:
+                missing.append("again-seconds %g is over %d" % (secs, AGAIN_SECONDS_MAX))
+        found = None
+        if events is None or not str(events).strip():
+            missing.append("the place's events are %s (silence is a finding)" % (
+                "not given" if events is None else "empty"))
+        else:
+            runs, order = {}, []
+            for line in str(events).replace("\r\n", "\n").splitlines():
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                w = e.get("watch") if isinstance(e, dict) else None
+                if not isinstance(w, dict) or w.get("mode") != "host" or not w.get("run"):
+                    continue
+                if w["run"] not in runs:
+                    order.append(w["run"])
+                    runs[w["run"]] = {"end": False, "named": []}
+                if e.get("kind") == "watch" and e.get("state") == "end":
+                    runs[w["run"]]["end"] = True
+                hole = e.get("hole")
+                if e.get("kind") == "hole" and isinstance(hole, dict) and hole.get("kind") == UNENDED_KIND:
+                    m = UNENDED_RUN.search(str(e.get("summary") or ""))
+                    runs[w["run"]]["named"].append(m.group(1) if m else None)
+            if len(order) < 2:
+                missing.append("the events hold %d run(s) of a host watch, not two" % len(order))
+            saying = [r for r in order if runs[r]["named"]]
+            if not saying:
+                missing.append("no run's events hold the hole %s" % UNENDED_KIND)
+            for later in saying:
+                for earlier in runs[later]["named"]:
+                    if earlier in runs and order.index(earlier) < order.index(later) and not runs[earlier]["end"]:
+                        found = (earlier, later)
+            if saying and found is None:
+                why = []
+                for later in saying:
+                    for earlier in runs[later]["named"]:
+                        if earlier is None:
+                            why.append("the hole of run %s names no run" % later)
+                        elif earlier not in runs or order.index(earlier) > order.index(later):
+                            why.append("the hole of run %s names run %s, which is not an earlier run of the events"
+                                       % (later, earlier))
+                        else:
+                            why.append("the hole of run %s names run %s, which has an end" % (later, earlier))
+                missing.append("; ".join(why))
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "the service ran again: pid %d, not %d, Running %g s after its end from outside; run %s"
+                 " says the hole %s naming run %s, which has no end" % (again, killed, secs, found[1], UNENDED_KIND,
+                                                                       found[0]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the service's run cannot be read (%s)" % type(exc).__name__)]
+
+
 SHORT_TOOL_NAME = ("X36 the stand-in's wget, a child that lives under a second, is a NET-TOOL finding of its tree that"
                    " names wget")
 
@@ -1367,6 +1484,8 @@ def main(argv=None):
     p.add_argument("--autostart")
     p.add_argument("--events-check")
     p.add_argument("--packed")
+    p.add_argument("--service-run")
+    p.add_argument("--service-events")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1395,6 +1514,9 @@ def main(argv=None):
         rows += read_packed(text(a.packed) if os.path.isfile(a.packed) else "", a.platform)
     else:
         rows += read_packed(None, a.platform)
+    # X48 (ADR-0013 AH-3): a file given and missing is the job's silence, MISSED; neither given, n/a
+    given = [None if f is None else (text(f) if os.path.isfile(f) else "") for f in (a.service_run, a.service_events)]
+    rows += read_service_again(*given)
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

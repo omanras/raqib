@@ -871,3 +871,111 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert '--packed "$RUNNER_TEMP/packed.out"' in linux
     windows = rig[rig.index("\n  windows:"):rig.index("\n  linux:")]
     assert "pyinstaller" not in windows.lower() and "--packed" not in windows
+
+
+# --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
+RUN_A, RUN_B = "20261127T080000.000Z-4242", "20261127T080041.000Z-5150"
+RUNFILE = "killed-pid: 4242\nagain-pid: 5150\nagain-seconds: 41.3\nstate: Running\n"
+
+
+def ev(run, kind, **kw):
+    return json.dumps(dict({"kind": kind, "watch": {"mode": "host", "run": run, "platform": "win32"}}, **kw))
+
+
+UNENDED_SUMMARY = ("watch-unended: the host watch before this one, run %s (pid 4242), ended without its end: its state"
+                   " C:\\ProgramData\\Raqib\\.raqib\\host\\rounds.jsonl.watch.json was left unfinished, its last"
+                   " heartbeat 2026-11-27T08:00:09.500Z; nothing was watched from this home for 31 s, from that"
+                   " heartbeat to this start (a watch ended from outside, a crash or a power loss)" % RUN_A)
+EVENTS_PAIR = "\n".join([
+    ev(RUN_A, "watch", state="start"), ev(RUN_A, "heartbeat"),
+    ev(RUN_B, "watch", state="start"),
+    ev(RUN_B, "hole", about="hole:1", hole={"class": "hole", "kind": "watch-unended"}, summary=UNENDED_SUMMARY),
+    ev(RUN_B, "heartbeat"), ev(RUN_B, "watch", state="end")]) + "\n"
+
+
+def x48(runfile=RUNFILE, events=EVENTS_PAIR):
+    ((ident, state, words),) = check.read_service_again(runfile, events)
+    assert ident.startswith("X48 ") and ident == check.SERVICE_AGAIN_NAME
+    return state, words
+
+
+def test_x48_met_where_the_service_ran_again_and_the_later_run_says_the_earlier_one_that_has_no_end():
+    state, words = x48()
+    assert state == check.MET, words
+    assert "pid 5150, not 4242, Running 41.3 s" in words and "run %s says the hole watch-unended naming run %s" % (
+        RUN_B, RUN_A) in words
+    assert x48(RUNFILE.replace("\n", "\r\n"), EVENTS_PAIR.replace("\n", "\r\n"))[0] == check.MET
+    assert x48(RUNFILE.replace("41.3", "90"))[0] == check.MET
+    assert check.AGAIN_SECONDS_MAX == 90 and check.UNENDED_KIND == "watch-unended"
+
+
+def test_x48_met_on_the_events_two_real_watches_write(tmp_path, monkeypatch):
+    import sys
+    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(ROOT / "tests"))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    import test_host_unended as unended
+    from raqib import host
+    assert host.UNENDED == check.UNENDED_KIND
+    w1, c1 = unended.watch(tmp_path)
+    unended.rounds(w1, c1, 2)                          # ended without its end: never finished
+    w2, c2 = unended.watch(tmp_path, wall0=unended.BASE + 41)
+    unended.rounds(w2, c2, 1)
+    w2.finish()
+    pid = w1.state(c1())["pid"]
+    events = (tmp_path / "home" / ".raqib" / "host" / "events.jsonl").read_text(encoding="ascii")
+    state, words = x48("killed-pid: %d\nagain-pid: %d\nagain-seconds: 41\nstate: Running\n" % (pid, pid + 1), events)
+    assert state == check.MET and "naming run %s" % w1.run in words, words
+
+
+@pytest.mark.parametrize("runfile, events, said", [
+    (RUNFILE.replace("state: Running", "state: Stopped"), EVENTS_PAIR, "the service's state is Stopped, not Running"),
+    (RUNFILE.replace("state: Running\n", ""), EVENTS_PAIR, "the service's state is not said, not Running"),
+    (RUNFILE.replace("again-pid: 5150", "again-pid: 4242"), EVENTS_PAIR,
+     "again-pid 4242 is killed-pid: the service did not run again with another pid"),
+    (RUNFILE.replace("again-pid: 5150", "again-pid: none"), EVENTS_PAIR, "no again-pid that is a number (none)"),
+    (RUNFILE.replace("killed-pid: 4242\n", ""), EVENTS_PAIR, "no killed-pid that is a number (not said)"),
+    (RUNFILE.replace("41.3", "91"), EVENTS_PAIR, "again-seconds 91 is over 90"),
+    (RUNFILE.replace("41.3", "soon"), EVENTS_PAIR, "no again-seconds that is a number (soon)"),
+    ("", EVENTS_PAIR, "the run's file is empty (silence is a finding)"),
+    (None, EVENTS_PAIR, "the run's file is not given"),
+    (RUNFILE, "", "the place's events are empty (silence is a finding)"),
+    (RUNFILE, None, "the place's events are not given"),
+    (RUNFILE, "\n".join(l for l in EVENTS_PAIR.splitlines() if RUN_A not in l.split('"summary"')[0]),
+     "the events hold 1 run(s) of a host watch, not two"),
+    (RUNFILE, EVENTS_PAIR.replace('"watch-unended"', '"rounds-corrupt"'), "no run's events hold the hole watch-unended"),
+    (RUNFILE, EVENTS_PAIR + ev(RUN_A, "watch", state="end") + "\n",
+     "the hole of run %s names run %s, which has an end" % (RUN_B, RUN_A)),
+    (RUNFILE, EVENTS_PAIR.replace("run %s (pid" % RUN_A, "run 20261127T070000.000Z-1 (pid"),
+     "names run 20261127T070000.000Z-1, which is not an earlier run of the events"),
+    (RUNFILE, EVENTS_PAIR.replace("the host watch before this one, run", "a watch before"),
+     "the hole of run %s names no run" % RUN_B),
+    (RUNFILE, EVENTS_PAIR.replace('"mode": "host"', '"mode": "project"'), "the events hold 0 run(s) of a host watch"),
+])
+def test_x48_missed_for_each_thing_not_found(runfile, events, said):
+    state, words = x48(runfile, events)
+    assert state == check.MISSED and said in words, words
+
+
+def test_x48_n_a_where_neither_file_was_given():
+    assert x48(None, None) == (check.SKIP, "no service run was given (--service-run, --service-events)")
+
+
+def test_x48_main_reads_both_files_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "run.txt").write_text(RUNFILE, encoding="utf-16")     # a redirect of Windows PowerShell 5
+    (tmp_path / "events.jsonl").write_text(EVENTS_PAIR, encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X48 " in x and not x.startswith("::")]
+        return line.split()[0]
+    both = ["--service-run", str(tmp_path / "run.txt"), "--service-events", str(tmp_path / "events.jsonl")]
+    assert row(both) == check.MET
+    assert row(["--service-run", str(tmp_path / "none.txt"), "--service-events", str(tmp_path / "events.jsonl")]) == \
+        check.MISSED
+    assert row(["--service-run", str(tmp_path / "run.txt")]) == check.MISSED   # the events not given: MISSED
+    assert row([]) == check.SKIP
