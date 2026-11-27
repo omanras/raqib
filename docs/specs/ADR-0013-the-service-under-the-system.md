@@ -914,3 +914,41 @@ changed from another module), and its list of what it does not see was not whole
   M12.4c2a2 (R-3), then M12.4c2b (K-9, O-5, Q's two additions: the runner asks the check at its own start as the
   system and does not watch a tree it does not take; the install writes the command by the path the check
   judged).
+
+## Amendment S (the Table, 2026-11-27) - the review of M12.4c2a2 (docs/review/2026-11-27-M12.4c2a2.md): what the hold on the libraries is for, and where it ends
+The third reviewer of this hold found its tables true to the tree, compared exactly both ways, and every one of
+the thirty forms the two reviews before had named failing at its own line - and then defeated it again: a
+library's object reached from another file, through getattr of its holder, a closure or the heap; the names
+CI-3's hand-over reads bound otherwise; the environment written through a name it was bound to; a table changed
+by its name written in a string; the interpreter's own loaders of code. Verdict REDO. The findings are right, and
+the fault is the Table's: three reviews were asked to defeat a reading of source text, and source text can
+always be written to defeat a reading of it. Whoever can write a file of raqib/ can write anything there; a scan
+is no wall against that, and R-3's "a new load cannot be written without changing the test's own list" promised
+one.
+- S-1 (what the hold is for). It guards against a change made in good faith that no reader notices: a new
+  library's name, a library loaded by a path, a folder added to the search, the PATH or the whole environment
+  set, a loader handed somewhere new, ctypes used in a way the tree did not use it. Each of those, written the
+  ordinary way, changes a table of the test, and a reviewer reads the table's change. It does not hold code
+  written to get past it, and no later task is asked to make it. FOR: the claim is one that can be kept.
+  MUST NOT TOUCH: the tables as built (true, and exact both ways).
+- S-2 (said exactly). The test's first lines and the three documents say S-1 in its own words, and name what is
+  therefore not held: an object of a library reached outside the function and file that loaded it, or by
+  getattr of what holds it, a closure, or the interpreter's own lists of live objects; a name the held
+  statements read, bound otherwise elsewhere; a table reached by its name as a string from another module; the
+  interpreter's own roads to code that is not a library by name (its import system given a path, sys.path,
+  extension modules); what the system's own libraries load by the registry's word; and all that R-3 already
+  said. "Any other fails" is said nowhere.
+- S-3 (the ordinary forms still missed, closed; findings 3, 6, 7, 8). The environment written through a name
+  os.environ was bound to in the same function is an ordinary form: followed and held. getattr of a library's
+  object by a name beginning with an underscore is held as any other use. A class pattern's keyword names are
+  read as mentions. That `sys.modules` is counted where a file imports sys is proved by a case of its own.
+- S-4 (the cost; the builder's question 2 and the review's view). `compile`, `exec` and `eval` reach code only as
+  the interpreter's own names: counted as names, as attributes of anything but a module bound by `import re`,
+  and in strings that are not docstrings. A new regular expression or a sentence of help no longer changes a
+  table.
+- S-5 (the builder's questions, kept as built unless S-3 or S-4 say otherwise). The twelve words added; case
+  kept; a read of the environment by any key not counted; compound statements held whole; `loader` counted in
+  other files; the two tables. The form autostart's reader of a drive's kind has (a library's name bound again)
+  is held as it is and stays.
+- S-6 (lands after the REDO and a reading of S-2 to S-4 alone; and next). No fourth attempt to defeat it is asked.
+  It moves no number (a test and its documents). Next: M12.4c2b1, then M12.4c2b2.
