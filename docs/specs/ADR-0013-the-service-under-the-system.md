@@ -830,3 +830,50 @@ in.
   asks the check and refuses unless it is taken; the command quoted, and for a plain interpreter with `-I`; the
   place made with its owner named (AG-5); the start at boot; the system told to start it again; a refusal's
   number said with its words.
+
+## Amendment Q (the Table, 2026-11-27) - the review of M12.4c2a (docs/review/2026-11-27-M12.4c2a.md) and its field run: REDO
+The reviewer's verdict is STOP on the ruling, and it is right. P-1 took a device's name that begins with
+`\Device\`; what was measured of a disk is narrower - `\Device\HarddiskVolume` and a number, with nothing after
+it (tests/fixtures/wincode/drives.txt). A letter whose device's name is a volume's followed by a folder's path
+begins the same way, and is the very thing P-1 exists to refuse: what is above that folder is never judged. The
+code does what P-1 said; P-1 said too much.
+The field's word on the branch as built (the probe branch 50baa9d on bed5479; x64 and ARM64): the gate green on
+six jobs and the rig green, X49, X50 and X51 MET; the tests of the check, the reader and the libraries passed on
+both, the two that read a real machine among them (a disk's reading; each library of the list a file in
+System32). The reader said `C:` kind 3 `\Device\HarddiskVolumeN`, x64's `D:` the same form, a letter not there
+error 2. A packed copy asked by its disk's letter: taken, the pass naming the drive and its device. Asked through
+a letter given to its folder, and through one given to Program Files: refused before any name was read, the
+device's name the folder's own path behind `\??\`. On a disk image with lists the drive was taken and the tree
+refused by its lists; on one without lists, by the null list.
+- Q-1 (the form measured, and no other; replaces P-1's test). A drive is taken only where the system says the
+  fixed kind and a device's name that is, whole, `\Device\HarddiskVolume` and a number: nothing before it,
+  nothing after it, its letters as written. Every other name refuses, said as read with the form asked for:
+  a folder's path behind `\??\`; a volume's name with anything after it; a volume of another kind of disk (not
+  measured: refused until it is). FOR: "to the drive's letter" means a volume's root and nothing below it.
+  MUST NOT TOUCH: the kind's rule; asked once, before any name; both roads.
+- Q-2 (the words; findings 5, 7, 10). A refused drive is said without "first met by", which always named the
+  drive's own root; the words for a name of another form say the form asked for and do not say what a share's
+  letter reads as (not measured: such a letter is refused by its kind, if the system's documents hold). Where
+  the device's name was not read, the kind stays in the reader's own words.
+- Q-3 (said in the documents; findings 2, 3, 4, 6, 16, 17). The letter is read as the session that runs the
+  check names it - said again; the system's account may name it otherwise or not at all, which the install
+  closes by having the service ask the check at its own start (M12.4c2b). The kind is also asked by the
+  autostart reader for its own purpose: the device's name has one reader, the kind two. A disk the system calls
+  fixed is taken as a disk whatever it is - one carried from another machine, an image attached, a volume a
+  program serves: who made its lists is not read. P-2's reading names three places a library is searched; the
+  third, folders the process itself added, is what the test's "no folder added" holds for raqib/ and nothing
+  holds for what the interpreter's own start adds.
+- Q-4 (the tests; findings 8, 9, 11, 13, 15). The measured readings are a fixture (drives.txt), read by the
+  tests. The letter-case test reaches the folding. The second-drive case holds that the walk's earlier names
+  were read. The scan of the libraries also refuses: a loader asked by index; ctypes' own low loader; a second
+  positional argument or `**` in a loading call; a name of a search call written as a string anywhere but where
+  it is allowed; a whole-table write to the environment; a table of names changed after it was written; a
+  loader handed on as a value; and a second call of the one allowed search call.
+- Q-5 (X51). It asks for the kind and a device's name that is not of the form of Q-1; the job's letter is given
+  to the job's own copy, and the name's end is not tied to it (kept, said).
+- Q-6 (the builder's questions, kept as built unless Q-1 to Q-5 say otherwise). The drives asked on a list the
+  caller gives; said at the end of the pass; a refused drive names no role; the stand-in's default for a letter
+  a test does not give is a disk of the measured form, said as a stand-in; the buffer's bound; find_library
+  refused outright.
+- M12.4c2b gains, from this review: the runner asks the check at its start, as the system, and does not watch a
+  tree it does not take (its own number for it); the install writes the command by the path the check judged.
