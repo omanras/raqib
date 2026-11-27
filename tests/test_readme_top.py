@@ -426,19 +426,20 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
 ]
 GUIDE_NEW += SERVICE_CHECK
 # ADR-0013 Amendment V (M12.4c2b2a): the paragraph of `raqib service status` on Windows, after the check's
-SERVICE_STATUS_WINDOWS = [
+SERVICE_STATUS_WINDOWS = [   # the guide's paragraph of the Windows status, each sentence (V, W, Z, ZA)
     "Ask `raqib service status` on Windows as a plain user: it needs no rights and changes nothing.",
     "It asks the system's service manager, by its own calls, about the service named `RaqibWatch`, and"
     " takes it as Raqib's only where its description begins with `raqib-service/1`; a service of the name"
     " without that mark is said as not Raqib's (exit 3).",
-    "A service an administrator made with that mark is read as Raqib's, whether `raqib service install` made it or he did by hand.",   # M12.4c2b2b: Raqib's install is built
-    # M12.4c2b2c (ADR-0013 Amendment Z): the start-again settings the install makes, read and judged
-    "It reads too what the system does after an end that was no Stop (each action by its kind and its seconds, and"
-    " the seconds after which the count is forgotten), the failure flag and the delayed start, and Raqib's service is"
-    " as installed only where they and its start are what the install writes - started again after 5 s, 30 s and then"
-    " 300 s, the count forgotten after 3600 s, the flag set, the start automatic and not delayed - and each"
-    " difference is said by what was read and what the install writes, so a service made by hand without them reads"
-    " not as installed (exit 1).",
+    "A service an administrator made with that mark is read as Raqib's, whether `raqib service install`"
+    " made it or he did by hand.",
+    "It reads too what the system does after an end that was no Stop (each action by its kind and its"
+    " seconds, and the seconds after which the count is forgotten), the failure flag and the delayed"
+    " start, and Raqib's service is as installed only where they and its start are what the install writes"
+    " - started again after 5 s, 30 s and then 300 s, the count forgotten after 3600 s, the flag set, the"
+    " start automatic and not delayed - and each difference is said by what was read and what the install"
+    " writes, so a service made by hand without them reads not as installed (exit 1); a message or a"
+    " command the system keeps beside those actions is a difference too, for the install writes none.",
     "Where the service stopped with the runner's own number, status says the number in the runner's"
     " words, and for 15 that what was refused is in `service.txt` in `C:\\ProgramData\\Raqib`.",
     "A start may be long: the runner checks its own code before the watch and tells the system to wait up"
@@ -448,9 +449,10 @@ SERVICE_STATUS_WINDOWS = [
     " description was measured (x64 and ARM64), and this command was then asked on real Windows by an"
     " administrator and by a user outside the administrators' group, who were answered the same; the rig's"
     " Windows job asks it at every run (X53).",
-    "What it answers such a caller for those settings and the delayed start was measured too (x64 and ARM64); their"
-    " reading by this command was not asked on a real machine before it was built: the rig reads it once the"
-    " running service of its Windows job is made by Raqib's own install.",   # M12.4c2b2c
+    "What the service manager answers such a caller for those settings and the delayed start was measured"
+    " too (x64 and ARM64), and their reading by this command was then asked on real Windows by a user with"
+    " no rights, each setting changed alone and each said; the rig reads it at every run, after Raqib's"
+    " own install (X53, X54).",
 ]
 GUIDE_NEW += SERVICE_STATUS_WINDOWS
 # ADR-0013 Amendment X (M12.4c2b2b): the paragraph of `raqib service install | remove` on Windows, after status's

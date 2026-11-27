@@ -2345,10 +2345,13 @@ collector that is slow, down or refusing never delays or loses a capture
   command was then asked on real machines by an administrator and by a user
   outside the administrators' group, who were answered the same (the probe
   23d544f); the rig asks it at every run (X53). What the manager answers
-  such a caller for the start-again settings and the delayed start was
+such a caller for the start-again settings and the delayed start was
   measured after (the probe 639362e, x64 and ARM64); their reading by this
-  command was not asked on a real machine before it was built: the rig reads
-  it once its running service is made by Raqib's own install.
+  command was then asked on real machines by a user with no rights, each
+  setting changed alone and each said (the probe dae96b7), and the rig reads
+  it at every run after Raqib's own install (X53, X54). A message or a
+  command the system keeps beside the actions is said and is a difference:
+  the install writes none.
 - **What the install and the remove of the service on Windows do (`raqib
   service install | remove`; ADR-0013 Amendment X).** On Windows an
 administrator's `raqib service install` makes the service RaqibWatch by the

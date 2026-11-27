@@ -783,10 +783,14 @@ def test_z2_the_numbers_as_installed_are_the_installs_own_and_its_structures_the
     assert FAILURE["actions"] == [(wininstall.RESTART, d) for d in wininstall.DELAYS]   # the stand-in's default
     assert FAILURE["reset"] == wininstall.RESET_PERIOD and Manager().failure == FAILURE
     theirs = ast.parse((ROOT / "raqib" / "wininstall.py").read_text(encoding="ascii"))
-    theirs = {n.name: ast.unparse(n.body[0]) for n in ast.walk(theirs) if isinstance(n, ast.ClassDef)}
-    ours = {n.name: ast.unparse(n.body[0]) for n in ast.walk(tree_of()[2]["_win"]) if isinstance(n, ast.ClassDef)}
+    theirs = {n.name: ast.unparse(n) for n in ast.walk(theirs) if isinstance(n, ast.ClassDef)}
+    ours = {n.name: ast.unparse(n) for n in ast.walk(tree_of()[2]["_win"]) if isinstance(n, ast.ClassDef)}
     for name in ("SC_ACTION", "SERVICE_FAILURE_ACTIONSW", "SERVICE_FAILURE_ACTIONS_FLAG"):   # what it writes, read
-        assert ours[name] == theirs[name], name
+        assert ours[name] == theirs[name], name   # ZA-4: the whole class, not its first statement alone
+    for tree in (tree_of()[2]["_win"], ast.parse((ROOT / "raqib" / "wininstall.py").read_text(encoding="ascii"))):
+        for n in ast.walk(tree):   # and a structure is its fields and nothing set beside them (a packing, say)
+            if isinstance(n, ast.ClassDef) and n.bases and "Structure" in ast.unparse(n.bases[0]):
+                assert len(n.body) == 1 and ast.unparse(n.body[0]).startswith("_fields_ = "), n.name
 
 
 def not_as_installed(lines):
@@ -801,9 +805,10 @@ INSTALLS = "start it again after 5 s, start it again after 30 s, start it again 
     ({"making": {"start": 4}}, "  start: 4, disabled", "start: 4, disabled; the install writes 2, automatic"),
     ({"making": {"start": None}}, "  start: None, a start this command has no word for",
      "start: None, a start this command has no word for; the install writes 2, automatic"),
-    ({"delayed": 1}, "  delayed start: 1, delayed", "delayed start: 1, delayed; the install writes 0, not delayed"),
+    ({"delayed": 1}, "  delayed start: 1, delayed",
+     "delayed start: 1, delayed; the install leaves it 0, not delayed"),
     ({"delayed": "x"}, "  delayed start: x, not a number",
-     "delayed start: x, not a number; the install writes 0, not delayed"),
+     "delayed start: x, not a number; the install leaves it 0, not delayed"),
     ({"failure": {"actions": []}}, "  after an end that was no Stop: none; the count forgotten after 3600 s",
      "after an end that was no Stop: none; the install writes " + INSTALLS),
     ({"failure": {"actions": [(1, 5000), (1, 30000)]}}, "  after an end that was no Stop: start it again after 5 s,"
@@ -868,7 +873,7 @@ def test_z2_every_difference_together_in_the_order_of_the_lines_running_and_stop
             "after an end that was no Stop: run a command after 1 s; the install writes " + INSTALLS,
             "the count forgotten after 86400 s; the install writes 3600 s",
             "the failure flag: 0, not set; the install writes 1, set",
-            "delayed start: 1, delayed; the install writes 0, not delayed"]
+            "delayed start: 1, delayed; the install leaves it 0, not delayed"]
     # with the earlier differences too, those first and in their order
     code, lines = asked(Manager(**dict(odd, making={"start": 4, "type": 0x20, "account": None})))
     assert [x.split(";")[0].split(" (")[0] for x in not_as_installed(lines)] == [
@@ -877,12 +882,19 @@ def test_z2_every_difference_together_in_the_order_of_the_lines_running_and_stop
         "the failure flag: 0, not set", "delayed start: 1, delayed"]
 
 
-def test_z2_a_service_the_install_made_is_still_active_and_its_texts_are_said_not_judged():
+def test_z2_a_service_the_install_made_is_still_active_and_a_text_kept_beside_its_actions_is_said_and_judged():
     code, lines = asked(Manager())
     assert (code, lines[-1]) == (0, "RESULT: ACTIVE") and lines[8:11] == AS_MADE and not not_as_installed(lines)
     texts = {"message": "the host restarts now", "command": "C:\\x\\after.cmd \u0430\x00" + "y" * 400}
     code, lines = asked(Manager(failure=texts))
-    assert (code, lines[-1]) == (0, "RESULT: ACTIVE") and lines[8] == AS_MADE[0]
+    # ZA-2: the install writes no text there, so one that is there is a difference, each said by its own line
+    assert (code, lines[-1]) == (1, "RESULT: ACTIVE, NOT AS INSTALLED") and lines[8] == AS_MADE[0]
+    assert not_as_installed(lines) == [
+        "the message kept for a restart of the machine is there; the install writes none",
+        "the command kept to run is there; the install writes none"]
+    for key in ("message", "command"):   # each alone
+        alone = asked(Manager(failure={key: "x"}))[1]
+        assert len(not_as_installed(alone)) == 1 and "is there; the install writes none" in alone[-2]
     assert lines[9:11] == ["  the message kept for a restart of the machine: \"the host restarts now\" (another"
                            " party's text)",
                            "  the command kept to run: \"C:\\x\\after.cmd \\u0430?%s...\" (another party's text)"
@@ -913,8 +925,10 @@ def test_z1_array_at_bounds_the_count_first_and_places_the_array_inside_the_byte
     assert at(3, 1040, 1000, 64, 8) == (40, None) and at(0, None, 1000, 40, 8) == (0, None)
     assert at(0, 5, 1000, 40, 8) == (0, None)   # a count of 0 reads nothing, wherever it points
     assert at(64, 1000, 1000, 512, 8) == (0, None)
-    for count in (65, 1 << 31, -1, None, True, "3"):   # past the bound: said, never read
+    for count in (65, 1 << 31, -1):   # past the bound: said, never read
         assert at(count, 1040, 1000, 1 << 20, 8) == (None, "%s actions, not from 0 to 64 (the bound)" % count)
+    for count in (None, True, "3"):   # and one that is no number is said as that, not as a number inside the bound
+        assert at(count, 1040, 1000, 1 << 20, 8) == (None, "a count of actions that is not a number (%s)" % count)
     assert at(3, None, 1000, 64, 8) == (None, "3 actions and no array (NULL)")
     assert at(3, 0, 1000, 64, 8) == (None, "3 actions and no array (NULL)")
     for where in (999, 1041, 2000, 0x10):
@@ -946,8 +960,10 @@ def test_z1_the_real_objects_own_logic_reads_levels_2_4_and_3_against_the_made_u
     assert "  the message kept for a restart of the machine: \"m\" (another party's text)" in lines
     assert "  the command kept to run: \"c\" (another party's text)" in lines
     assert not_as_installed(lines) == ["the count forgotten after 60 s; the install writes 3600 s",
+                                       "the message kept for a restart of the machine is there; the install writes"
+                                       " none", "the command kept to run is there; the install writes none",
                                        "the failure flag: 0, not set; the install writes 1, set",
-                                       "delayed start: 1, delayed; the install writes 0, not delayed"]
+                                       "delayed start: 1, delayed; the install leaves it 0, not delayed"]
     # a count over the bound, a count with no array, an array outside the bytes read: NOT KNOWN, the handles closed
     for failure, why in (({"count": 65}, "65 actions, not from 0 to 64 (the bound)"),
                          ({"count": 1 << 31}, "2147483648 actions, not from 0 to 64 (the bound)"),

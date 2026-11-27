@@ -6,7 +6,8 @@ ARM64, the same): a caller with no rights may connect to the service manager and
 and its making, and reads them - the state with the process's id, the system's exit and the service's own; the type,
 the start, the account and the command (a first ask with no room answers error 122 and the bytes needed); and its
 description, as it was set. A name that is not there answers error 1060; a service never started reads state 1 with
-the exit 1077. This command itself was not measured on a real machine: the rig reads it as X53 (V-5).
+the exit 1077. This command itself was then asked on real machines by an administrator and by a user with no
+rights (Amendments W and ZA), and the rig asks it so at every run (X53; X54 after Raqib's own install).
 
 Raqib's service (V-2) is the one named winservice.SERVICE_NAME (RaqibWatch) whose description begins with MARK, the
 mark the Linux unit carries in its first line (raqib/service.py MARK, without its `# `). A service of that name
@@ -329,7 +330,9 @@ def array_at(count, where, base, size, width, bound=ACTIONS_MAX):
     """Z-1: where the array of `count` actions of `width` bytes each lies in the `size` bytes read at `base`: (its
     offset, None), or (None, why) - a count outside 0 to `bound` (said before any of the array is read), an array that
     is NULL with a count, or one that does not lie wholly inside the bytes read. A count of 0 reads nothing."""
-    if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= bound:
+    if isinstance(count, bool) or not isinstance(count, int):
+        return None, "a count of actions that is not a number (%s)" % _said(count)
+    if not 0 <= count <= bound:
         return None, "%s actions, not from 0 to %d (the bound)" % (_said(count), bound)
     if count == 0:
         return 0, None
@@ -455,7 +458,7 @@ def _action_said(action):
 def _failure(got, out):
     """Z-1, Z-2: the line of what the system does after an end that was no Stop; the texts kept beside the actions,
     each on a line of its own and only where it is there; what differs from what the install writes, as a list."""
-    actions, reset, differ = [tuple(a) for a in got.get("actions")], got.get("reset"), []
+    actions, reset, differ, texts = [tuple(a) for a in got.get("actions")], got.get("reset"), [], []
     said = ", ".join(_action_said(a) for a in actions) or "none"
     number = _number(reset)
     count = ("the count never forgotten (0x%X, INFINITE)" % NEVER if number == NEVER else
@@ -467,12 +470,13 @@ def _failure(got, out):
         text = got.get(key)
         if text is not None and text != "":
             out.write("  %s: \"%s\" (another party's text)\n" % (words, _said(text)))
+            texts.append("%s is there; the install writes none" % words)   # ZA-2: said, and judged
     if [(_number(k), _number(d)) for k, d in actions] != [(RESTART, d) for d in DELAYS]:
         differ.append("after an end that was no Stop: %s; the install writes %s" % (
             said, ", ".join(_action_said((RESTART, d)) for d in DELAYS)))
     if number != RESET_PERIOD:
         differ.append("%s; the install writes %d s" % (count, RESET_PERIOD))
-    return differ
+    return differ + texts   # in the order of the lines: the actions, the count, then the texts kept beside them
 
 
 def _flag(value, out):
@@ -491,7 +495,7 @@ def _delayed(value, out):
     said = ("%d, %s" % (number, "delayed" if number else "not delayed") if number is not None else
             "%s, not a number" % _said(value))
     out.write("  delayed start: %s\n" % said)
-    return [] if number == 0 else ["delayed start: %s; the install writes 0, not delayed" % said]
+    return [] if number == 0 else ["delayed start: %s; the install leaves it 0, not delayed" % said]
 
 
 def _exit(got, out, ws, state, ours):

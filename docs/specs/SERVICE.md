@@ -628,8 +628,13 @@ refused at its start with 15; one whose command lacks `-I`; one whose descriptio
 two askers were answered the same lines and the same exit at each. The account of a service made with none named read
 `LocalSystem`; a service with no description read as having none. Not measured: a service that is starting, stopping
 or paused as status reads it; a service marked for removal; a machine joined to a domain. The rig reads the command at
-every run (X53, below). The reading of levels 2, 4 and 3 (M12.4c2b2c) was not asked on a real machine before it was
-built: the rig reads it once X53's running service is made by Raqib's own install (Z-3, the Table's wiring).
+every run (X53, below). The reading of levels 2, 4 and 3 (M12.4c2b2c) was asked on real machines after it was built
+(Amendment ZA; the probe branch dae96b7, of b90aa54; x64 and ARM64, the same), by a user outside the administrators'
+group: a service Raqib's own install made read ACTIVE with the three lines as the install writes them; then each
+setting changed alone by the system's own tool - the start set to on demand, to automatic and delayed, the flag taken
+away, the count forgotten after 60 s, one action only, a third action that runs a command with a command kept, the
+actions taken away - read `ACTIVE, NOT AS INSTALLED`, 1, with its difference said, and ACTIVE again once put back. The
+rig reads it at every run: X54 after Raqib's own install, and X53, whose running service that install makes (Z-3).
 
 **Raqib's service.** The one named RaqibWatch whose description begins with `raqib-service/1` - the mark the Linux
 unit carries in its first line - the mark ending there or at a space. A service of the name without the mark is said
@@ -670,11 +675,11 @@ service without the mark the three levels are said and nothing is judged.
 
 | Answer | Exit | Where |
 |---|---|---|
-| `RESULT: ACTIVE` | 0 | Raqib's, running and as installed: the mark, the command's form, a process of its own, the system's account; and (Amendment Z) the start automatic (2) and not delayed, started again after 5000, 30000 and 300000 ms after an end that was no Stop, the count forgotten after 3600 s, and the failure flag set - the numbers the install writes. ACTIVE says the service runs, not that the watch writes its record. |
+| `RESULT: ACTIVE` | 0 | Raqib's, running and as installed: the mark, the command's form, a process of its own, the system's account; and (Amendment Z) the start automatic (2) and not delayed, started again after 5000, 30000 and 300000 ms after an end that was no Stop, the count forgotten after 3600 s, the failure flag set - the numbers the install writes - and no message and no command kept beside those actions, for the install writes none (ZA-2). ACTIVE says the service runs, not that the watch writes its record. |
 | `RESULT: INSTALLED, NOT ACTIVE` | 1 | Raqib's, in any other state, said by its word; `, NOT AS INSTALLED` is added where it is not, each difference said (one of Amendment Z's by what was read and what the install writes). |
 | `RESULT: ACTIVE, NOT AS INSTALLED` | 1 | Raqib's, running and not as installed, each difference said: a service whose start-again settings were taken away, or whose start was set to manual, reads so. |
 | `RESULT: NOT INSTALLED` | 3 | No service of the name (error 1060). |
-| `RESULT: NOT INSTALLED BY RAQIB, YET A SERVICE OF THE NAME IS <its state>` | 3 | A service of the name without the mark. |
+| `RESULT: NOT INSTALLED BY RAQIB, YET A SERVICE OF THE NAME IS <its state>` | 3 | A service of the name without the mark, where every call was read: its settings are said and nothing of them is judged. |
 | `RESULT: NOT KNOWN` | 3 | A call failed, a close included, a level of the three that could not be read (its call and the system's number said), or an answer of a shape it does not read. |
 | one line, nothing asked | 2 | Not Windows (raqib/winmanager.py's own answer; on Linux `raqib service status` is the Linux command, as before). |
 

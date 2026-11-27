@@ -628,18 +628,19 @@ after which the count is forgotten), the failure flag and the delayed start, and
 as installed only where they and its start are what the install writes - started again after 5 s, 30
 s and then 300 s, the count forgotten after 3600 s, the flag set, the start automatic and not
 delayed - and each difference is said by what was read and what the install writes, so a service
-made by hand without them reads not as installed (exit 1). Where the service stopped with the
-runner's own number, status says the number in the runner's words, and for 15 that what was refused
-is in `service.txt` in `C:\ProgramData\Raqib`. A start may be long: the runner checks its own code
-before the watch and tells the system to wait up to 60 s, so a service that is starting is said as
-starting, not ACTIVE; ask again. ACTIVE says the service runs, not that the watch writes its record.
-What the service manager answers a caller with no rights for a service's state, making and
+made by hand without them reads not as installed (exit 1); a message or a command the system keeps
+beside those actions is a difference too, for the install writes none. Where the service stopped
+with the runner's own number, status says the number in the runner's words, and for 15 that what was
+refused is in `service.txt` in `C:\ProgramData\Raqib`. A start may be long: the runner checks its
+own code before the watch and tells the system to wait up to 60 s, so a service that is starting is
+said as starting, not ACTIVE; ask again. ACTIVE says the service runs, not that the watch writes its
+record. What the service manager answers a caller with no rights for a service's state, making and
 description was measured (x64 and ARM64), and this command was then asked on real Windows by an
 administrator and by a user outside the administrators' group, who were answered the same; the rig's
-Windows job asks it at every run (X53). What it answers such a caller for those settings and the
-delayed start was measured too (x64 and ARM64); their reading by this command was not asked on a
-real machine before it was built: the rig reads it once the running service of its Windows job is
-made by Raqib's own install.
+Windows job asks it at every run (X53). What the service manager answers such a caller for those
+settings and the delayed start was measured too (x64 and ARM64), and their reading by this command
+was then asked on real Windows by a user with no rights, each setting changed alone and each said;
+the rig reads it at every run, after Raqib's own install (X53, X54).
 
 In a prompt opened as administrator, `raqib service install` installs the service on Windows from a
 copy the check takes. It asks the check of its own code first, as `raqib service check` asks it, and
