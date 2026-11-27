@@ -4,7 +4,7 @@ name: service-check-drive-field
 on:
   push:
     branches: [claude/rig-probe]
-    paths: [tools/rig/svc_check_drive_field.ps1, .github/workflows/service-check-drive-field.yml]
+    paths: [tools/rig/svc_check_drive_field.ps1, tools/rig/svc_letter.py, .github/workflows/service-check-drive-field.yml]
 permissions:
   contents: read
 env:

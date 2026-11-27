@@ -26,6 +26,19 @@ subst R: /D | Out-Null
 subst R: "C:\Program Files"
 Ask "by R: (a letter given to Program Files)" "R:\RaqibFieldDrive\raqib.exe"
 subst R: /D | Out-Null
+"=== a letter given to a volume's own name followed by the folder's path (ADR-0013 Q-1), and to the volume's name alone"
+$letterTool = Join-Path $PSScriptRoot "svc_letter.py"
+$volume = (python -c "from raqib import winservice; print(winservice.System().read_drive('C:\\')[1])")
+"the volume's device as the reader says it: $volume"
+python $letterTool give "S:" "$volume\Program Files\RaqibFieldDrive"
+python -c $read "S:\"
+if (Test-Path "S:\raqib.exe") { Ask "by S: (a volume's name and the folder's path)" "S:\raqib.exe" } else { "S:\raqib.exe is not there through that letter: the check not asked" }
+python $letterTool take "S:" "$volume\Program Files\RaqibFieldDrive"
+python $letterTool give "S:" "$volume"
+python -c $read "S:\"
+if (Test-Path "S:\Program Files\RaqibFieldDrive\raqib.exe") { Ask "by S: (the volume's name alone: another letter of the same volume)" "S:\Program Files\RaqibFieldDrive\raqib.exe" } else { "the copy is not there through that letter: the check not asked" }
+python $letterTool take "S:" "$volume"
+"S: left: $(Test-Path 'S:\')"
 "=== a disk image, with access lists (NTFS) and without (FAT32)"
 $vhd = "$env:RUNNER_TEMP\pd.vhd"
 foreach ($fs in "ntfs", "fat32") {
