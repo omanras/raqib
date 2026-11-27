@@ -8,7 +8,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
                               [--events-check FILE] [--packed FILE]
                               [--service-run RUNFILE] [--service-events EVENTSFILE] [--service-check FILE]
                               [--service-check-plain FILE] [--service-check-drive FILE] [--service-refused FILE]
-                              [--summary FILE] [--strict]
+                              [--service-status FILE] [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
@@ -84,6 +84,15 @@ first did not run (refused-exit 1066, the service's own number; refused-own 15 a
 its decimal 536870927; refused-text holding "NOT the system's alone" and a path of a drive) and the second ran
 (taken-state Running; taken-text holding the pass's sentence with its counts); a byte-order mark before the first key
 is read past; MISSED with words for each thing not found, a file given and missing included; n/a where none was given.
+--service-status: what the rig's Windows job kept of `raqib service status` asked with no rights at three moments
+(ADR-0013 V-5, M12.4c2b2a): FILE holds lines `key: value` (none-exit, none-result: no service of the name;
+active-exit, active-result, active-command: the service made with the mark from the copy under Program Files, running;
+refused-exit, refused-result, refused-words: the one made with the mark from the job's own Python, refused at its
+start). X53 MET only where the first is exit 3 and `RESULT: NOT INSTALLED`, the second exit 0 and `RESULT: ACTIVE`
+with a command holding `-I -m raqib service run` and a path under Program Files, and the third exit 1 with a result
+beginning `RESULT: INSTALLED, NOT ACTIVE` and words holding the runner's words for 15 and `service.txt`; a byte-order
+mark before the first key is read past; MISSED with words for each thing not found, a file given and missing
+included; n/a where none was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -1468,6 +1477,75 @@ def read_service_refused(text):
         return [(name, MISSED, "the services made from two trees cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_STATUS_NAME = ("X53 `raqib service status` on Windows, with no rights, says no service of the name as NOT"
+                       " INSTALLED (3), the service made from the copy under Program Files as ACTIVE (0) with its"
+                       " command, and the one made from the job's own Python as installed and not active (1) with"
+                       " 15's words")
+STATUS_KEYS = ("none-exit", "none-result", "active-exit", "active-result", "active-command", "refused-exit",
+               "refused-result", "refused-words")
+STATUS_PLAIN = "-I -m raqib service run"              # raqib/winmanager.py FORMS[1]: a plain interpreter's command
+PROGRAM_FILES = re.compile(r"[A-Za-z]:\\Program Files\\", re.IGNORECASE)   # a path under Program Files
+NOT_ALONE_WORDS = ("the code it runs is not the system's alone: its own check at this start refused it, or gave no"
+                   " answer it reads")                # raqib/winservice.py EXIT_WORDS[EXIT_NOT_ALONE] (a test ties)
+STATUS_TEXT = "service.txt"                           # raqib/winservice.py TEXT_NAME, the runner's text file
+
+
+def read_service_status(text):
+    """X53 (ADR-0013 V-5, M12.4c2b2a): what the rig's Windows job kept of `raqib service status` asked with no rights
+    at three moments: no service of the name (none-exit, none-result), the job's service made with the mark from the
+    copy under Program Files and running (active-exit, active-result, active-command), and one made with the mark
+    from the job's own Python, refused at its start (refused-exit, refused-result, refused-words). text: the FILE's
+    text (None: not given). MET only where none-exit is 3 and none-result `RESULT: NOT INSTALLED`; active-exit 0,
+    active-result `RESULT: ACTIVE` and active-command holding STATUS_PLAIN and a path under Program Files;
+    refused-exit 1, refused-result beginning `RESULT: INSTALLED, NOT ACTIVE` and refused-words holding
+    NOT_ALONE_WORDS and STATUS_TEXT; a byte-order mark before the first key is read past. MISSED with words for each
+    thing not found; n/a where none was given. It never raises."""
+    name = SERVICE_STATUS_NAME
+    try:
+        if text is None:
+            return [(name, SKIP, "no service status was given (--service-status)")]
+        if not str(text).lstrip(BOM).strip():
+            return [(name, MISSED, "missing: the status file is empty or was not written (silence is a finding)")]
+        got = _run_lines(text)
+        missing = ["no %s" % key for key in STATUS_KEYS if key not in got]
+        for key, want, of in (("none-exit", 3, "with no service of the name"), ("active-exit", 0, "of the running"
+                              " service"), ("refused-exit", 1, "of the service refused at its start")):
+            if key in got and _int(got[key]) != want:
+                missing.append("status %s: exit %s, not %d" % (of, got[key][:40] or "not said", want))
+        none, active = got.get("none-result", ""), got.get("active-result", "")
+        refused, words = got.get("refused-result", ""), got.get("refused-words", "")
+        command = got.get("active-command", "")
+        if "none-result" in got and none != "RESULT: NOT INSTALLED":
+            missing.append("status with no service of the name: %s, not RESULT: NOT INSTALLED" % (none[:200]
+                                                                                                 or "nothing"))
+        if "active-result" in got and active != "RESULT: ACTIVE":
+            missing.append("status of the running service: %s, not RESULT: ACTIVE" % (active[:200] or "nothing"))
+        if "active-command" in got:
+            if STATUS_PLAIN not in command:
+                missing.append("status of the running service: its command does not hold %s (%s)" % (
+                    STATUS_PLAIN, command[:200]))
+            if not PROGRAM_FILES.search(command):
+                missing.append("status of the running service: its command names no path under Program Files (%s)"
+                               % command[:200])
+        if "refused-result" in got and not refused.startswith("RESULT: INSTALLED, NOT ACTIVE"):
+            missing.append("status of the service refused at its start: %s, not RESULT: INSTALLED, NOT ACTIVE" % (
+                refused[:200] or "nothing"))
+        if "refused-words" in got:
+            if NOT_ALONE_WORDS not in words:
+                missing.append("status of the service refused at its start: its words do not hold the runner's words"
+                               " for 15 (%s)" % words[:200])
+            if STATUS_TEXT not in words:
+                missing.append("status of the service refused at its start: its words do not name %s (%s)" % (
+                    STATUS_TEXT, words[:200]))
+        if missing:
+            return [(name, MISSED, "missing: %s" % "; ".join(missing))]
+        return [(name, MET, "no service of the name: RESULT: NOT INSTALLED (exit 3); the service from the copy under"
+                 " Program Files: RESULT: ACTIVE (exit 0), its command %s; the one from the job's own Python: %s"
+                 " (exit 1), %s" % (command[:200], refused[:200], words[:300]))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the service status cannot be read (%s)" % type(exc).__name__)]
+
+
 def read_check(text, name, counts_said, option, second):
     """X49 and X50, one reading: name the claim's, counts_said the pattern of its pass sentence (four numbers: the
     names, folders, files and folders above, the first the sum of the rest), option the rig's option, second what
@@ -1725,6 +1803,7 @@ def main(argv=None):
     p.add_argument("--service-check-plain")
     p.add_argument("--service-check-drive")
     p.add_argument("--service-refused")
+    p.add_argument("--service-status")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1770,6 +1849,9 @@ def main(argv=None):
     # X52 (ADR-0013 T-3): the same, of the two services made to run `raqib service run`, which asks the check
     refused = a.service_refused
     rows += read_service_refused(None if refused is None else (text(refused) if os.path.isfile(refused) else ""))
+    # X53 (ADR-0013 V-5): the same, of `raqib service status` asked with no rights at three moments
+    asked = a.service_status
+    rows += read_service_status(None if asked is None else (text(asked) if os.path.isfile(asked) else ""))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

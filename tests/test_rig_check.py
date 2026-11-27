@@ -1459,3 +1459,140 @@ def test_x52_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_
     assert row(["--service-refused", str(tmp_path / "bom.txt")]) == check.MET
     assert row(["--service-refused", str(tmp_path / "none.txt")]) == check.MISSED
     assert row([]) == check.SKIP
+
+
+# --- X53 (ADR-0013 V-5, M12.4c2b2a): `raqib service status` on Windows, with no rights, at three moments ---------
+def status_lines():
+    """What raqib/winmanager.py's status writes at the three moments, asked of a made-up service manager: no service
+    of the name; one made with the mark from a copy under Program Files, running; one made with the mark from the
+    job's own Python (the placeholder `user`), refused at its start with 15."""
+    import io
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import winmanager, winservice
+
+    class Made:
+        def __init__(self, there, command="", state=1, exit=0, own=0):
+            self.there, self.command, self.got = there, command, {"type": 0x10, "state": state, "exit": exit,
+                                                                  "own": own, "pid": 0 if state != 4 else 4321}
+
+        def platform(self):
+            return "win32"
+
+        def connect(self):
+            return 1, 0
+
+        def open(self, manager, name):
+            return (2, 0) if self.there else (None, 1060)
+
+        def description(self, handle):
+            return "raqib-service/1 the watch", 0
+
+        def making(self, handle):
+            return {"type": 0x10, "start": 2, "command": self.command, "account": "LocalSystem"}, 0
+
+        def state(self, handle):
+            return dict(self.got), 0
+
+        def close(self, handle):
+            return True, 0
+
+    def ask(made):
+        out = io.StringIO()
+        return winmanager.status(made, out), out.getvalue().splitlines()
+    return (ask(Made(False)),
+            ask(Made(True, '"C:\\Program Files\\Raqib\\Python311\\python.exe" -I -m raqib service run', 4)),
+            ask(Made(True, '"C:\\Users\\user\\rig\\python.exe" -I -m raqib service run', 1,
+                     winservice.SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)))
+
+
+def statusfile(**kw):
+    (none, none_lines), (active, active_lines), (refused, refused_lines) = status_lines()
+    keys = {"none-exit": str(none), "none-result": none_lines[-1], "active-exit": str(active),
+            "active-result": active_lines[-1],
+            "active-command": [x for x in active_lines if x.startswith("  command: ")][0].strip(),
+            "refused-exit": str(refused), "refused-result": refused_lines[-1],
+            "refused-words": " ".join(x.strip() for x in refused_lines[1:-1])}
+    keys.update(kw)
+    return "".join("%s: %s\n" % (k, v) for k, v in keys.items() if v is not None)
+
+
+def x53(text):
+    ((ident, state, words),) = check.read_service_status(text)
+    assert ident.startswith("X53 ") and ident == check.SERVICE_STATUS_NAME
+    return state, words
+
+
+def test_x53_met_where_none_is_not_installed_the_copy_under_program_files_active_and_the_users_refused_with_15():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import winmanager, winservice
+    assert check.NOT_ALONE_WORDS == winservice.EXIT_WORDS[winservice.EXIT_NOT_ALONE]
+    assert check.STATUS_TEXT == winservice.TEXT_NAME and check.STATUS_PLAIN == winmanager.FORMS[1]
+    (none, none_lines), (active, active_lines), (refused, refused_lines) = status_lines()
+    assert (none, none_lines[-1], active, active_lines[-1], refused) == (3, "RESULT: NOT INSTALLED", 0,
+                                                                        "RESULT: ACTIVE", 1)
+    assert refused_lines[-1] == "RESULT: INSTALLED, NOT ACTIVE"
+    state, words = x53(statusfile())
+    assert state == check.MET, words
+    assert words.startswith("no service of the name: RESULT: NOT INSTALLED (exit 3); the service from the copy under"
+                            " Program Files: RESULT: ACTIVE (exit 0), its command command: \"C:\\Program Files\\")
+    assert x53(statusfile().replace("\n", "\r\n"))[0] == check.MET and x53("\ufeff" + statusfile())[0] == check.MET
+    assert x53(statusfile(**{"active-command": '"c:\\program files\\R\\python.exe" -I -m raqib service run'}))[0] == \
+        check.MET
+    assert x53(statusfile(**{"refused-result": "RESULT: INSTALLED, NOT ACTIVE, NOT AS INSTALLED"}))[0] == check.MET
+
+
+@pytest.mark.parametrize("kw, said", [
+    ({"none-exit": "0"}, "status with no service of the name: exit 0, not 3"),
+    ({"none-exit": ""}, "status with no service of the name: exit not said, not 3"),
+    ({"none-result": "RESULT: NOT KNOWN"}, "status with no service of the name: RESULT: NOT KNOWN, not RESULT: NOT"
+                                           " INSTALLED"),
+    ({"none-result": "RESULT: NOT INSTALLED BY RAQIB, YET A SERVICE OF THE NAME IS STOPPED"}, "not RESULT: NOT"
+                                                                                             " INSTALLED"),
+    ({"active-exit": "1"}, "status of the running service: exit 1, not 0"),
+    ({"active-result": "RESULT: ACTIVE, NOT AS INSTALLED"}, "status of the running service: RESULT: ACTIVE, NOT AS"
+                                                            " INSTALLED, not RESULT: ACTIVE"),
+    ({"active-command": '"C:\\Program Files\\R\\raqib.exe" service run'}, "its command does not hold -I -m raqib"
+                                                                          " service run"),
+    ({"active-command": '"C:\\Users\\user\\python.exe" -I -m raqib service run'}, "its command names no path under"
+                                                                                  " Program Files"),
+    ({"refused-exit": "3"}, "status of the service refused at its start: exit 3, not 1"),
+    ({"refused-result": "RESULT: ACTIVE"}, "status of the service refused at its start: RESULT: ACTIVE, not RESULT:"
+                                           " INSTALLED, NOT ACTIVE"),
+    ({"refused-words": "exit: 1066, the service's own number: 536870927, service.txt"}, "its words do not hold the"
+                                                                                        " runner's words for 15"),
+    ({"refused-words": check.NOT_ALONE_WORDS}, "its words do not name service.txt"),
+    ({"none-exit": None}, "no none-exit"), ({"none-result": None}, "no none-result"),
+    ({"active-exit": None}, "no active-exit"), ({"active-result": None}, "no active-result"),
+    ({"active-command": None}, "no active-command"), ({"refused-exit": None}, "no refused-exit"),
+    ({"refused-result": None}, "no refused-result"), ({"refused-words": None}, "no refused-words"),
+])
+def test_x53_missed_for_each_thing_not_found(kw, said):
+    state, words = x53(statusfile(**kw))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x53_missed_where_the_file_is_empty_and_n_a_where_none_was_given():
+    for text in ("", "\ufeff\n", "  \n"):
+        assert x53(text) == (check.MISSED, "missing: the status file is empty or was not written (silence is a"
+                                           " finding)")
+    assert x53(None) == (check.SKIP, "no service status was given (--service-status)")
+    assert x53(object())[0] == check.MISSED   # never raises
+
+
+def test_x53_main_reads_the_file_and_a_given_file_that_is_missing_is_missed(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "status.txt").write_text(statusfile(), encoding="utf-16")   # a redirect of Windows PowerShell 5
+    (tmp_path / "bom.txt").write_text("\ufeff" + statusfile(), encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+
+    def row(argv):
+        check.main(base + argv)
+        (line,) = [x for x in capsys.readouterr().out.splitlines() if "X53 " in x and not x.startswith("::")]
+        return line.split()[0]
+    assert row(["--service-status", str(tmp_path / "status.txt")]) == check.MET
+    assert row(["--service-status", str(tmp_path / "bom.txt")]) == check.MET
+    assert row(["--service-status", str(tmp_path / "none.txt")]) == check.MISSED
+    assert row([]) == check.SKIP

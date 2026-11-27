@@ -325,11 +325,17 @@ SERVICE_ROWS = [
     "--purge` removes that folder too, and only it; with no unit file, exit 0 only where systemd holds"
     " no unit of the name (LoadState not-found, ActiveState inactive or failed), else exit 1, nothing "
     "touched and nothing purged |",
-    "| `raqib service status` | no rights needed: installed, enabled and active by systemctl's own wor"
-    "ds, whether it is as installed (the file's whole text the one Raqib writes, loaded from that file"
-    ", no drop-in, not changed since it was loaded), the restarts, and the last result where not activ"
-    "e; with no unit file, a unit of the name that systemd holds is said; exit 0 active as installed, "
-    "1 installed and not active, or not as installed, 3 not installed or not known, 2 not Linux |",
+    "| `raqib service status` | no rights needed: on Linux, installed, enabled and active by systemctl'"
+    "s own words, whether it is as installed (the file's whole text the one Raqib writes, loaded from t"
+    "hat file, no drop-in, not changed since it was loaded), the restarts, and the last result where no"
+    "t active; with no unit file, a unit of the name that systemd holds is said; exit 0 active as insta"
+    "lled, 1 installed and not active, or not as installed, 3 not installed or not known, 2 not Linux a"
+    "nd not Windows; on Windows, by the service manager's own calls, the service `RaqibWatch`: whether "
+    "it carries Raqib's mark (`raqib-service/1` at the start of its description), its command and wheth"
+    "er it is one of the two forms Raqib's install writes, its type, start and account, its state with "
+    "its process's id, and where it is not running the exit the system holds, the runner's own number i"
+    "n its words; it changes nothing; exit 0 running as installed, 1 not running or not as installed, 3"
+    " not installed, a service of the name that is not Raqib's, or not known |",
 ]
 GUIDE_NEW += SERVICE_ROWS
 # ADR-0013 Amendment C (M12.1p, AC-1): the host watch without its page, where watch --host's options are told
@@ -408,6 +414,24 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK
+# ADR-0013 Amendment V (M12.4c2b2a): the paragraph of `raqib service status` on Windows, after the check's
+SERVICE_STATUS_WINDOWS = [
+    "Ask `raqib service status` on Windows as a plain user: it needs no rights and changes nothing.",
+    "It asks the system's service manager, by its own calls, about the service named `RaqibWatch`, and ta"
+    "kes it as Raqib's only where its description begins with `raqib-service/1`; a service of the name wi"
+    "thout that mark is said as not Raqib's (exit 3).",
+    "Raqib does not install a service of Windows yet, so a service an administrator made with that mark i"
+    "s read as Raqib's: make it from a copy the check takes.",
+    "Where the service stopped with the runner's own number, status says the number in the runner's words"
+    ", and for 15 that the whole refusal is in `service.txt` in `C:\\ProgramData\\Raqib`.",
+    "A start may be long: the runner checks its own code before the watch and tells the system to wait up"
+    " to 60 s, so a service that is starting is said as starting, not ACTIVE; ask again.",
+    "ACTIVE says the service runs, not that the watch writes its record.",
+    "What a caller with no rights may read of the service manager was measured on GitHub's Windows machin"
+    "es; this command itself was not asked on a real machine before it was built, and the rig's Windows j"
+    "ob is to read it (X53).",
+]
+GUIDE_NEW += SERVICE_STATUS_WINDOWS
 # M17.1 (ADR-0015 V-1 to V-3, Amendment A): the number, what a move of it means, the changelog and the update
 # steps, in the guide's Install and watch
 VERSION_NUMBER = [

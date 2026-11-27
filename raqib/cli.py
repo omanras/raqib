@@ -290,7 +290,13 @@ no command, raqib prints its usage and exits 2.
       status needs no rights: exit 0 active as installed (the file's whole
       text, where systemd loaded it from, no drop-in, not changed since), 1
       installed and not active, or not as installed, 3 not installed (a unit
-      of the name systemd holds is said) or not known, 2 not Linux.
+      of the name systemd holds is said) or not known, 2 not Linux. On
+      Windows status asks the system's service manager, with no rights, for
+      the service RaqibWatch: whether it carries Raqib's mark, its command
+      (one of the two forms Raqib's install writes), type, start, account,
+      state and exit; exit 0 running as installed, 1 not running or not as
+      installed, 3 not installed, not Raqib's or not known (ADR-0013
+      Amendment V).
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -712,14 +718,18 @@ def _parser():
                          " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
                          " no state, unreadable, or written more than two beats ago or in the future (silent)")
     sv = sub.add_parser("service", help="the host watch as a unit of the system's, Linux (systemd): install, remove"
-                                        " or say its status (M12.1, ADR-0013); Windows: run it as a service, or"
-                                        " check whose the code a service would run is")
+                                        " or say its status (M12.1, ADR-0013); Windows: run it as a service, say"
+                                        " its status, or check whose the code a service would run is")
     sv.add_argument("action", choices=("install", "remove", "status", "run", "check"),
                     help="install (root): write raqib-watch.service, enable and start it, and say whether it is"
                          " active and as installed after 3 s; remove (root): stop, disable and remove it, the"
-                         " record kept; with no file, a unit of the name systemd holds is exit 1; status:"
-                         " installed, enabled, active (exit 0 active as installed, 1 not active or not as"
-                         " installed, 3 not installed or not known); run (Windows, run by the system's service"
+                         " record kept; with no file, a unit of the name systemd holds is exit 1; status (no"
+                         " rights): on Linux installed, enabled, active (exit 0 active as installed, 1 not active or"
+                         " not as installed, 3 not installed or not known); on Windows, by the service manager's own"
+                         " calls, the service RaqibWatch: Raqib's mark, its command, type, start and account, its"
+                         " state and its exit (exit 0 running as installed, 1 not running or not as installed, 3 not"
+                         " installed, not Raqib's or not known; ADR-0013 Amendment V); run (Windows, run by the"
+                         " system's service"
                          " manager only): the host watch as a service of Windows, its record in Raqib under"
                          " ProgramData, closed to all but the system and the administrators (ADR-0013 Amendment"
                          " E; docs/specs/SERVICE.md); not started by the service manager, or not Windows: exit 2;"
@@ -1643,14 +1653,24 @@ def cmd_forward(args, out):
 
 def cmd_service(args, out):
     """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its three bounds) only; the
-    watch does not know it. `run` (Amendment E, M12.4a): raqib/winservice.py, imported here only, the runner of the
-    host watch as a service of Windows."""
+    watch does not know it. `run` (Amendment E, M12.4a): raqib/winservice.py, the runner of the host watch as a
+    service of Windows, imported here, by raqib/wincode.py and in raqib/winmanager.py's status (for told and the
+    runner's numbers). `check` (Amendment K, M12.4c1): raqib/wincode.py,
+    imported here and in raqib/winservice.py's System.own_check (the check at every start of the service, ADR-0013
+    U-4). `status` on Windows (Amendment V, M12.4c2b2a): raqib/winmanager.py, imported here only; on Linux status is
+    raqib/service.py's, as before."""
     if args.action == "run":
         from raqib import winservice
         return winservice.cli_run(args, out)
-    if args.action == "check":   # Amendment K (M12.4c1): raqib/wincode.py, imported here only
+    if args.action == "check":
         from raqib import wincode
         return wincode.cli_check(args, out)
+    if args.action == "status" and sys.platform == "win32":   # V-3: the service manager, asked with no rights
+        from raqib import winmanager
+        try:
+            return winmanager.cli_run(args, out)
+        except winmanager.Refused as exc:
+            raise UsageError(str(exc))
     from raqib import service
     try:
         return service.cli_run(args, out)
