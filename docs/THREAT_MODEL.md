@@ -2146,6 +2146,48 @@ collector that is slow, down or refusing never delays or loses a capture
   file outside ~/.raqib, the unit in /etc/systemd/system, because an
   administrator ran them (ADR-0013 A-4). They ask for no elevation, and the
   watch never runs them on its own.
+- **The service on Windows (`raqib service run`; ADR-0013 Amendments E to
+  G).** On Windows the host watch is built to run as a service of the
+  system's, its record under `Raqib` in ProgramData (docs/specs/SERVICE.md).
+  The first builder's runner (c125f62) ran so in Amendment F's field run;
+  this runner (f8af8f5) ran so in Amendment G's field run, plain and packed,
+  on x64 and ARM64. The candidate of Amendment E ran as the system's own
+  account. Who may touch it: in Amendment E's candidate and in Amendment F's
+  field run of c125f62, a plain user made for the run was refused a Stop of
+  the service and the ending of its process. A folder ProgramData makes is
+  open to every user (Amendment E: he wrote into it, read the service's log
+  and listed its record). So the runner never takes an open folder and never
+  sets an owner or a list on anything that exists: absent, the place is made
+  by the one call that gives it the closed list as it is made (the system
+  and the administrators, whole, nothing inherited); made or found, it is
+  read through one handle on the name itself (a link is not followed), and
+  it is taken only where that one read says a folder and no reparse point,
+  its owner the system or the administrators, and its list
+  `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, as a folder made closed reads. The
+  same list set on a folder that existed (`D:PAI...`) is refused: such a
+  folder was open once, and what was put in it then keeps its own owner
+  (AG-1). Anything else is refused and left as it is, open or not, at every
+  start: no watch starts, and an administrator removes it. In Amendment F's
+  measurements a folder so made was owned by the administrators, and a plain
+  user's write, listing, renaming and removal of it were each refused; a
+  held handle kept nothing, so none is relied on. ProgramData, its drive and
+  its parents are taken as the system gives them, the administrators', and
+  are not checked: a link or a network drive there is the administrators'
+  own. A refusal's words go to an error stream a service does not have, so
+  they are lost; its trace is its number, 0x20000000 + n, in the service's
+  state, and Amendment F measured such a number written in the system's log
+  as itself (this runner's own refusals read so in Amendment G's field run,
+  and the start command failed at once). An administrator, and the system's
+  account, can still stop it, read and change its record, and change Raqib's
+  code, and nothing yet checks that the code the service runs is the
+  system's and the administrators' alone (A-3's Windows counterpart is the
+  install's, AE-6); the service's own code runs with the system's rights, so
+  a defect in it is the system's. Not measured: a place whose list is closed
+  in meaning but written otherwise (refused, by the letter); a place on a
+  volume that keeps no owners; a shutdown of the machine; a start at boot;
+  the manager's limit of 30 s under a slow start; another account than the
+  system's; a place on another volume, or one with a file held open by
+  another process; Windows before the runners' versions.
 
 ## 7. Platform
 
