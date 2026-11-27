@@ -336,6 +336,23 @@ GUIDE_NEW += SERVICE_ROWS
 NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing listens on one, no page is opened in a"
            " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
 GUIDE_NEW += NO_PAGE
+# ADR-0013 Amendment K (M12.4c1, K-6): `raqib service check`'s row in the guide's table, and when to run it
+SERVICE_CHECK = [
+    "| `raqib service check` | Windows, Raqib packed with its own runtime; no rights needed, nothing wr"
+    "itten: whether the code a service of Windows would run is the system's alone - the program's folde"
+    "r, whole, and each folder above it to the drive, by the owners and lists Windows gives (`docs/spec"
+    "s/SERVICE.md`); exit 0 the system's alone, with how many names of which kinds it checked, 1 not or"
+    " not read, the first name refused said with its role and why, 2 not Windows or not packed (a plain"
+    " interpreter's roads are not yet checked) |",
+    "Run `raqib service check` on Windows before a service of Windows is made to run Raqib as the syste"
+    "m, from the packed copy that service would run, once it is where it will stay:",
+    "Amendment K measured an administrator's copy in `C:\\Program Files`, its lists the ones Windows ga"
+    "ve it, taken.",
+    "A copy in a user's folder or in the drive's root, or one GitHub's Python runs, is refused, and the"
+    " name refused is said.",
+    "It is a reading at one moment: run it again after anything there changes.",
+]
+GUIDE_NEW += SERVICE_CHECK
 # M17.1 (ADR-0015 V-1 to V-3, Amendment A): the number, what a move of it means, the changelog and the update
 # steps, in the guide's Install and watch
 VERSION_NUMBER = [

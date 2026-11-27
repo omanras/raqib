@@ -1182,7 +1182,8 @@ def test_e7_the_guide_names_the_three_commands_in_its_table_and_the_cli_says_the
     import test_readme_top as registry
     guide = (ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8")
     commands = guide.split("## Commands\n", 1)[1].split("\n## ", 1)[0].split("\n")
-    rows = [r for r in commands if r.startswith("| `raqib service ")]
+    rows = [r for r in commands if r.startswith("| `raqib service ")
+            and not r.startswith("| `raqib service check` |")]   # M12.4c1: the check's row is test_wincode's
     assert rows == registry.SERVICE_ROWS and len(rows) == 3
     assert [r.split("`")[1] for r in rows] == ["raqib service install [--no-start]", "raqib service remove [--purge]",
                                                "raqib service status"]

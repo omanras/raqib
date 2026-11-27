@@ -2188,6 +2188,20 @@ collector that is slow, down or refusing never delays or loses a capture
   the manager's limit of 30 s under a slow start; another account than the
   system's; a place on another volume, or one with a file held open by
   another process; Windows before the runners' versions.
+- **What the check of the code does not read (`raqib service check`;
+  ADR-0013 Amendment K).** On Windows `raqib service check` says whether the
+  code a service would run is the system's alone, by the owners and lists of
+  the packed program's folder, whole, and of each folder above it, read at
+  one moment; Raqib installs no service of Windows yet, so nothing asks it
+  before one runs. It does not read the rights a user holds apart from any
+  list (backup and restore, taking ownership, debugging programs), each of
+  which reaches past every list it reads; the system's PATH (this Raqib
+  loads no library by a bare name that System32 does not hold, not yet
+  pinned by a test); the labels of a system list; or anything that changes
+  after it was read. A plain interpreter is refused, never passed: its roads
+  are not checked. Not measured: the kind of the drive, a machine joined to
+  a domain, Program Files with lists an administrator changed, and an
+  install of Python for all users.
 
 ## 7. Platform
 
