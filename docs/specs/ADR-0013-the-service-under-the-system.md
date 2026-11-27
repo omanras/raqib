@@ -1343,3 +1343,44 @@ X54 MET.
   jobs. Not measured: these settings on a 32-bit Windows; a reset period that is never forgotten; a service
   marked for removal. Next of the service on Windows, each small: the check-point raised while the check walks
   (M12.4c2b3, U-4), the record removed with the service (M12.4c2b4). Then the queue.
+
+## Amendment ZB (the Table, 2026-11-27) - M12.4c2b3: the check-point raised while the check walks (U-4)
+Measured before this ruling (the probe branch e727d8e; x64 and ARM64; a service made by hand from a Python
+copied under Program Files with 150000 empty files added, about 157000 names). Raqib 0.17.0 as it is: through
+the walk the system said START_PENDING with the check-point 0 and the wait of 60 s; Start-Service waited to the
+end (50 s and 33 s) and took the start; `net start` gave up after 17.7 s and 19.8 s with exit 2 and "could not
+be started", and the service ran 30 s and 14 s later. A candidate, never merged (b6058c5), that told
+START_PENDING again every 2 s with the check-point one higher and the same wait: the system said the check-point
+1, 2, 3 and on about every 2 s; Start-Service took the start after 25 s and 32 s; `net start` waited the whole
+walk and ended with exit 0 and "was started successfully" after 25.2 s and 32.4 s. Not measured: `net start`
+against a moving check-point on a walk longer than 32.4 s; a time between two raisings other than 2 s; what `net
+start`'s own rule is; a walk longer than the wait told; a raising the system does not take. The walk's seconds
+differ between the two x64 runs because they were two machines; the raising makes no walk faster.
+- ZB-1 (what is raised). While `System.own_check()` runs, the runner tells the system START_PENDING again every
+  CHECK_BEAT (2 s, the time measured) with a check-point one higher than the last (1, 2, 3 and on) and the wait
+  CHECK_WAIT_HINT as before. Every other status is told with the check-point 0, as until now. FOR: a command
+  that waits for a start by the check-point (`net start`, measured) no longer says of a service that is starting
+  that it could not be started. MUST NOT TOUCH: T-1 and T-2 - nothing is told RUNNING before the check passed,
+  the wait told stays 60 s, the check itself (raqib/wincode.py) and its line in the text file are as they are;
+  and no raising is told after a Stop was asked or after STOPPED.
+- ZB-2 (how, and its end). A thread of the runner's own, begun just before the check and ended by it: it tells
+  through the same road and under the same lock as the second START_PENDING (`self.lock`, then `_status`), and
+  it is over - ended and waited for - before `_own_code` writes its line or returns, whether the check passed,
+  refused or ended by an exception. The wait for it is bounded (CHECK_BEAT and 5 s more); a thread that did not
+  end in that time is said in one line and the start goes on. FOR: after `_own_code` nothing of the raising is
+  left that could tell START_PENDING over a RUNNING or a STOPPED.
+- ZB-3 (a raising that fails changes nothing). The raising is a courtesy to whoever waits; it is no part of the
+  verdict. A raising the system does not take, or that raises an exception, is said once in the text file - the
+  first - and counted; the count of those after it is said in one line when the check is over, never a line
+  every 2 s. A thread that cannot be begun is said in one line, and the check runs without it. In none of these
+  does the service's exit or the check's answer change.
+- ZB-4 (the tests). The made-up system records each status with its check-point. Shown: a check that lasts
+  several beats is told START_PENDING with 1, 2, 3 in order, each with the wait of 60 s, and then RUNNING with 0
+  (passed) or STOPPED with 15 and no RUNNING (refused, and ended by an exception); a check shorter than a beat
+  tells no raising; nothing is told between the check's end and its line; a Stop asked ends the raisings; ZB-3's
+  three cases with their lines. The tests wait on events, not on the clock: the beat is the runner's own value
+  that a test makes small.
+- ZB-5 (the rig and the documents). The Table wires the claim after the builder: X55 - a service from the copy
+  under Program Files made large is started by `net start`, the system is read with a check-point above 0 while
+  it starts, and `net start` ends with 0. docs/specs/SERVICE.md and docs/THREAT_MODEL.md, which say since U-4
+  that the check-point is not raised, are righted by the Table with what the field read of the branch.
