@@ -10,8 +10,9 @@ The road (Runner.run): the dispatcher is started in a thread of its own. Where i
 started by the service manager (error 1063), or fails otherwise, or does not answer in CONNECT_WAIT seconds, or
 the handler is not registered, that is said on the error stream and no watch starts (exit 2). Else the system's
 call of the service's main registers the handler and reports START_PENDING (AF-2). The main thread then makes the
-place ready (prepare()) and begins the text file; only then is RUNNING reported and the watch started. A refusal
-of either is STOPPED straight from START_PENDING: no RUNNING is ever reported for it.
+place ready (prepare()), begins the text file and asks the check of its own code (T-1, below); only then is RUNNING
+reported and the watch started. A refusal of any of these is STOPPED straight from START_PENDING: no RUNNING is ever
+reported for it.
 
 The place (AF-1): `Raqib` under the folder the environment names ProgramData (refused where that name is absent or
 not a whole path of a drive). Nothing here sets an owner or a list on anything that exists. Absent, the place is
@@ -111,6 +112,7 @@ STOP_WAIT_HINT = 30000          # milliseconds told to the system with STOP_PEND
 # names at the slowest rate measured is about 38 s: not measured, and the hint is above it with room
 CHECK_WAIT_HINT = 60000
 CHECK_SAID_MAX = 4000           # T-1: characters of each part of the check's answer said in the text file
+CHECK_HEAD = "its own code, checked at this start by this process (ADR-0013 T-1), in %.2f s"   # the line's head
 PASS_SAID = "raqib service check: the code a service would run is the system's alone: %s"   # wincode.cli_check's
 REFUSED_SAID = "raqib service check: NOT the system's alone: %s, %s"                         # two lines (a test ties)
 
@@ -820,7 +822,7 @@ class Runner:
         trace, got = "", None
         try:
             got = self.system.own_check()
-        except (Exception, KeyboardInterrupt) as exc:   # T-1: an exception out of the check is a refusal (15)
+        except BaseException as exc:   # T-1, U-3: whatever ends the check is a refusal (15); no Stop is raised here
             trace = traceback.format_exc()
             try:
                 words = _cut(str(exc))
@@ -828,8 +830,7 @@ class Runner:
                 words = "its words could not be read"
             why = "the check ended by %s: %s" % (type(exc).__name__, words)
         lasted = self.system.clock() - began
-        head = "its own code, checked at this start by this process (ADR-0013 T-1), in %.2f s" % (
-            lasted if lasted == lasted else 0.0)
+        head = CHECK_HEAD % (lasted if lasted == lasted else 0.0)
         if not trace:
             known = type(got) is tuple and len(got) == 4 and type(got[1]) is dict and type(got[2]) is list
             bad, words = (got[0], got[3]) if known else (None, None)
@@ -840,11 +841,11 @@ class Runner:
                 why = REFUSED_SAID % (_cut(bad[0]), _cut(bad[1]))
             else:
                 why = "the check gave an answer of a form this runner does not know (%s)" % _form_said(got)
+        self.code = EXIT_NOT_ALONE   # first: nothing below can leave a refusal told as another number
         if trace:
             self.text.write(trace)
         if not why.startswith("raqib service check: "):
             why += "; what was not read is never the system's"
-        self.code = EXIT_NOT_ALONE
         self._note("%s: %s; no watch is begun; the system is told %s" % (head, why, told(self.code)))
         return False
 

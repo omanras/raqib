@@ -1069,6 +1069,7 @@ def test_ai4_the_wait_is_measured_on_the_waiting_clock_not_the_wall_clock(tmp_pa
 
 # --- M12.4c2b1 (ADR-0013 Amendment T, T-1, T-2): the service asks the check of its own code at every start ---------
 HEAD = "raqib service run: its own code, checked at this start by this process (ADR-0013 T-1), in %.2f s: "
+assert HEAD == "raqib service run: " + winservice.CHECK_HEAD + ": "
 TOLD_15 = "; no watch is begun; the system is told the service's own exit 536870927 (0x2000000F: %s)" % (
     winservice.EXIT_WORDS[winservice.EXIT_BASE + 15])
 NOT_READ = "; what was not read is never the system's"
@@ -1134,7 +1135,7 @@ def test_t1_each_kind_of_refusal_is_said_whole_no_watch_no_wait_and_15_from_star
     lines = runner_lines(m)
     assert lines[1] == HEAD % 0.5 + "raqib service check: NOT the system's alone: %s, %s" % bad + TOLD_15, said
     assert lines[1] == HEAD % 0.5 + winservice.REFUSED_SAID % bad + TOLD_15 and len(lines) == 2
-    assert WAITING not in m.text() and "the watch" not in lines[1].split(TOLD_15)[0][len(HEAD % 0.5):][:9]
+    assert WAITING not in m.text()
 
 
 @pytest.mark.parametrize("got", [
@@ -1154,7 +1155,8 @@ def test_t1_an_answer_of_a_form_the_runner_does_not_know_is_refused_with_15(got,
 
 
 @pytest.mark.parametrize("error", [RuntimeError("a folder could not be listed"), OSError(5, "Access is denied"),
-                                   RecursionError("maximum recursion depth exceeded"), KeyboardInterrupt()])
+                                   RecursionError("maximum recursion depth exceeded"), KeyboardInterrupt(),
+                                   SystemExit(3), GeneratorExit()])
 def test_t1_an_exception_out_of_the_check_is_refused_with_15_and_its_trace(error, tmp_path, monkeypatch):
     m = Machine(tmp_path, place=thing())
     m.own_error = error
@@ -1257,6 +1259,14 @@ def test_t1_the_real_objects_own_check_is_wincodes_check_with_its_own_system_and
         out = io.StringIO()
         wincode.cli_check(args(), out, system=asker)
         assert out.getvalue() == said + "\n"
+    # and the plain road's pass, which own_check picks as the command does (U-3)
+    asker = SimpleNamespace(platform=lambda: "win32", packed=lambda: False, isolated=lambda: True,
+                            no_site=lambda: False)
+    monkeypatch.setattr(wincode, "check", lambda system, drives: drives.extend(DRIVES) or (None, dict(plain)))
+    out = io.StringIO()
+    wincode.cli_check(args(), out, system=asker)
+    assert out.getvalue() == winservice.PASS_SAID % wincode.plain_words(plain, DRIVES) + "\n"
+    assert winservice.System().own_check() == (None, plain, DRIVES, wincode.plain_words(plain, DRIVES))
 
 
 def test_t1_wincode_is_imported_only_inside_own_check_and_the_check_is_never_skipped():

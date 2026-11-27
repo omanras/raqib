@@ -891,6 +891,21 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert 'subst "${letter}:" $system' in drive and 'subst "${letter}:" /D' in drive and "service check" in drive
     assert "tools\\rig\\service_check_drive.ps1 -Packed $env:RUNNER_TEMP\\service-check\\pack\\dist\\raqib" in windows
     assert ("--service-check-drive $env:RUNNER_TEMP\\service-check-drive\\service-check-drive.txt" in windows)
+    # T-3 (X48, X52): the job's services are made from a copy of its Python under Program Files, one folder deeper,
+    # with -I; one more is made from the job's own Python, which the runner's own check refuses
+    again = (ROOT / "tools" / "rig" / "service_again.ps1").read_text(encoding="utf-8")
+    refused = (ROOT / "tools" / "rig" / "service_refused.ps1").read_text(encoding="utf-8")
+    for script in (again, refused):
+        assert script.isascii() and "pip install" not in script and "taskkill" not in script.replace(
+            "taskkill /f /pid $killed", "")   # X48 ends the one process it made, and nothing else does
+        assert "-I -m raqib service run" in script and "Join-Path $env:ProgramFiles" in script
+        assert "Remove-Item -Recurse -Force $holder" in script or "$place, $holder" in script
+    assert '$py = Join-Path $holder "Py\\python.exe"' in again and "(Get-Command python).Source) (Join-Path" in again
+    assert all("%s: " % key in refused for key in check.REFUSED_KEYS)
+    assert "its own code, checked at this start" in refused and check.RUNNER_SAID.endswith(
+        "its own code, checked at this start")
+    assert "tools\\rig\\service_refused.ps1 -Out $env:RUNNER_TEMP\\service-refused" in windows
+    assert "--service-refused $env:RUNNER_TEMP\\service-refused\\service-refused.txt" in windows
 
 
 # --- X48 (ADR-0013 AH-3, M12.4b): a service of Windows ended from outside runs again, and its next watch says so ---
@@ -1383,6 +1398,7 @@ def test_x52_met_where_the_users_tree_did_not_run_with_15_and_the_copy_under_pro
     assert check.REFUSED_OWN == winservice.EXIT_NOT_ALONE == 0x2000000F and check.REFUSED_WIN32 == 1066
     assert winservice.SERVICE_SPECIFIC == check.REFUSED_WIN32 and check.REFUSED_SAID in winservice.REFUSED_SAID
     assert check.TAKEN_SAID in winservice.PASS_SAID
+    assert check.RUNNER_SAID == "raqib service run: " + winservice.CHECK_HEAD.split(" by this process")[0]
     state, words = x52(refusedfile())
     assert state == check.MET, words
     assert words.startswith("the service from the job's own Python did not run (exit 1066, its own number"
@@ -1406,6 +1422,11 @@ def test_x52_met_where_the_users_tree_did_not_run_with_15_and_the_copy_under_pro
     ({"taken-text": "raqib service check: the code a service would run is the system's alone"},
      "holds no pass's sentence with its counts"),
     ({"taken-text": "raqib service check: NOT the system's alone: C:\\x, y"}, "holds no pass's sentence"),
+    # the command's own output, which says the same sentences, is not the service's text file (U-3)
+    ({"refused-text": "raqib service check: NOT the system's alone: C:\\Users\\user\\rig, owned by a user"},
+     "the service from the job's own Python: its text file's line is not the runner's own"),
+    ({"taken-text": plain_line()},
+     "the service from the copy under Program Files: its text file's line is not the runner's own"),
     ({"refused-exit": None}, "no refused-exit"), ({"refused-own": None}, "no refused-own"),
     ({"refused-text": None}, "no refused-text"), ({"taken-state": None}, "no taken-state"),
     ({"taken-text": None}, "no taken-text"),

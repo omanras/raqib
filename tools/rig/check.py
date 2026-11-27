@@ -1403,6 +1403,8 @@ REFUSED_WIN32 = 1066            # raqib/winservice.py SERVICE_SPECIFIC: the exit
 REFUSED_OWN = 0x2000000F        # raqib/winservice.py EXIT_NOT_ALONE (ADR-0013 T-1): 15, as the system gives it
 REFUSED_SAID = "NOT the system's alone"                           # raqib/wincode.py cli_check's refusal, its words
 TAKEN_SAID = "the code a service would run is the system's alone"  # and its pass's (winservice PASS_SAID)
+RUNNER_SAID = "raqib service run: its own code, checked at this start"   # the runner's own line (CHECK_HEAD), and
+# not the command's output: `raqib service check` prints the same sentences without it (ADR-0013 U-3)
 
 
 def _number(text):
@@ -1420,8 +1422,9 @@ def read_service_refused(text):
     from the Python copied under Program Files (taken-state, taken-text). text: the FILE's text (None: not given). MET
     where the first did not run - refused-exit REFUSED_WIN32, refused-own REFUSED_OWN (0x2000000F or 536870927),
     refused-text holding REFUSED_SAID and a path of a drive - and the second ran: taken-state Running, taken-text
-    holding TAKEN_SAID with a counts' sentence (CHECK_COUNTS or CHECK_PLAIN_COUNTS); a byte-order mark before the
-    first key is read past. MISSED with words for each thing not found; n/a where none was given. It never raises."""
+    holding TAKEN_SAID with a counts' sentence (CHECK_COUNTS or CHECK_PLAIN_COUNTS), each text the runner's own line
+    (RUNNER_SAID); a byte-order mark before the first key is read past. MISSED with words for each thing not found;
+    n/a where none was given. It never raises."""
     name = SERVICE_REFUSED_NAME
     try:
         if text is None:
@@ -1437,6 +1440,11 @@ def read_service_refused(text):
         if "refused-own" in got and _number(got["refused-own"]) != REFUSED_OWN:
             missing.append("the service from the job's own Python: its own number %s, not 15 (0x%08X or %d)" % (
                 got["refused-own"][:40], REFUSED_OWN, REFUSED_OWN))
+        for key, value, of in (("refused-text", refused, "the job's own Python"),
+                               ("taken-text", taken, "the copy under Program Files")):
+            if key in got and RUNNER_SAID not in value:
+                missing.append("the service from %s: its text file's line is not the runner's own (it does not say"
+                               " %s)" % (of, RUNNER_SAID))
         if "refused-text" in got:
             if REFUSED_SAID not in refused:
                 missing.append("the service from the job's own Python: its text file's line does not say %s (%s)" % (
