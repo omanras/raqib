@@ -690,3 +690,67 @@ python.exe" -I -m raqib service run`.
   registry's paths at all; python.org's installer with a plain user's writes tried against it (tried against the
   copy); the Store's Python (its interpreter is a reparse point: refused); an embedded distribution with a `._pth`
   file; Python older than 3.10.
+
+## Amendment N (the Table, 2026-11-27) - the review of M12.4c1b (docs/review/2026-11-27-M12.4c1b.md) and its field run: REDO
+The reviewer's verdict is STOP, and it is right: the code does what M says, and M is wrong. M-2 judges the folders
+above the interpreter's folder by K-3, whose reason is that adding a thing beside does not replace what is there.
+But a plain interpreter looks, at every start, for files of fixed names beside and above its own folder, and
+what it finds there changes what it runs. Read in the interpreter's own source (CPython 3.11.9, 3.12.10, 3.13.9
+and 3.14.0, Modules/getpath.py and Lib/site.py), not measured - no probe plants such a file:
+- `pyvenv.cfg` is read from the folder above the folder the executable is in, and else from that folder, with or
+  without `-I`; the site module looks in the same two places.
+- A build tree is looked for: `pybuilddir.txt` in the real executable's folder, and else the file
+  `Modules\Setup.local` two folders above that folder; where it is found, the library is taken from `Lib` two
+  folders above. For python.org's own default folder for all users (one folder below Program Files) "two folders
+  above" is the drive's root - where signed-in users may add a folder (measured, K).
+- A `._pth` file beside the library or the executable replaces the path (inside the folder; walked).
+None of the three is asked where the interpreter's home was set by the program that embeds it. Read in the
+packer's source (PyInstaller 6.11.1, bootloader/src/pyi_pyconfig.c): it sets the home, the path's entries, an
+isolated configuration and no site. So the packed road stands as K and L left it - for this packer, the one the
+rig pins.
+The field's word on the branch as built (the probe branch f60bbdf; x64 and ARM64): the check's tests passed on
+both; python.org's installer for all users (3.11.9, ARM64) with the branch's Raqib installed, asked with `-I`:
+taken, 3271 names, 5 entries, 1 not there, in 0.7 s - and that take is the fault above, on a real machine. Without
+`-I`, and by the `raqib.exe` beside it: exit 2 with the command to ask by. The job's own Python: refused. A venv
+under Program Files: taken. A *.pth line naming a folder not there under the root: refused, the root judged for
+it; one naming a folder under Program Files: taken, and the folder was on the interpreter's path; one under
+ProgramData: refused; a package file users may modify: refused. Measured on ARM64 (3.11.9): a path the registry
+holds under the interpreter's PythonPath key, the user's or the machine's, is on the path without `-I` and not
+with it. On x64 the installer ended with 0 and installed nothing (the machine holds that version); a copy stood in.
+- N-1 (the names the interpreter itself looks for are judged as entries are; replaces nothing of M, adds to M-2).
+  For the folder the interpreter is in, and for its base's: `pyvenv.cfg` in the folder above it; and, two folders
+  above it, `Modules\Setup.local` and `Lib`. Each is judged as an entry of the path is: there - as the code itself
+  (a file as itself, a folder whole); not there - by the deepest folder of it that is there, as the code itself,
+  itself only (M-3: whoever may add the missing thing decides what runs). The refusal says which name, that the
+  interpreter looks for it at every start, and the folder judged for it. FOR: nobody but the system can give the
+  interpreter a venv file or a build tree. So an interpreter one or two folders below a drive's root is refused
+  wherever signed-in users may add a folder to the root - python.org's default folder for all users among them,
+  said in the words of the refusal and in the guide; one folder deeper (`C:\Program Files\NAME\Python...`) it is
+  taken. MUST NOT TOUCH: the packed road; K-2, K-3, L-1.
+- N-2 (who runs the check; finding 3). The check is run by the code it judges: the interpreter that says the pass
+  has already run its site and the `import` lines of its *.pth files, as every start of it does. So the pass says
+  "none of their lines taken or run by the check", never "nothing of them run"; and the spec, the guide and the
+  threat model say that the check is a reading of a tree as its own code tells it - a gate against a tree put in
+  the wrong place, not a judgement of a tree another already changed - and that it is asked first by a plain
+  user, who needs no rights for it. Said too: the check writes nothing, but the interpreter that runs it may
+  write bytecode caches beside what it imports where the asker may write there.
+- N-3 (small; findings 4, 5, 6, 7, 9). Only the base executable may be unnamed: a program, a prefix or a base
+  prefix the system object does not name is a refusal, never skipped. The exec prefix and the base exec prefix
+  are roots too where they are not the prefix and the base prefix. The pass counts apart the folders judged
+  themselves only, says "its base's" only where a base was walked, and says an entry beneath a file as judged by
+  that file. The documents say both roads, what is taken beneath a file, and that names beginning with a dot are
+  read though site skips them. The tests' stand-in listings are named as stand-ins; the X50 test's refusal
+  holds the bits the check says.
+- N-4 (the builder's questions, kept as built unless N-1 to N-3 say otherwise). A folder met as a folder above
+  and as a root is judged in both roles on one reading (Q1; the reviewer traced both orders). An entry on a drive
+  that is not there: refused (Q3). *.pth names as site matches them, read in every entry that is a folder (Q4,
+  Q5). The raqib package outside every entry is walked where it is (Q6). Roots that must be there are refused
+  where they are not (Q7). Lines made whole with ntpath, never repaired (Q9). A *.pth file read to one byte past
+  its bound and refused there (Q10). The command to ask by in double quotes (Q11). A short name is not matched
+  to its long one: walked twice, never passed for it (Q16). cli.py's docstring is the Table's at the merge (Q12).
+- N-5 (the rig, M-6). The copy X50 asks is put one folder deeper (`C:\Program Files\RaqibRig\Py`), by N-1.
+- Recorded: a 2 or 3 from a call on an opened handle would be believed as "not there" (finding 8; none known);
+  names whose case the file system and the check fold differently (finding 10); a launcher's variable inherited
+  by the asker (finding 11). Not measured: N-1's three names on a real machine (read in the source only); the
+  registry's paths on x64 and on a version after 3.11; whether bytecode caches are written by an asking
+  administrator; a packer other than the one read.
