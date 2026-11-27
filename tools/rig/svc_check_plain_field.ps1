@@ -35,6 +35,15 @@ $py = "$home9\python.exe"
 & $py -m pip install --disable-pip-version-check -q --no-warn-script-location "$env:GITHUB_WORKSPACE" 2>&1 | Select-Object -Last 1
 "its path with -I -m: $((& $py -I -c "import sys; print(' | '.join(sys.path))") -join ' ')"
 
+"=== asked where it was put (ADR-0013 N-1: one folder below Program Files, the names the interpreter looks for two folders above are the drive's root's)"
+Ask "with -I, where the installer or the copy put it" $py @("-I")
+"=== the same tree one folder deeper, as an administrator copies it"
+$first = $home9
+New-Item -ItemType Directory -Force "C:\Program Files\RaqibField" | Out-Null
+Copy-Item $first "C:\Program Files\RaqibField\Py" -Recurse
+$home9 = "C:\Program Files\RaqibField\Py"
+$py = "$home9\python.exe"
+"its path with -I: $((& $py -I -c "import sys; print(' | '.join(sys.path))") -join ' ')"
 "=== asked"
 Ask "with -I" $py @("-I")
 Ask "without -I" $py @()
@@ -46,6 +55,10 @@ $said = python -I -m raqib service check 2>&1 | ForEach-Object { "$_" }
 
 "=== a venv from it under Program Files, the branch's Raqib installed into the venv"
 $venv = "C:\Program Files\RaqibFieldVenv"
+& "$first\python.exe" -m venv "C:\Program Files\RaqibFieldVenv0"
+& "C:\Program Files\RaqibFieldVenv0\Scripts\python.exe" -m pip install --disable-pip-version-check -q --no-warn-script-location "$env:GITHUB_WORKSPACE" 2>&1 | Select-Object -Last 1
+Ask "a venv whose base is where the installer or the copy put it" "C:\Program Files\RaqibFieldVenv0\Scripts\python.exe" @("-I")
+Remove-Item -Recurse -Force "C:\Program Files\RaqibFieldVenv0" -ErrorAction SilentlyContinue
 & $py -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q --no-warn-script-location "$env:GITHUB_WORKSPACE" 2>&1 | Select-Object -Last 1
 "its path with -I: $((& "$venv\Scripts\python.exe" -I -c "import sys; print(' | '.join(sys.path))") -join ' ')"
@@ -72,7 +85,7 @@ icacls $deep /remove:g "*S-1-5-32-545" | Out-Null
 Ask "after every change was undone" $py @("-I")
 
 "=== does -I read a path from the registry"
-$tag = (Get-ChildItem "HKLM:\Software\Python\PythonCore" -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty "$($_.PSPath)\InstallPath" -ErrorAction SilentlyContinue).'(default)' -like "$home9*" } | Select-Object -First 1).PSChildName
+$tag = (Get-ChildItem "HKLM:\Software\Python\PythonCore" -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty "$($_.PSPath)\InstallPath" -ErrorAction SilentlyContinue).'(default)' -like "$first*" } | Select-Object -First 1).PSChildName
 if (-not $tag) { "no key of this interpreter under HKLM\Software\Python\PythonCore: NOT MEASURED" } else {
   "the interpreter's key: PythonCore\$tag"
   $see = "import sys; print(any('raqibfieldreg' in p.lower() for p in sys.path))"
@@ -80,8 +93,7 @@ if (-not $tag) { "no key of this interpreter under HKLM\Software\Python\PythonCo
     $key = "${hive}:\Software\Python\PythonCore\$tag\PythonPath\RaqibField"
     New-Item -Path $key -Force | Out-Null
     Set-Item -Path $key -Value "C:\RaqibFieldReg"
-    "a path under ${hive}'s key: on the path without -I: $((& $py -c $see) -join ' '); with -I: $((& $py -I -c $see) -join ' ')"
-    Ask "    asked with -I while that key is there" $py @("-I")
+    "a path under ${hive}'s key: on the path without -I: $((& "$first\python.exe" -c $see) -join ' '); with -I: $((& "$first\python.exe" -I -c $see) -join ' ')"
     Remove-Item -Path $key -Force
   }
   if (-not (Get-ChildItem "HKCU:\Software\Python\PythonCore\$tag\PythonPath" -ErrorAction SilentlyContinue) -and (Test-Path "HKCU:\Software\Python\PythonCore\$tag\PythonPath")) { Remove-Item "HKCU:\Software\Python\PythonCore\$tag\PythonPath" -Force }
@@ -90,6 +102,6 @@ if (-not $tag) { "no key of this interpreter under HKLM\Software\Python\PythonCo
 "=== removed"
 Remove-Item -Recurse -Force $venv, "C:\Program Files\RaqibFieldExtra", "C:\ProgramData\RaqibFieldPth" -ErrorAction SilentlyContinue
 if ($how -like "python.org*") { $p = Start-Process $inst -ArgumentList "/quiet", "/uninstall" -Wait -PassThru; "the installer's removal ended with $($p.ExitCode)" }
-Remove-Item -Recurse -Force $home9 -ErrorAction SilentlyContinue
-"left: $(Test-Path $home9), $(Test-Path $venv), $(Test-Path 'C:\Program Files\RaqibFieldExtra'), $(Test-Path 'C:\ProgramData\RaqibFieldPth')"
+Remove-Item -Recurse -Force $first, "C:\Program Files\RaqibField" -ErrorAction SilentlyContinue
+"left: $(Test-Path $first), $(Test-Path 'C:\Program Files\RaqibField'), $(Test-Path $venv), $(Test-Path 'C:\Program Files\RaqibFieldExtra'), $(Test-Path 'C:\ProgramData\RaqibFieldPth')"
 exit 0
