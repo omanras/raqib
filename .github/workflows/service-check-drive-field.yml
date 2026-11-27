@@ -1,6 +1,6 @@
 name: service-check-drive-field
 # Probe only (never merged): the field's word on a branch's `raqib service check` and the drive a path is on
-# (ADR-0013 Amendment P), and its test of the libraries loaded by name on real Windows.
+# (ADR-0013 Amendments P to R), and its test of the libraries loaded by name on real Windows.
 on:
   push:
     branches: [claude/rig-probe]
