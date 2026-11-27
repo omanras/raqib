@@ -1,0 +1,40 @@
+name: service-purge-field
+# Probe only (never merged): the nineteenth measurement - the place of Raqib's Windows service after its remove, and what
+# removes it, on real Windows.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_purge_field.ps1, tools/rig/svc_purge_field.py, .github/workflows/service-purge-field.yml]
+permissions:
+  contents: read
+jobs:
+  field:
+    name: the place after the remove (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+        ref: [main]
+    env:
+      RAQIB_REF: ${{ matrix.ref }}
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib, its tests and its rig tools
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q .
+      - name: asked in the field
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_purge_field.ps1"
