@@ -6,7 +6,7 @@ name: agents-probe
 on:
   push:
     branches: [claude/rig-probe]
-    paths-ignore: [tools/rig/packed_probe.py, tools/rig/mac_probe.py, tools/rig/window_probe.py, "tools/rig/packed_env_*", "tools/rig/svc_probe*", tools/rig/svc_field.ps1, .github/workflows/service-probe5.yml, .github/workflows/service-probe6.yml, tools/rig/svc_kill.ps1, tools/rig/svc_probe7.ps1, tools/rig/svc_probe8.ps1, .github/workflows/service-probe8.yml, .github/workflows/service-probe9.yml, .github/workflows/service-probe7.yml, .github/workflows/service-kill.yml, .github/workflows/service-field.yml, .github/workflows/service-probe.yml, .github/workflows/platform-probe.yml, .github/workflows/window-probe.yml, .github/workflows/packed-env-probe.yml, .github/workflows/agents-probe.yml]
+    paths-ignore: [tools/rig/packed_probe.py, tools/rig/mac_probe.py, tools/rig/window_probe.py, "tools/rig/packed_env_*", "tools/rig/svc_probe*", tools/rig/svc_field.ps1, .github/workflows/service-probe5.yml, .github/workflows/service-probe6.yml, tools/rig/svc_kill.ps1, tools/rig/svc_probe7.ps1, tools/rig/svc_probe8.ps1, .github/workflows/service-probe8.yml, .github/workflows/service-probe9.yml, .github/workflows/service-probe9b.yml, .github/workflows/service-probe7.yml, .github/workflows/service-kill.yml, .github/workflows/service-field.yml, .github/workflows/service-probe.yml, .github/workflows/platform-probe.yml, .github/workflows/window-probe.yml, .github/workflows/packed-env-probe.yml, .github/workflows/agents-probe.yml]
 permissions:
   contents: read
 env:
