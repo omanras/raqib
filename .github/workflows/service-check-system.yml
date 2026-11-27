@@ -1,0 +1,44 @@
+name: service-check-system
+# Probe only (never merged): the eleventh measurement - `raqib service check` asked by the system's own account,
+# and the runner served from a copy under Program Files (before ADR-0013 Amendment T is ruled).
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_check_system.ps1, .github/workflows/service-check-system.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: main
+jobs:
+  field:
+    name: raqib service check, asked by the system, on real Windows (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the branch's Raqib and its rig tools
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib tests docs pyproject.toml tools/rig/check.py tools/rig/service_check.ps1 tools/rig/pack.sh
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1
+      - name: the rig's own packed copy
+        shell: pwsh
+        run: |
+          & tools\rig\service_check.ps1 -Out $env:RUNNER_TEMP\service-check | Select-Object -Last 3
+          exit 0
+      - name: asked in the field
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_check_system.ps1" -PackedDir "$env:RUNNER_TEMP\service-check\pack\dist\raqib"
