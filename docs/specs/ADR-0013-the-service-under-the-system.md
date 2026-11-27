@@ -390,3 +390,39 @@ machines):
   list; a Stop while the service is START_PENDING; where the Stop's interrupt surfaces after the watch's call on
   a real machine; an owner's own call for the right to change his file's list; a place on a volume that keeps no
   owners; reparse points other than a junction and a link.
+
+## Amendment H (the Table, 2026-11-27) - M12.4b: a watch started after one that ended without its end
+Measured for Amendment E and not yet ruled (the probe branch 02de365; GitHub's Windows machines, x64 and ARM64):
+the service's process ended from outside, with the system told to start it again after 2 s - the system said so
+(event 7031) and started it, and the new watch refused: "another raqib watch --host is watching this home (run
+..., pid ..., heartbeat 3 s ago): one host watch per home; stop it first". It ended with 2, the service read
+Stopped, and the system did not start it again. Read in the code, not measured: a watch refuses an unfinished
+state until its heartbeat is `stale_after_seconds` old (30 s), by the heartbeat alone; a watch that starts over
+a stale unfinished state takes the home and says nothing of the watch before it. The Linux unit meets the same
+refusal and is started again every 5 s until it passes.
+- AH-1 (a watch that ended without its end is said by the next one; every system). A host watch that starts over
+  a state another watch left unfinished says so once, at its start, as a hole of its own run: the run before,
+  its pid, its last heartbeat, and how many seconds lie between that heartbeat and this start, in which nothing
+  was watched from this home. It is a hole and not a blind spot: a watcher that was ended from outside, a crash,
+  a power loss - each is a gap in the record, and the result of the run that found it is not clean (rule 4).
+  FOR: the gap is in the record itself, and in the events a collector takes, not only in the system's own log.
+  MUST NOT TOUCH: the rule by which a second watch is refused (the heartbeat and its staleness, D-6); a state
+  that is finished; a state whose heartbeat cannot be parsed (refused as today).
+- AH-2 (the service waits for a state to go stale). Before it starts the watch, the runner asks the engine
+  whether another watch still holds the home (one function of raqib/host.py, the same test the watch itself
+  makes). Where one does, it says so in its text file and waits until that heartbeat is stale - the state's own
+  staleness and no longer, with a bound - and then starts the watch, which says AH-1's hole. A Stop during the
+  wait is obeyed at once: no watch is begun, the system is told 0. A state still fresh after the wait is a
+  living watch: the watch's own refusal stands (20). The service reads RUNNING while it waits (AF-2's order is
+  kept), and the text file says it is waiting, for what, and for how long. FOR: a service ended from outside
+  watches again without a person. MUST NOT TOUCH: the Linux unit (systemd starts it again until it passes; AH-1
+  gives it the same line).
+- AH-3 (a claim on the rig, the Table's wiring). The rig's Windows job makes the service from the installed
+  Raqib, tells the system to start it again, ends its process, and keeps what it read; X48 is MET where the
+  service ran again with another pid, and the place's events hold two runs, the second with AH-1's hole naming
+  the first, the first with no end. `tools/rig/check.py` reads it from the files the job keeps.
+- Recorded, not ruled: taking over at once where the process the state names is no longer there (the gap would
+  be seconds, not half a minute) - not before it is measured that a pid and its start can be told on every
+  system a home may be shared across; the system told to start the service again on an exit of the service's own
+  (the install's, M12.4c). Not measured: a power loss; a machine's shutdown without a Stop; a clock set back
+  between the heartbeat and the start (the seconds said are then wrong, and said as read).
