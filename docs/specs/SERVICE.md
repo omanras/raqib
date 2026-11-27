@@ -275,12 +275,14 @@ ADR-0013 Amendment E (AE-1, AE-3, AE-4), Amendment F (AF-1 to AF-4, which replac
 exists) and Amendment G (AG-1, AG-2). This is the first part of S4: on Windows the host watch runs as a service of the
 system's, by the standard library alone (ctypes; no new dependency), in raqib/winservice.py. Installing, removing and
 asking the state of the service are not here yet (M12.4c); until they are, the line above that there is nothing for
-Windows is true of `install`, `remove` and `status` only. Six sources are named below and nothing else is called
+Windows is true of `install`, `remove` and `status` only. Eight sources are named below and nothing else is called
 measured: Amendment E (a candidate of 150 lines in the same shape, not this runner), Amendment F's field run of
-c125f62 (the first builder's runner, as a real service), Amendment F's measurements (the calls this runner makes, by
-a probe), Amendment G (this runner's own field run as a real service, f8af8f5, and two measurements more by a probe),
-Amendment H (the candidate of Amendment E ended from outside, by the probe 02de365, as Amendment I records it), and
-Amendment I's field run of 8914d37 (this runner with the wait below, as a real service ended from outside).
+c125f62 (the first builder's runner, as a real service), Amendment F's measurements (the calls this runner makes, by a
+probe), Amendment G (this runner's own field run as a real service, f8af8f5, and two measurements more by a probe),
+Amendment H (the candidate of Amendment E ended from outside, by the probe 02de365, as Amendment I records it),
+Amendment I's field run of 8914d37 (the runner with the first build of the wait, before the review's changes, as a
+real service ended from outside), Amendment J's field run of 054ef34 (this runner, the same way), and the rig's own
+Windows job, which ends the service at every run (X48).
 
 **The shape.** `raqib service run` is the command the system's service manager runs; nobody else. Its process hands
 the system its service table (StartServiceCtrlDispatcherW) in a second thread, and runs the watch in the main thread
@@ -428,13 +430,19 @@ records the probe branch 02de365 (GitHub's Windows machines, x64 and ARM64), whi
 not this runner (Amendment I): with the system told to start the service again after 2 s, the system said so (event
 7031) and started it, the new watch refused ("another raqib watch --host is watching this home (run ..., pid ...,
 heartbeat 3 s ago): one host watch per home; stop it first"), ended with 2, and the service read Stopped and was not
-started again. Amendment I records what this runner did, in the field run of 8914d37 (the probe branch 241e04f; the
-same machines; `raqib service run` as a real service, the system told to start it again after 5 s, its process ended
-from outside): the system said the end (event 7031) and started the service; the runner's text said the state still
-held the place ("heartbeat 5 s ago, stale after 30 s ... waiting up to 25.6 s") and waited; the watch read its first
-round 31 to 32 s after the end; the place's events held two runs, each chain whole, the later with the hole
-`watch-unended` naming the earlier, which had no end; the rig's own check read X48 MET from what was kept; after a
-Stop and one more start, no second such hole. The words and lines below are the REDO's, after that run.
+started again. Amendment I records what the runner of 8914d37 did, before the review's changes, in its field run (the
+probe branch 241e04f; the same machines; `raqib service run` as a real service, the system told to start it again
+after 5 s, its process ended from outside): the system said the end (event 7031) and started the service; the runner's
+text said the state still held the place ("heartbeat 5 s ago, stale after 30 s ... waiting up to 25.6 s") and waited;
+the watch read its first round 31 to 32 s after the end; the place's events held two runs, each chain whole, the later
+with the hole `watch-unended` naming the earlier, which had no end; the rig's own check read X48 MET from what was
+kept (X48 as it then was, without the tie to the pids); after a Stop and one more start, no second such hole.
+Amendment J records the field run of 054ef34 - this runner, with every change below but Amendment J's own words (the
+probe branch 607b75c; the same machines): the text file said the wait before it and after it ("lasted 25.1 s and
+ended: stale"), the watch said the hole `watch-unended` at its start in the words below and the events held it, the
+first round was read 31 s after the end, X48 read MET with the pids tied, and after a Stop and one more start there
+was no second such hole. Not run on a real machine: the hole of a state that cannot be read; a start ended before its
+first round.
 
 `holder()`, one function of raqib/host.py, reads whether another host watch holds a home: nothing held (no state, a
 finished state, an object that is no host watch's state); a state that cannot be read (there, and an open refused, not
@@ -450,45 +458,54 @@ PID), left its state PATH unfinished with its heartbeat stale: its last heartbea
 watch that ended without its end (ended from outside, a crash or a power loss) or one that stopped writing its state:
 for those N s no watch of this home is known to have watched". RUN, PID and HEARTBEAT are made printable and cut to 40
 characters (`HELD_SAID_MAX`; a cut one ends with "..."). N is the whole seconds of the age the refusal's own reading
-took (`holder()` at the watch's refusal, a moment after the start's clock read, not at the start's instant), as the
-wall clock reads them. A heartbeat ahead of that clock (a state whose own staleness is negative or NaN) is said "its
-last heartbeat HEARTBEAT, S s ahead of this start's clock; ...: how long no watch of this home watched is not known",
-S as read and never 0. `watch-state-unreadable`, over a state there that cannot be read: "the state PATH is there and
-cannot be read as a state (WHY): whether the host watch before this one ended without its end, and how long no watch
-of this home watched, is not known; this watch takes the home", WHY the error's kind and words, cut to 80 characters;
-the watch starts as before. None where there was no state (a first watch is no gap), where the state was finished or
-no host watch's, or where the watch is refused.
+took (`holder()` at the watch's refusal, after the start's clock read and its check of Sysmon, not at the start's
+instant), as the wall clock reads them. A heartbeat ahead of that clock (a state whose own staleness is negative or
+NaN) is said "its last heartbeat HEARTBEAT, S s ahead of this start's clock; ...: how long no watch of this home
+watched is not known", S in six significant digits (`%g`) and never 0. `watch-state-unreadable`, over a state there
+that cannot be read: "the state PATH is there and cannot be read as a state (WHY): whether the host watch before this
+one ended without its end, and how long no watch of this home watched, is not known; this watch starts over it", WHY
+the error's kind with its words cut to 80 characters, or what JSON value the file holds where it is no object (an
+array, null, a number, a string); the watch starts as before. None where there was no state (a first watch is no gap),
+where the state was finished or no host watch's, or where the watch is refused.
 
 When the hole is written (AI-1): before the watch's own state is first written (by its registration, at its start,
 over the state that named the run before), the watch's start line and the holes of its start so far are written to the
-events file, lines of this run's chain as any other; a later pass finds them said and writes them no more. A watch
-ended again in its first seconds still leaves the earlier gap in the events. This early write is made only on a start
-that found such a state; every other start's events begin at its first tick, as before.
+events file, lines of this run's chain as any other; a later pass finds them said and writes them no more. Read in the
+code and held by a test, not run on a real machine: a watch ended again in its first seconds still leaves the earlier
+gap in the events - unless that early write itself fails (a full disk, an events file refused): the watch then starts,
+says the failure as a hole of its own (`events-unwritable`) in its state and its final report, and the earlier gap is
+in no record that lasts if this watch too is ended in its first seconds (AJ-2). A start that said the watch before and
+then fails before it writes any state (the page's port refused; not the service's road, which serves no page) leaves
+its start line and the hole in the events with no end, and the state still naming the run before: the next watch says
+the run before again - two holes for one gap, each true to what its run found (AJ-1). This early write is made only on
+a start that found such a state; every other start's events begin at its first tick, as before.
 
 The runner (AH-2, AI-4): after RUNNING and before the watch, the runner asks `holder()` of the place; where another
 watch's state still holds it, fresh, one line of the text file says the run, the pid, the heartbeat's age as read and
 how long it will wait ("another host watch's state still holds the place (run ..., pid ..., heartbeat 4 s ago, stale
 after 30 s): it was ended without its end, or it still watches; waiting up to 27.0 s for it to go stale, asked again
 every 1 s, then the watch"; a heartbeat ahead of the clock: "heartbeat S s ahead of this clock"). It waits the state's
-own staleness less its age, plus one second, never more than 60 s whatever numbers the state holds (a staleness or an
-age that is no number the wait can use - too large for a float, NaN, a boolean, a text - waits the 60 s), asking again
-every second, the last pause the part of a second left, on the system's waiting clock (monotonic), never the wall
-clock. One line after it: "the wait for the state of the watch before lasted T s and ended: HOW", HOW stale, finished,
-gone (the state removed: the watch before's end is then not known), the state cannot be read, its heartbeat cannot be
-parsed, still fresh after the whole wait, or a Stop. Then it starts the watch, which says AH-1's hole. The service
-reads RUNNING while it waits (AF-2's order kept). A Stop during the wait ends it at once: no watch is begun, the
-system is told 0, and the text file has AF-4's line ("the watch was stopped before it gave a report (it was not
-begun)"). A state still fresh after the wait is a living watch: the watch is started and its own refusal stands (20).
-An exception out of `held` (a state nested past the parser's limit) is the runner's own (23). Not held, stale, a state
-that cannot be read, or a heartbeat that cannot be parsed: no wait and no line. A heartbeat that cannot be parsed gets
-no wait (AI-6): the watch refuses it (20), and the service stays stopped until an administrator acts (removes that
-file once no host watch runs, as the refusal says). The wait goes through the system's object (winservice.System:
-`held`, `clock`, `pause`); the runner's tests use a stand-in's clocks (its wall clock and its waiting clock two values
-where a test sets them) and no real second. X48 (`tools/rig/check.py --service-run RUNFILE --service-events
-EVENTSFILE`, AI-5): MET only where the RUNFILE says Running, an again-pid above 0 that is not killed-pid and an
-again-seconds from 0 to 90, and the place's events hold the hole `watch-unended` of a later run whose id ends with "-"
-and again-pid, naming an earlier run with no end and the pid killed-pid; a byte-order mark before the first key is
-read past. The job's wiring is the Table's.
+own staleness less its age, plus one second, never more than 60 s whatever numbers the state holds (a staleness too
+large for a float, or infinite, waits the 60 s; a boolean or a text as the staleness is read by `holder()` as 30, and
+a NaN makes the state stale, so there is no wait; a number said in the line is cut to 40 characters and the cut is
+marked), asking again every second, the last pause the part of a second left, on the system's waiting clock
+(monotonic), never the wall clock. One line after it: "the wait for the state of the watch before lasted T s and
+ended: HOW", HOW stale, finished, gone (the state removed: the watch before's end is then not known), the state cannot
+be read, its heartbeat cannot be parsed, no longer held (the state is no host watch's), still fresh after the whole
+wait, or a Stop. Then it starts the watch, which says AH-1's hole. The service reads RUNNING while it waits (AF-2's
+order kept). A Stop during the wait ends it at once: no watch is begun, the system is told 0, and the text file has
+AF-4's line ("the watch was stopped before it gave a report (it was not begun)"). A state still fresh after the wait
+is a living watch: the watch is started and its own refusal stands (20). An exception out of `held` (a state nested
+past the parser's limit) is the runner's own (23). Not held, stale, a state that cannot be read, or a heartbeat that
+cannot be parsed: no wait and no line. A heartbeat that cannot be parsed gets no wait (AI-6): the watch refuses it
+(20), and the service stays stopped until an administrator acts (removes that file once no host watch runs, as the
+refusal says). The wait goes through the system's object (winservice.System: `held`, `clock`, `pause`); the runner's
+tests use a stand-in's clocks (its wall clock and its waiting clock two values where a test sets them) and no real
+second. X48 (`tools/rig/check.py --service-run RUNFILE --service-events EVENTSFILE`, AI-5): MET only where the RUNFILE
+says Running, an again-pid above 0 that is not killed-pid and an again-seconds from 0 to 90, and the place's events
+hold the hole `watch-unended` of a later run whose id ends with "-" and again-pid, naming an earlier run with no end
+and the pid killed-pid; a byte-order mark before the first key is read past. The rig's Windows job makes the service,
+ends its process once and keeps the two files (tools/rig/service_again.ps1).
 
 **What was not measured.** A place whose list is closed in meaning but written otherwise (refused, by the letter); a
 place on a volume that keeps no owners; an owner written as a whole SID and not as SY or BA (refused with 13, by the
@@ -498,12 +515,15 @@ the watch's call on a real machine; a call by a file's owner that asks only for 
 folder closed after he put it there; reparse points of other kinds than a junction and a link; the runner under Python
 3.11 as a service; a Stop that comes while the watch is still starting (it may end with no final report and an
 unfinished state, which the next watch says as a hole; nothing else is built for it); a watch that ignores its
-interrupt (not built); a shutdown of the machine (the control was
-not sent); a service's start at boot; the manager's limit of 30 s under a slow start; another account than the
-system's; a place on another volume, or one with a file held open by another process; Windows before the runners'
-versions. Of the watch before (Amendment H): a power loss; a machine's shutdown without a Stop; a clock set back
-between the heartbeat and the start (the seconds said are then wrong, and said as read); what a power loss leaves
-of the state on NTFS or ext4 (AI-2); the Linux unit's exit 3 after such a start, as systemd reads it; the REDO's
-words and lines on a real machine (the Table's run after it lands); taking over at once where the
-process the state names is gone (recorded, not ruled). The install, its start at boot, the system told to start it again, a refusal where the code it would run is
-not the system's alone, and the event log are M12.4c's.
+interrupt (not built); a shutdown of the machine (the control was not sent); a service's start at boot; the manager's
+limit of 30 s under a slow start; another account than the system's; a place on another volume, or one with a file
+held open by another process; Windows before the runners' versions. Of the watch before (Amendment H): a power loss; a
+machine's shutdown without a Stop; a clock set back between the heartbeat and the start (the seconds said are then
+wrong, and said as read); what a power loss leaves of the state on NTFS or ext4 (AI-2); the Linux unit's exit 3 after
+such a start, as systemd reads it; the hole of a state that cannot be read, and the early write on a start ended
+before its first round, on a real machine; a state removed before a start - the watch before is then said nowhere,
+also where an administrator removes it as the unparsed refusal advises; an object at the state's path that is no host
+watch's (taken as nothing held, said nowhere); a state with a negative or NaN staleness written by a living watch
+(said as one that ended or stopped writing); taking over at once where the process the state names is gone (recorded,
+not ruled). The install, its start at boot, the system told to start it again, a refusal where the code it would run
+is not the system's alone, and the event log are M12.4c's.

@@ -467,3 +467,43 @@ The reviewer's verdict is NEXT with no blocker, and a list to fix before the mer
   more name, the state inside its place (findings 18 to 22). On Linux a unit stopped after such a start ends
   with 3, and systemd may read that as failed: said, not measured. The wiring of the rig's Windows job for X48
   is the Table's, after the REDO.
+
+## Amendment J (the Table, 2026-11-27) - the review of M12.4b REDO (docs/review/2026-11-27-M12.4b-redo.md) and its field run: lands
+The field's word on 054ef34 (the probe branch 607b75c; GitHub's Windows machines, x64 and ARM64; the branch's
+`raqib service run` as a real service, its process ended from outside): the gate green on six jobs and the rig
+green; the runner's and the hole's 125 tests passing on real Windows; the system started the service again; its
+text said the state still held the place and that it would wait ("heartbeat 5 s ago, stale after 30 s ...
+waiting up to 25.6 s"), then "the wait ... lasted 25.1 s and ended: stale"; the watch said the hole `watch-
+unended` at its start, naming the run before and its pid, its last heartbeat 30 s before the start; the first
+round was read 31 s after the end; the events held the hole in the same words, both chains whole; X48 read MET
+with the hole's pid the ended one and the later run the new process's; after a Stop and one more start, no
+second such hole.
+The second reviewer's verdict is NEXT with no blocker. Ruled, and done by the Table's hand:
+- AJ-1 (a start that said the watch before and then failed; finding 7). Such a start leaves its start line and
+  the hole in the events with no end, and the state still names the run before, so the next watch says the run
+  before again: two holes for one gap, each true to what its run found, and the failed run itself a run with no
+  end in the events. Kept as it is: nothing is taken back from a record, and the service's own road serves no
+  page and cannot fail there. A test holds it and the spec says it.
+- AJ-2 (the early write that fails; finding 6). The watch starts: a watch that cannot write its events still
+  watches, and says so as the hole it already has for that. The earlier gap is then in this run's state and
+  final report only; the spec says the case instead of promising the events.
+- AJ-3 (said as it is; findings 2, 10, 11, 18, 25, R4). The test of a refused start that writes nothing is
+  restored. A value JSON holds is named in JSON's words. A watch over a state it cannot read "starts over it";
+  it is not said to take a home it may not get. A number cut for a line is marked as cut. The fresh refusal's
+  run and pid are cut as the hole's are - its words are otherwise as they were. The rig's check says in its own
+  usage what X48 now asks.
+- AJ-4 (the rig keeps it). The rig's Windows job makes the service from the Raqib it installed, ends its process
+  once and keeps what X48 reads (tools/rig/service_again.ps1), at every run of the rig.
+- AJ-5 (kept, and said in the spec as not said or not measured). A state removed before a start leaves the watch
+  before said nowhere, also where an administrator removes it as the unparsed refusal advises (R8); an object at
+  the state's path that is no host watch's is nothing held (finding 12); a state with a negative or NaN
+  staleness written by a living watch is said as one that ended or stopped writing (14); a state nested past the
+  parser's limit stops every start until an administrator acts, loudly (R3); the wait's asks lie outside its
+  bound by one read of a local file (first review, 8). On such a start only, the start's other holes are written
+  with the early write and the heartbeat counts from the start (R1). Not run on a real machine: the hole of a
+  state that cannot be read; a start ended before its first round; how systemd reads a unit that ends with 3
+  after such a start; what a power loss leaves of the state.
+- AJ-6 (lands). M12.4b lands as 0.10.0 after the gate and the rig, X48 among its claims, on the commit to be
+  merged. Next: M12.4c (install, remove, status; the place's owner named in the call that makes it; a refusal
+  where the code is not the system's alone; the start at boot; the system told to start it again; the event
+  log).

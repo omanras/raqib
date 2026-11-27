@@ -477,6 +477,7 @@ HELD_NONE, HELD_FRESH, HELD_STALE, HELD_UNPARSED = "none", "fresh", "stale", "un
 HELD_UNREADABLE = "unreadable"   # ADR-0013 AI-2: holder()'s answer for a state that is there and cannot be read
 UNENDED = "watch-unended"   # ADR-0013 AH-1: the hole of a watch started over a state another watch left unfinished
 UNREADABLE_BEFORE = "watch-state-unreadable"   # AI-2: the hole of a watch started over a state it cannot read
+JSON_NAMES = {list: "array", type(None): "null", str: "string", bool: "true or false", int: "number", float: "number"}
 HELD_SAID_MAX = 40   # AI-3: a run, a pid or a heartbeat read from a state is said cut to this many characters
 WHY_SAID_MAX = 80    # AI-2: why a state cannot be read, said cut to this many characters
 
@@ -520,8 +521,8 @@ def holder(home=None, wall=None, path=None):
     except (OSError, ValueError) as exc:
         error = "%s: %s" % (type(exc).__name__, _safe(getattr(exc, "strerror", None) or exc)[:WHY_SAID_MAX])
         return dict(got, held=HELD_UNREADABLE, error=error, why="the state cannot be read (%s)" % error)
-    if not isinstance(other, dict):
-        error = "it holds a JSON %s, not an object" % type(other).__name__
+    if not isinstance(other, dict):   # AJ-3: JSON's own names for what it holds, not this language's
+        error = "it holds a JSON %s, not an object" % JSON_NAMES.get(type(other), "value")
         return dict(got, held=HELD_UNREADABLE, error=error, why="the state cannot be read (%s)" % error)
     if other.get("mode") != HOST:
         return dict(got, why="the state is no host watch's")
@@ -550,7 +551,7 @@ def before_hole(held, state_path):
     if held.get("held") == HELD_UNREADABLE:
         return (UNREADABLE_BEFORE, "the state %s is there and cannot be read as a state (%s): whether the host watch"
                 " before this one ended without its end, and how long no watch of this home watched, is not known;"
-                " this watch takes the home" % (state_path, held.get("error")))
+                " this watch starts over it" % (state_path, held.get("error")))
     if held.get("held") != HELD_STALE:
         return None
     age = held["age"]
@@ -2523,7 +2524,8 @@ class HostWatch:
         if held["held"] == HELD_FRESH:
             raise HostError("another raqib watch --host is watching this home (run %s, pid %s, heartbeat %.0f s"
                             " ago): one host watch per home; stop it first (%s)" % (
-                                _safe(held["run"]), _safe(held["pid"]), max(held["age"], 0), self.state_path))
+                                _held_said(held["run"]), _held_said(held["pid"]), max(held["age"], 0),
+                                self.state_path))   # AJ-3: the run and the pid cut as the hole cuts them
         return held
 
     def _resume(self):

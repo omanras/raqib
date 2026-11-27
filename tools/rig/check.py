@@ -51,10 +51,11 @@ the helper ended or was started again, and no tree of its report is the packed p
 report given and missing or empty included; n/a off Linux, or where no report was given.
 --service-run, --service-events: what the rig's Windows job kept of the service ended from outside and started again
 by the system (ADR-0013 AH-3, M12.4b): RUNFILE holds lines `key: value` (killed-pid, again-pid, again-seconds,
-state), EVENTSFILE the place's events.jsonl. X48 MET where the service ran again (state Running, again-pid a number
-other than killed-pid, again-seconds at most 90) and the events hold two runs of a host watch, the later with the
-hole watch-unended whose words name the earlier run's id, the earlier with no end; MISSED with words for each thing
-not found, a file given and missing included; n/a where neither file was given.
+state), EVENTSFILE the place's events.jsonl. X48 MET only where the service ran again (state Running, again-pid a
+number above 0 other than killed-pid, again-seconds from 0 to 90) and the events hold the hole watch-unended of a
+later run whose id ends with "-" and again-pid, its words naming an earlier run with no end and the pid killed-pid
+(AI-5: the end this job made, no other); a byte-order mark before the first key is read past; MISSED with words for
+each thing not found, a file given and missing included; n/a where neither file was given.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and

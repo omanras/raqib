@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "tests" / "fixtures" / "host"))
 
-from raqib import discover, host  # noqa: E402
+from raqib import discover, host, watch as watchmod  # noqa: E402
 from raqib.rules import engine  # noqa: E402
 
 from test_watch import FakeRunner, make_notifier  # noqa: E402
@@ -126,9 +126,9 @@ def test_holder_nothing_held_no_state_a_finished_state_and_a_state_of_no_host_wa
     (b"\x00" * 64, "JSONDecodeError: Expecting value"),                      # filled with zeros
     (b'{"mode": "host", "heartbeat": ', "JSONDecodeError: Expecting value"),   # torn
     (b'{"mode": "h\xc3\xb4st"}', "UnicodeDecodeError: "),        # not ASCII
-    (b"[1, 2]", "it holds a JSON list, not an object"),                      # a JSON that is no object
-    (b"null", "it holds a JSON NoneType, not an object"),
-    (b"42", "it holds a JSON int, not an object"),
+    (b"[1, 2]", "it holds a JSON array, not an object"),                      # a JSON that is no object
+    (b"null", "it holds a JSON null, not an object"),
+    (b"42", "it holds a JSON number, not an object"),
 ])
 def test_ai2_holder_tells_a_state_that_cannot_be_read_apart_from_no_state(tmp_path, data, error):
     path = state_file(tmp_path)
@@ -215,6 +215,60 @@ def test_the_watch_refuses_exactly_where_holder_says_fresh_or_unparsed_and_in_to
 
 
 # --- AI-1: the hole is in the events before this watch's state replaces the one that named the run before ---------
+
+def test_e2_none_where_this_run_is_refused_and_the_state_is_left_as_it_was(tmp_path):
+    """Restored by the Table (the second review's finding 2): a refused start says no hole, writes no event and
+    leaves the state's bytes as they were - the one test that fails if the early write moved before the refusal."""
+    path = state_file(tmp_path)
+    for wall0, beat in ((BEAT_AT + 30, BEAT), (BEAT_AT + 3600, "garbled")):
+        state_file(tmp_path, heartbeat=beat)
+        before = path.read_bytes()
+        with pytest.raises(host.HostError):
+            watch(tmp_path, wall0=wall0)
+        assert path.read_bytes() == before
+        assert not (tmp_path / "home" / ".raqib" / "host" / "events.jsonl").exists()
+
+
+def test_aj3_the_refusals_run_and_pid_are_cut_as_the_holes_are(tmp_path):
+    state_file(tmp_path, run="R" * 10000, pid="P" * 10000)
+    with pytest.raises(host.HostError) as got:
+        watch(tmp_path, wall0=BEAT_AT + 3)
+    words = str(got.value)
+    assert "run %s..., pid %s...," % ("R" * 40, "P" * 40) in words and len(words) < 600
+
+
+def test_aj1_a_start_that_fails_after_it_said_the_watch_before_leaves_a_run_with_no_end_and_the_next_says_it_again(
+        tmp_path, monkeypatch):
+    """AJ-1: the start said the watch before (its events hold its start line and the hole), then failed before it
+    wrote any state (its page could not be served). The state still names the run before; the failed run has no
+    end in the events; the next watch says the run before again - two holes for one gap, from two runs, each
+    true to what its run found."""
+    home = tmp_path / "home"
+    path = state_file(tmp_path, heartbeat=OLD_BEAT)
+    before = path.read_bytes()
+
+    def refused(*args, **kwargs):
+        raise OSError(98, "Address already in use")
+    monkeypatch.setattr(watchmod, "_serve", refused)
+    with pytest.raises(watchmod.WatchError):
+        host.start(CATALOG, RULES, every=10, no_open=True, no_notify=True, no_page=False, port=1, out=io.StringIO(),
+                   err=io.StringIO(), environ={}, home=str(home),
+                   reader=lambda: host_fixtures.inventory("linux", CATALOG), platform="linux")
+    assert path.read_bytes() == before                                   # the state still names the run before
+    lines = [x for x in (home / ".raqib" / "host" / "events.jsonl").read_text(encoding="ascii").splitlines() if x]
+    got = [json.loads(x) for x in lines]
+    failed = got[0]["watch"]["run"]
+    assert got[0]["kind"] == "watch" and got[0]["state"] == "start"
+    assert [e["hole"]["kind"] for e in got if e["kind"] == "hole"] == [host.UNENDED]
+    assert not [e for e in got if e["kind"] == "watch" and e.get("state") == "end"]   # the failed run has no end
+    chain_whole(lines)
+    w = watch(tmp_path, wall0=BASE + 5)[0]                               # the next watch, over the same state
+    again = [json.loads(x) for x in (home / ".raqib" / "host" / "events.jsonl").read_text(
+        encoding="ascii").splitlines() if x]
+    holes = [e for e in again if e["kind"] == "hole" and e["hole"]["kind"] == host.UNENDED]
+    assert len(holes) == 2 and {e["watch"]["run"] for e in holes} == {failed, w.run}
+    assert all("run 20261103T120000Z-4242 (pid 4242)" in e["summary"] for e in holes)   # both name the run before
+
 
 class Ended(BaseException):
     """The watch ended right after its state was first written (a stand-in: nothing is signalled)."""
@@ -364,7 +418,7 @@ def test_ai2_a_watch_over_a_state_it_cannot_read_starts_and_says_one_hole_of_its
     assert hole["detail"] == (
         "the state %s is there and cannot be read as a state (JSONDecodeError: Unterminated string starting at: line"
         " 1 column 18 (char 17)): whether the host watch before this one ended without its end, and how long no"
-        " watch of this home watched, is not known; this watch takes the home" % w.state_path)
+        " watch of this home watched, is not known; this watch starts over it" % w.state_path)
     assert unended(w) == [] and hole["round"] is None and hole["notice"] is None
     rounds(w, c, 1)
     text, code = w.finish()

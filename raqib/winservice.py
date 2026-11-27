@@ -373,7 +373,8 @@ def _number_said(value):
 
 def _read_said(value):
     try:
-        return _printable(value)[:40]
+        text = _printable(value)
+        return text[:40] + ("..." if len(text) > 40 else "")   # AJ-3: a cut is marked, never said as the whole
     except ValueError:   # an integer past str()'s digits
         return "a number too long to say"
 

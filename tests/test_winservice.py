@@ -932,7 +932,8 @@ def test_ai4_a_staleness_of_10_400_read_from_a_real_state_waits_60_s_and_the_wat
     m = Machine(tmp_path, place=thing(), watch=returns(2), stop=False)
     before(m, 1, stale=10 ** 400)
     code, _ = served(m, monkeypatch)
-    assert "waiting up to 60.0 s" in m.text() and "stale after %s s" % ("1" + "0" * 39) in m.text() and code == 2
+    assert "waiting up to 60.0 s" in m.text() and code == 2
+    assert "stale after %s... s" % ("1" + "0" * 39) in m.text()    # AJ-3: the cut is marked, not said as the number
     assert winservice._number_said(10 ** 5000) == "a number too long to say"   # past str()'s digits: no exception
 
 
