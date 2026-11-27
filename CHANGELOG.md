@@ -5,6 +5,43 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.15.0 - 2026-11-27
+
+What is new:
+- `raqib service status` now answers on Windows (ADR-0013 Amendments V and W). It needs no rights and changes
+  nothing: it asks the system's service manager, by the system's own calls, about the service named
+  `RaqibWatch`, and says one line for each thing it read - whether the name is there, Raqib's mark in its
+  description (`raqib-service/1`), its command and whether it is one of the two forms Raqib's install will
+  write, its type, start and account, its state, and the exit the system holds where it is not running.
+- The four answers are Linux's: 0 `RESULT: ACTIVE` (running, and as installed), 1 installed and not active or
+  not as installed, 3 not installed, a service of the name that is not Raqib's, or not known, 2 on another
+  system.
+- A service that stopped with the runner's own number is said in the runner's words; for 15 (the code it runs
+  is not the system's alone) status names the text file that holds what was refused.
+- Text read from the service manager was written by whoever made the service: status writes it as printable
+  ASCII, a letter of another script by its number, and cuts it.
+- Measured on GitHub's Windows machines, x64 and ARM64: asked by an administrator and by a user outside the
+  administrators' group at ten moments of a service's life, the two were answered the same lines and the same
+  exit at each. The rig asks it as such a user at every run (X53).
+- Raqib does not install a service of Windows yet: until it does, a service status calls Raqib's is one an
+  administrator made under that name with the mark as its description.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes for a watch, a window, the Linux service or a service of Windows that runs.
+
+Not measured:
+- A service that is starting, stopping or paused, as status reads it: of those states it says the state and the
+  bare number the system holds, no more.
+- A service marked for removal; a machine joined to a domain.
+- The delayed start, the failure actions and the failure flag are not read: what a caller with no rights reads
+  back of them is to be measured before the install sets them.
+- Installing and removing the service on Windows: not built.
+
 ## 0.14.0 - 2026-11-27
 
 What is new:

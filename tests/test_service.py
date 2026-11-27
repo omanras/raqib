@@ -202,6 +202,11 @@ def run(fake, *argv):
     out, err = io.StringIO(), io.StringIO()
     old = sys.stderr
     sys.stderr = err
+    platform = sys.platform
+    if platform == "win32" and "status" in argv:
+        # The made-up machine is Linux's. On a Windows test machine `status` would else go to the real service
+        # manager (ADR-0013 V-4, W-5): the command is turned by sys.platform, so the test says which it asks.
+        sys.platform = "linux"
     try:
         saved = service.System
         service.System = lambda: fake
@@ -211,6 +216,7 @@ def run(fake, *argv):
             service.System = saved
     finally:
         sys.stderr = old
+        sys.platform = platform
     return code, out.getvalue(), err.getvalue()
 
 
