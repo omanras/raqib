@@ -338,3 +338,55 @@ The reviewer's verdict is REDO with two blockers, both in what Amendment E ruled
   (taken), the start command failing at once on a refusal, and the system's log's own words for it. Not measured
   still: AE-6's list; a place whose list is closed in meaning but written otherwise (refused, by the letter); a
   place on a volume that keeps no owners.
+
+## Amendment G (the Table, 2026-11-27) - the review of M12.4a REDO (docs/review/2026-11-27-M12.4a-redo.md) and its field run: lands
+The field's word on f8af8f5 (AF-5; the probe branch 1104096; GitHub's Windows machines, x64 and ARM64, plain and
+packed): the gate green on six jobs and the rig green; as a real service, run by hand it refused with its line
+and made nothing; the place absent, it was made owned by the administrators with the list
+`D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, the watch ran, a Stop took 0.26 s with the final report and the run's
+chain whole; a plain user's write, read, listing, Stop and ending of its process were each refused; started
+again, the text before was kept once; a place a plain user made first (13, twice in a row), an administrator's
+open place with a file and without one (14), a junction and a link at the name (11), a file there (12): each
+refused, the start command failing at once, the system's log saying the number itself (`%%536870925` and so on),
+each left exactly as it was and nothing written where a link points.
+The second reviewer's verdict is NEXT. Measured for its findings 3 and 15 (the probe branch 4007788, the same
+machines):
+- The making call (CreateDirectoryW) where the name is a junction or a link, its target there or absent, or a
+  file: error 183 each time, and nothing made where they point - an absent target stayed absent. (Another call
+  that makes a folder and is told not to follow a link answered error 80 in the same cases; it is not needed.)
+- A plain user's file left in a folder that was closed afterwards (the administrators made its owner, the closed
+  list set, read back `D:PAI...`): the file took the folder's list and kept the plain user as its owner. His
+  reading it by its whole path, his giving the users the file again with the system's own tool, and his writing
+  to it were each refused. A call that asks only for an owner's right to change his file's list was not tried.
+- Found on the way: the runner's real-object test passed in the gate and failed in the field's step on the same
+  machine as the same administrator - a folder made by the same call was owned by the administrators where the
+  process was started from PowerShell, and by the user himself where it was started from Git's bash.
+- AG-1 (the closed list is taken in one form). A place is taken only where its list reads as a folder MADE
+  closed reads, `D:P...`. The same list set on a folder that existed (`D:PAI...`) is refused with 14: such a
+  folder was open once, what was put in it then keeps its own owner, and the refusals measured above rest on one
+  tool, not on what an owner may ask of the system. FOR: what is in a taken place was put there by the system or
+  the administrators (the review's finding 15, and the first review's 7 whole). MUST NOT TOUCH: the making call
+  and the text it is handed (R4); AF-1's one read through one handle.
+- AG-2 (the watch's end is always decided and always said). An interrupt that surfaces in the runner outside the
+  watch's call no longer skips the watch's trace and the runner's last line, and after a Stop it is never told
+  as the runner's own failure (the review's finding 9). Tests for the three places it can surface.
+- AG-3 (the making call stays). Measured: it follows no link at the name and makes nothing elsewhere (finding
+  3); the documents say so with this source.
+- AG-4 (kept, or said). 18 for a text file ended by a failed write where the system would be told 0, and the
+  bound reached stays 0 (R3); 17 and 23 (R1, R2); a Stop while START_PENDING obeyed, not measured (R5); the
+  owner and the list split at the first `D:` after `O:`, an owner written as a whole SID refused (R6); 21 for a
+  watch that returned nothing after a Stop (R7); standard input left None (R10); a junction made in the test by
+  CPython's own private call, absent or changed it is not read (R9). The documents' sentences the review names
+  are narrowed (findings 10, 15, 16). A RUNNING the system does not take leaves the service START_PENDING, said
+  only in the text file: recorded as not measured (finding 7).
+- AG-5 (who makes the place matters, and it is the install's). The runner is started by the system, and the
+  place it made was the administrators' in every run. An administrator's own process may make a folder that is
+  his and not the administrators' (measured above): the install (M12.4c) names the owner in the call that makes
+  the place, measured first, and the runner's test says the owner it met instead of failing.
+- AG-6 (lands). M12.4a lands as 0.9.0 after the Table's field run of the commit to be merged. Next: M12.4b (a
+  watch killed and started again: the wait, and the new watch saying the one before ended without its end; a
+  claim on the rig), M12.4c (install, remove, status; the place's owner named; a refusal where the code is not
+  the system's alone; the start at boot; the system told to start it again; the event log). Not measured: AE-6's
+  list; a Stop while the service is START_PENDING; where the Stop's interrupt surfaces after the watch's call on
+  a real machine; an owner's own call for the right to change his file's list; a place on a volume that keeps no
+  owners; reparse points other than a junction and a link.

@@ -290,10 +290,10 @@ def test_e1_cli_service_run_is_handed_to_winservice(monkeypatch):
     assert cli.main(["service", "run"], io.StringIO()) == 7 and got == ["run"]
 
 
-def test_e1_the_closed_lists_are_two_constants_and_the_owners_two():
+def test_e1_the_closed_list_is_taken_in_one_form_as_made_and_the_owners_are_two():
     assert winservice.CLOSED_AS_MADE == "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
     assert winservice.CLOSED_AS_SET == "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
-    assert winservice.CLOSED_LISTS == (CLOSED_AS_MADE, CLOSED_AS_SET) and winservice.MADE_WITH == CLOSED_AS_SET
+    assert winservice.MADE_WITH == CLOSED_AS_SET and not hasattr(winservice, "CLOSED_LISTS")   # AG-1: one form taken
     assert winservice.OWNERS == ("SY", "BA") and winservice.ALREADY_EXISTS == 183
     assert winservice.PLACE_NAME == "Raqib" and winservice.HOME_NAMES == ("HOME", "USERPROFILE")
     assert winservice.owner_and_list("O:BAD:P(A;;FA;;;SY)") == ("BA", "D:P(A;;FA;;;SY)")
@@ -304,12 +304,12 @@ def test_e1_the_closed_lists_are_two_constants_and_the_owners_two():
 @pytest.mark.parametrize("given, road", [
     (None, "made"),                                                  # absent: made closed in one call, then read
     (thing(owner="SY", dacl=CLOSED_AS_MADE), "found"),               # as the system writes a list it was made with
-    (thing(owner="BA", dacl=CLOSED_AS_SET, items=["x"]), "found"),   # as it writes a list set; contents untouched
+    (thing(owner="BA", dacl=CLOSED_AS_MADE, items=["x"]), "found"),  # a run's record before in it: untouched
 ])
 def test_e1_the_roads_that_take_the_place_one_make_call_and_one_read(given, road, tmp_path, monkeypatch):
     m = Machine(tmp_path, place=given)
     got = winservice.prepare(m)
-    assert got == (PLACE, road, m.place["owner"], m.place["dacl"]) and got[3] in winservice.CLOSED_LISTS
+    assert got == (PLACE, road, m.place["owner"], m.place["dacl"]) and got[3] == CLOSED_AS_MADE
     assert m.log == [("make", PLACE), ("read", PLACE)]               # one making call, one read: nothing set
     if given is not None:
         assert m.place == given                                      # what was found is as it was
@@ -336,6 +336,8 @@ REFUSALS = [
     ({"made_owner": STRANGER}, B + 13, "is owned by " + STRANGER),
     ({"place": thing(owner="BA", dacl=OPEN, items=["left.txt"])}, B + 14, "not the closed one"),
     ({"place": thing(owner="BA", dacl=OPEN)}, B + 14, "not the closed one"),                        # open, empty
+    ({"place": thing(owner="BA", dacl=CLOSED_AS_SET)}, B + 14, "as a folder made closed reads"),    # AG-1: closed after
+    ({"place": thing(owner="SY", dacl=CLOSED_AS_SET, items=["x"])}, B + 14, "not the closed one"),  # it existed
     ({"place": thing(dacl=CLOSED_AS_MADE + "(A;OICI;FR;;;BU)")}, B + 14, "not the closed one"),
     ({"place": thing(dacl="D:P(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)")}, B + 14, "not the closed one"),   # by the letter
     ({"made_dacl": OPEN}, B + 14, "not the closed one"),
@@ -562,7 +564,10 @@ def test_e4_a_watch_ended_by_the_real_interrupt_is_interrupted_told_0_and_said_i
     before = signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
         m = Machine(tmp_path, place=thing(), watch=waits_and_is_ended_by_the_real_interrupt, real_interrupt=True)
-        code, runner = served(m, monkeypatch)
+        try:
+            code, runner = served(m, monkeypatch)
+        except KeyboardInterrupt:               # a runner that let it out must fail this test, not end the run
+            pytest.fail("the interrupt came out of the runner")
         consumed = True
         try:
             time.sleep(0.05)                    # nothing is left to surface
@@ -604,7 +609,83 @@ def test_e4_a_keyboard_interrupt_in_the_runner_outside_the_watchs_call_is_caught
     code, runner = served(m, monkeypatch)
     assert code == 0 and calls == ["returned", "returned"]
     assert runner.caught == ["in the runner, outside the watch's call"] and m.statuses()[-1] == (STOPPED, 0, 0)
-    assert "an interrupt came in the runner, outside the watch's call; it was caught and changed nothing" in m.text()
+    lines = m.text().splitlines()
+    assert "raqib service run: an interrupt came in the runner, outside the watch's call; it was caught" in lines[-2]
+    assert lines[-1].startswith("raqib service run: the watch returned with 0;") and "is told exit 0" in lines[-1]
+    assert runner.finished and runner.decided                    # AG-2: the last line is the watch's end, always
+
+
+def test_ag2_an_interrupt_inside_the_end_itself_still_leaves_the_last_line_and_the_trace(tmp_path, monkeypatch):
+    def fails(machine, argv, out):
+        raise ValueError("the watch's own")
+    m = Machine(tmp_path, place=thing(), watch=fails)
+    runner = winservice.Runner(m)
+    real, calls = runner._note, []
+
+    def interrupted_at_the_end_line(text):
+        calls.append(text)
+        if text.startswith("the watch ended by ValueError") and len([c for c in calls if c == text]) == 1:
+            raise KeyboardInterrupt
+        return real(text)
+    monkeypatch.setattr(runner, "_note", interrupted_at_the_end_line)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    code = runner.run()
+    text = m.text()
+    assert code == 2 and runner.caught == ["in the runner, outside the watch's call"] and runner.finished
+    assert "ValueError: the watch's own" in text and text.splitlines()[-1].startswith(
+        "raqib service run: the watch ended by ValueError")
+    assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_WATCH_FAILED)   # the watch's, not 23
+
+
+class _InterruptsAt:
+    """A lock that raises the interrupt once, at its nth entering: the Stop's interrupt surfacing there."""
+
+    def __init__(self, real, nth):
+        self.real, self.nth, self.n = real, nth, 0
+
+    def __enter__(self):
+        self.n += 1
+        if self.n == self.nth:
+            raise KeyboardInterrupt
+        return self.real.__enter__()
+
+    def __exit__(self, *exc):
+        return self.real.__exit__(*exc)
+
+
+def test_ag2_an_interrupt_right_after_the_watch_returned_keeps_its_result(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), stop=False)
+    runner = winservice.Runner(m)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    real = runner._watch
+
+    def watch_with_the_lock_that_interrupts():
+        runner.lock = _InterruptsAt(runner.lock, 2)    # 1: before the watch's call; 2: the finally after it returned
+        return real()
+    monkeypatch.setattr(runner, "_watch", watch_with_the_lock_that_interrupts)
+    runner.run()
+    assert runner.outcome == ("returned", 0, "") and runner.caught == ["after the watch returned"]
+    assert runner.finished and m.text().splitlines()[-1].startswith("raqib service run: the watch returned with 0;")
+
+
+def test_ag2_an_interrupt_as_the_runner_ended_is_caught_and_the_service_still_stops(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing(), stop=False)
+    runner = winservice.Runner(m)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    real, calls = runner._end, []
+
+    def end_interrupted_once():
+        calls.append(1)
+        if len(calls) == 1:
+            raise KeyboardInterrupt
+        return real()
+    monkeypatch.setattr(runner, "_end", end_interrupted_once)
+    runner.run()                                     # nothing comes out of it
+    assert len(calls) == 2 and runner.caught == ["as the runner ended"]
+    assert m.statuses()[-1][0] == STOPPED and runner.finished
 
 
 def test_e4_stop_pending_is_never_reported_after_stopped_and_one_stop_is_acted_on_once(tmp_path, monkeypatch):
@@ -655,15 +736,18 @@ def test_e5_the_real_object_makes_a_folder_closed_in_one_call_and_reads_names_by
         import _winapi
         _winapi.CreateJunction(str(target), str(tmp_path / "junction"))
         links.append(str(tmp_path / "junction"))
-    except (ImportError, AttributeError, OSError):
-        pass
+    except (ImportError, AttributeError, OSError, TypeError):   # a private call of CPython's: absent, refused or
+        pass                                                    # changed, that part is not read
     for link in links:
         attributes, _ = system.read_place(link)
         assert attributes & FOLDER and attributes & REPARSE, link
     if owner not in winservice.OWNERS:
         import ctypes
-        if ctypes.windll.shell32.IsUserAnAdmin():
-            raise AssertionError("an administrator's folder made so is owned by %s" % owner)
-        pytest.skip("this user is no administrator: the folder's owner is %s (said, not judged)" % owner)
+        # Measured (ADR-0013 Amendment G): the same administrator's process makes a folder owned by the
+        # administrators from PowerShell (the gate) and by the user himself from Git's bash. The runner would
+        # refuse such a place with 13; here it is said, not judged. The service is started by the system (BA).
+        assert winservice.owner_and_list(text)[0] == owner and owner
+        pytest.skip("this process makes folders owned by %s, not by the system or the administrators (said, not"
+                    " judged; admin: %s)" % (owner, bool(ctypes.windll.shell32.IsUserAnAdmin())))
     if not links:
         pytest.skip("neither a link nor a junction could be made here: that part is not read")

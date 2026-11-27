@@ -263,40 +263,40 @@ unit that could not be stopped is not removed.
 
 ## Windows: the runner (`raqib service run`)
 
-ADR-0013 Amendment E (AE-1, AE-3, AE-4) and Amendment F (AF-1 to AF-4, which replace AE-2's closing of a folder
-that exists). This is the first part of S4: on Windows the host watch runs as a service of the system's, by the
-standard library alone (ctypes; no new dependency), in raqib/winservice.py. Installing, removing and asking the
-state of the service are not here yet, and neither is what a watch started again after a killed one does (AE-6);
-until they are, the line above that there is nothing for Windows is true of `install`, `remove` and `status`
-only. Three sources are named below and nothing else is called measured: Amendment E (a candidate of 150 lines in
-the same shape, not this runner), Amendment F's field run of c125f62 (the first builder's runner, as a real
-service), and Amendment F's measurements (the calls this runner now makes, by a probe, not by this runner). This
-runner as built here has not yet run as a service: the Table runs it so before the merge (AF-5).
+ADR-0013 Amendment E (AE-1, AE-3, AE-4), Amendment F (AF-1 to AF-4, which replace AE-2's closing of a folder that
+exists) and Amendment G (AG-1, AG-2). This is the first part of S4: on Windows the host watch runs as a service of the
+system's, by the standard library alone (ctypes; no new dependency), in raqib/winservice.py. Installing, removing and
+asking the state of the service are not here yet, and neither is what a watch started again after a killed one does
+(AE-6); until they are, the line above that there is nothing for Windows is true of `install`, `remove` and `status`
+only. Four sources are named below and nothing else is called measured: Amendment E (a candidate of 150 lines in the
+same shape, not this runner), Amendment F's field run of c125f62 (the first builder's runner, as a real service),
+Amendment F's measurements (the calls this runner makes, by a probe), and Amendment G (this runner's own field run as
+a real service, f8af8f5, and two measurements more by a probe).
 
-**The shape.** `raqib service run` is the command the system's service manager runs; nobody else. Its process
-hands the system its service table (StartServiceCtrlDispatcherW) in a second thread, and runs the watch in the
-main thread as it runs from a console, by Raqib's own entry with the Linux unit's arguments:
-`cli.main(["watch", "--host", "--no-page", "--no-notify"], out)`. When the system calls the service's main, the
-runner registers its handler and reports START_PENDING, with no control accepted. The main thread then makes the
-place ready and begins the text file, and only then reports RUNNING and starts the watch (AF-2). A refusal of the
-place or of the text file is STOPPED straight from START_PENDING: no RUNNING is reported for it (Amendment F's
-measurements: a refusal reported from START_PENDING makes the start command fail at once; reported from RUNNING,
-the command said ok, as the field run of c125f62 showed). A Stop or a Shutdown from the system is reported as
-STOP_PENDING (with a hint of 30 s), and then turned into the interrupt a person's Ctrl+C is
-(`signal.raise_signal(SIGINT)` from the handler); the watch ends, and then STOPPED is reported. Nothing is
-reported after STOPPED. The interrupt is raised only while the watch's call runs: a Stop that comes before it
-means the watch is not begun, and a Stop after it returned raises nothing; an interrupt that still surfaces in the
-runner outside the watch's call is caught and said in the text file. A second Stop, and every other control,
-changes nothing; a control the runner could not act on is said in the text file (the system's own calls of the
-handler swallow every exception, so that nothing comes out into the system's thread).
+**The shape.** `raqib service run` is the command the system's service manager runs; nobody else. Its process hands
+the system its service table (StartServiceCtrlDispatcherW) in a second thread, and runs the watch in the main thread
+as it runs from a console, by Raqib's own entry with the Linux unit's arguments: `cli.main(["watch", "--host",
+"--no-page", "--no-notify"], out)`. When the system calls the service's main, the runner registers its handler and
+reports START_PENDING, with no control accepted. The main thread then makes the place ready and begins the text file,
+and only then reports RUNNING and starts the watch (AF-2). A refusal of the place or of the text file is STOPPED
+straight from START_PENDING: no RUNNING is reported for it (Amendment F's measurements: a refusal reported from
+START_PENDING makes the start command fail at once; reported from RUNNING, the command said ok, as the field run of
+c125f62 showed). A Stop or a Shutdown from the system is reported as STOP_PENDING (with a hint of 30 s), and then
+turned into the interrupt a person's Ctrl+C is (`signal.raise_signal(SIGINT)` from the handler); the watch ends, and
+then STOPPED is reported. Nothing is reported after STOPPED. The interrupt is raised only while the watch's call runs:
+a Stop that comes before it means the watch is not begun, and a Stop after it returned raises nothing; an interrupt
+that still surfaces in the runner outside the watch's call is caught and said in the text file, and the watch's end is
+still decided and still the text file's last line (AG-2). A second Stop, and every other control, changes nothing; a
+control the runner could not act on is said in the text file (the runner's wrapper around the handler swallows every
+exception, so that nothing comes out into the system's thread).
 
-Run by anything but the service manager, the dispatcher fails at once with error 1063 (Amendment E): the runner
-says so on its error stream (`not started by the service manager (error 1063)`), starts no watch and exits 2; so
-it does where the dispatcher fails otherwise, where it does not answer in 25 s, and where the handler is not
-registered (then no status can be told at all). Off Windows, `raqib service run` says in one line that it is
-Windows', whatever other arguments are given, and exits 2. Every call of the system goes through one object
-(winservice.System) that a test replaces; ctypes is imported inside it, at its first call of Windows, never when
-the module is imported, and no program is started.
+Run by anything but the service manager, the dispatcher fails at once with error 1063 (Amendment E): the runner says
+so on its error stream (`not started by the service manager (error 1063)`), starts no watch and exits 2; so it does
+where the dispatcher fails otherwise, where it does not answer in 25 s, and where the handler is not registered (then
+no status can be told at all). Off Windows, `raqib service run` says in one line that it is Windows', with
+`--no-start` or `--purge` given or not, and exits 2. Every call of the system goes through one object
+(winservice.System) that a test replaces; ctypes is imported inside it, at its first call of Windows, never when the
+module is imported, and no program is started.
 
 **The place.** `Raqib` under the folder the environment of the service names `ProgramData`; where that name is
 absent, or is not a whole path of a drive (a letter, a colon and a separator; no `..`; not a share), the runner
@@ -314,20 +314,25 @@ kind, its owner and its list come from that one handle, and it is taken only whe
 | a reparse point (a junction, a link) | refuses (11); it is left as it is |
 | not a folder | refuses (12); it is left as it is |
 | an owner neither the system (SY) nor the administrators (BA) | refuses (13); it is left as it is |
-| a list other than `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)` and `D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, whatever the folder holds or does not hold | refuses (14); it is left as it is |
-| a folder, no reparse point, owned by SY or BA, its list one of the two | takes it; what is in it is not touched |
+| a list other than `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, whatever the folder holds or does not hold - the same list set on a folder that existed, `D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, among them (AG-1) | refuses (14); it is left as it is |
+| a folder, no reparse point, owned by SY or BA, its list `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)` | takes it; what is in it is not touched |
 
-The two lists are the closed one in the two forms the system writes it: `D:P...` as read back from a folder made
-with it, `D:PAI...` as read back from a list set on a folder that exists (both forms: Amendment F's measurements
-and Amendment E). A list closed in meaning but written otherwise is refused, by the letter. A place that is refused
-is refused again at every start, for nothing in it was changed; an administrator removes it. Only a place taken
-has its owner and list as the read says, so nothing a stranger left is ever inside a place that is taken. A
-handle is not held to keep the place: Amendment F's measurements found that a handle with the right to read the
-list alone holds nothing (its maker renamed a folder while it was held); what keeps a taken place's name is its
-own list and owner (Amendment F's measurements: a plain user's write, listing, renaming and removal of a folder so
-made were each refused). Only then are the process's `HOME` and `USERPROFILE` the place, as the Linux unit's HOME
-is its state directory, so the watch's whole record is written under it. One folder is made, the place; one name
-is read, the place's.
+The closed list is taken in one form only (AG-1): `D:P...`, as the system writes it for a folder made with it. The
+same list set on a folder that existed reads back `D:PAI...` (Amendments E and F) and is refused: such a folder was
+open once, and what was put in it then keeps its own owner. Amendment G's measurements: a plain user's file left in a
+folder closed afterwards kept him as its owner; his reading it by its whole path, his giving the users the file again
+with the system's own tool, and his writing to it were each refused - a call that asks only for an owner's right to
+change his file's list was not tried, so nothing rests on those refusals. A list closed in meaning but written
+otherwise is refused, by the letter. A place that is refused is refused again at every start, for nothing in it was
+changed; an administrator removes it. A place is taken only as the making call leaves one, closed from its first
+moment, so what is in a taken place was put there by the system or the administrators (AG-1). The making call does not
+follow a link at the name: Amendment G's measurements found that at a junction and at a link, its target there or
+absent, and at a file, it answered error 183 and made nothing where they point. A handle is not held to keep the
+place: Amendment F's measurements found that a handle with the right to read the list alone holds nothing (its maker
+renamed a folder while it was held); what keeps a taken place's name is its own list and owner (Amendment F's
+measurements: a plain user's write, listing, renaming and removal of a folder so made were each refused). Only then
+are the process's `HOME` and `USERPROFILE` the place, as the Linux unit's HOME is its state directory, so the watch's
+whole record is written under it. One folder is made, the place; one name is read, the place's.
 
 **The text file.** A service has no standard streams (each is None; Amendment E). The runner gives the watch a
 text file in the place, `service.txt`, for its report and its errors. It is begun anew at each start; the one
@@ -371,39 +376,50 @@ otherwise. A refusal of the place or of the text file is said on the error strea
 is None: the words are lost, and the refusal's only trace is its number in the service's state and the system's
 log.
 
-**What was measured, and by what.** Amendment E (the candidate, not this runner; GitHub's Windows machines, x64
-and ARM64, Python 3.12, Raqib plain and packed by PyInstaller 6.11.1): the system started it in 0.56 to 0.71 s
-plain and 0.08 to 0.09 s packed; a Stop took 0.25 to 0.27 s, the watch ending 0.01 to 0.03 s after the control
-with its final report and code 0; as a service the process was the system's own account in session 0, its
-folder System32, its three standard streams None; with no service manager the dispatcher failed at once with
-error 1063; with HOME and USERPROFILE a folder under ProgramData, the watch's whole record was written there; a
-folder ProgramData makes is open to every user; a list set as `D:PAI...` on a folder read back so, and a plain
-user was then refused; a folder a plain user made first is his, and he opened it again after it was closed; his
-Stop of the service and his ending its process were refused. Amendment F's field run of c125f62 (the first
-builder's runner, which reported RUNNING first and closed an open empty place; the same machines, plain and
-packed): run by hand it refused with its line, exit 2; the place absent, it was made owned by the administrators
-with the closed list, the watch ran, a Stop took 0.26 s with the final report, the state Stopped with exit 0; a
-plain user's write, read, listing, Stop and ending of its process were each refused; started again, the text
-before was kept once; a place a plain user made first was refused with 13 and left untouched, an open one with a
-file in it refused with 14, a junction refused with 11 with nothing written where it points; the system's log gave
-each of those numbers the system's own words for it, and the start command said it succeeded for a service that
-then refused. Amendment F's measurements (a probe, the same machines): a folder made by CreateDirectoryW with the
-closed list, as an administrator and as the system's own account in a service, read back owned by the
-administrators with `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, and made again, error 183; read through one handle on
-the name itself, a folder, a junction and a link to a folder (each a folder that is a reparse point), a file, and
-an absent name (error 2); a refusal from START_PENDING fails the start command at once; a number of 14 is written
-in the system's log with the system's words for 14, and 0x20000000 + 14 as itself (`%%536870926`).
+**What was measured, and by what.** Amendment E (the candidate, not this runner; GitHub's Windows machines, x64 and
+ARM64, Python 3.12, Raqib plain and packed by PyInstaller 6.11.1): the system started it in 0.56 to 0.71 s plain and
+0.08 to 0.09 s packed; a Stop took 0.25 to 0.27 s, the watch ending 0.01 to 0.03 s after the control with its final
+report and code 0; as a service the process was the system's own account in session 0, its folder System32, its three
+standard streams None; with no service manager the dispatcher failed at once with error 1063; with HOME and
+USERPROFILE a folder under ProgramData, the watch's whole record was written there; a folder ProgramData makes is open
+to every user; a list set as `D:PAI...` on a folder read back so, and a plain user was then refused; a folder a plain
+user made first is his, and he opened it again after it was closed; his Stop of the service and his ending its process
+were refused. Amendment F's field run of c125f62 (the first builder's runner, which reported RUNNING first and closed
+an open empty place; the same machines, plain and packed): run by hand it refused with its line, exit 2; the place
+absent, it was made owned by the administrators with the closed list, the watch ran, a Stop took 0.26 s with the final
+report, the state Stopped with exit 0; a plain user's write, read, listing, Stop and ending of its process were each
+refused; started again, the text before was kept once; a place a plain user made first was refused with 13 and left
+untouched, an open one with a file in it refused with 14, a junction refused with 11 with nothing written where it
+points; the system's log gave each of those numbers the system's own words for it, and the start command said it
+succeeded for a service that then refused. Amendment F's measurements (a probe, the same machines): a folder made by
+CreateDirectoryW with the closed list, as an administrator and as the system's own account in a service, read back
+owned by the administrators with `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, and made again, error 183; read through one
+handle on the name itself, a folder, a junction and a link to a folder (each a folder that is a reparse point), a
+file, and an absent name (error 2); a refusal from START_PENDING fails the start command at once; a number of 14 is
+written in the system's log with the system's words for 14, and 0x20000000 + 14 as itself (`%%536870926`). Amendment
+G's field run (this runner, f8af8f5, the same machines, plain and packed; its tests passing on real Windows): run by
+hand it refused with its line, exit 2, and made nothing; the place absent, it was made owned by the administrators
+with `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`, the watch ran, a Stop took 0.26 s with the final report and the run's
+chain whole, the state Stopped with exit 0; a plain user's write, read, listing, Stop and ending of its process were
+each refused; started again on its own place, the text before was kept once; a place a plain user made first, an
+administrator's open place with a file in it and without one, a junction and a link at the place's name, and a file
+there: each refused with its number (13, 14, 14, 11, 11, 12), the start command failing at once, the system's log
+saying the number itself (`%%536870925` and so on), and each left exactly as it was, twice in a row for the first.
+Amendment G's measurements (a probe): the making call at a junction, a link and a file, as said above; a plain user's
+file inside a folder closed afterwards, as said above; and the same administrator's process making a folder owned by
+the administrators when started from PowerShell and owned by the user himself when started from Git's bash - the
+service is started by the system, and the folder it made was the administrators' in every run.
 
-**What was not measured.** This runner as built here, as a service: the Table measures it before the merge
-(AF-5), with a place a plain user made, an administrator's open place with and without a file, a junction, a link
-and a file at the place's name, a closed place holding the record of a run before, the start command failing at
-once on a refusal, and the system's log's own words for it. Not measured either: a place whose list is closed in
-meaning but written otherwise (refused, by the letter); a place on a volume that keeps no owners; a link at the
-place's name whose target is absent; reparse points of other kinds than a junction and a link; the runner under
-Python 3.11 as a service; a Stop that comes while the watch is still starting (it may end with no final report
-and an unfinished state; M12.4b's); a watch that ignores its interrupt (M12.4b's); a shutdown of the machine (the
-control was not sent); a service's start at boot; the manager's limit of 30 s under a slow start; another account
-than the system's; a place on another volume, or one with a file held open by another process; Windows before the
-runners' versions. A watch started while the one before left its state unfinished, and how long the service waits
-then, are M12.4b's; the install, its start at boot, the system told to start it again, a refusal where the code it
-would run is not the system's alone, and the event log are M12.4c's.
+**What was not measured.** A place whose list is closed in meaning but written otherwise (refused, by the letter); a
+place on a volume that keeps no owners; an owner written as a whole SID and not as SY or BA (refused with 13, by the
+letter); a Stop that comes while the service is still START_PENDING; a RUNNING the system does not take (the service
+would stay START_PENDING for the watch's life, said only in the text file); where the Stop's interrupt surfaces after
+the watch's call on a real machine; a call by a file's owner that asks only for the right to change its list, inside a
+folder closed after he put it there; reparse points of other kinds than a junction and a link; the runner under Python
+3.11 as a service; a Stop that comes while the watch is still starting (it may end with no final report and an
+unfinished state; M12.4b's); a watch that ignores its interrupt (M12.4b's); a shutdown of the machine (the control was
+not sent); a service's start at boot; the manager's limit of 30 s under a slow start; another account than the
+system's; a place on another volume, or one with a file held open by another process; Windows before the runners'
+versions. A watch started while the one before left its state unfinished, and how long the service waits then, are
+M12.4b's; the install, its start at boot, the system told to start it again, a refusal where the code it would run is
+not the system's alone, and the event log are M12.4c's.

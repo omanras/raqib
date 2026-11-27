@@ -5,6 +5,40 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.9.0 - 2026-11-27
+
+What is new:
+- On Windows the host watch can run as a real service of the system's: `raqib service run` (ADR-0013 Amendments
+  E to G). It is the part the system's service manager runs - there is no `raqib service install` for Windows
+  yet, so this number changes nothing a person does by hand; it is the first of three steps.
+- It is built with Python's standard library alone: no new dependency, no compiled helper. Measured on GitHub's
+  Windows machines, x64 and ARM64, plain and packed: the system starts it in about a second, a Stop takes a
+  quarter of a second, and the watch ends with its whole final report, as on Ctrl+C.
+- Its record lives in a place of its own, `Raqib` under ProgramData, made closed to everyone but the system and
+  the administrators in the one call that makes it. Measured: a plain user could not write into it, read it,
+  list it, stop the service or end its process.
+- It refuses rather than repairs. A folder already there that it did not find closed and owned by the system
+  or the administrators - one a plain user made first, an open one, a link, a file - is left exactly as it is
+  and the service does not start. Measured: the start command fails at once, and the system's own log holds the
+  refusal's number.
+- Nothing changes on Linux or macOS but one line: `raqib service run` says it is Windows'.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- A service killed and started again by the system: measured before this number, the new watch refuses for 30
+  seconds because the killed one's state still reads as a living watch, and the service then stays stopped.
+  That is the next task; until it lands, do not rely on the system starting it again.
+- A shutdown of the machine; the service's start at boot; another account than the system's; a machine joined
+  to a domain or with an endpoint protection product; Windows before the versions GitHub's machines run.
+- Nothing yet checks that the code the service runs can be written only by the system and the administrators:
+  that is the install's, as on Linux.
+
 ## 0.8.2 - 2026-11-27
 
 What is new:

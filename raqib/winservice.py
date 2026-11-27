@@ -19,7 +19,7 @@ made by the one call that gives it the closed list as it is made (CreateDirector
 "it already exists" from that call (error 183) is the road of a place that is there. Made or found, it is read
 through ONE handle on the name itself (CreateFileW with the flag that does not follow a link): its kind, its owner
 and its list come from that one handle. It is taken only where that one read says a folder and no reparse point,
-its owner the system (SY) or the administrators (BA), and its list one of CLOSED_LISTS; anything else is refused
+its owner the system (SY) or the administrators (BA), and its list CLOSED_AS_MADE; anything else is refused
 and left exactly as it is. Only then are HOME and USERPROFILE of the process the place, as the Linux unit's HOME is
 its state directory.
 
@@ -59,12 +59,13 @@ SERVICE_NAME = "RaqibWatch"     # the table's name; a service of its own process
 WATCH_ARGV = ("watch", "--host", "--no-page", "--no-notify")   # the Linux unit's arguments (AE-1)
 PLACE_NAME = "Raqib"            # the place: PLACE_NAME under ProgramData (AF-1)
 HOME_NAMES = ("HOME", "USERPROFILE")
-# The closed list, the system and the administrators, whole, nothing inherited, in the two forms the system writes
-# it (AF-1): as set on a folder that exists (Amendment E, measured) - also the text the place is made with, as the
-# measured candidate made it - and as read back from a folder made with it (Amendment F, measured).
-CLOSED_AS_SET = "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+# The closed list: the system and the administrators, whole, nothing inherited. The system writes it in two forms
+# (Amendment F, measured): as read back from a folder MADE with it, and as read back from a list SET on a folder
+# that existed. A place is taken only in the first (AG-1): a folder that was closed after it existed was open
+# once, and what was put in it then keeps its own owner. MADE_WITH is the text the making call is handed, as the
+# measured candidate handed it (it reads back as CLOSED_AS_MADE).
 CLOSED_AS_MADE = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
-CLOSED_LISTS = (CLOSED_AS_MADE, CLOSED_AS_SET)
+CLOSED_AS_SET = "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
 MADE_WITH = CLOSED_AS_SET
 OWNERS = ("SY", "BA")           # the owners a place may have
 TEXT_NAME = "service.txt"
@@ -369,8 +370,9 @@ def prepare(system):
     if owner not in OWNERS:
         raise Refusal(EXIT_OWNER, "%s is owned by %s, neither the system (SY) nor the administrators (BA); it is"
                                   " left as it is" % (place, owner or "nobody said"))
-    if dacl not in CLOSED_LISTS:
-        raise Refusal(EXIT_OPEN, "%s has the list %s, not the closed one; it is left as it is" % (place, dacl))
+    if dacl != CLOSED_AS_MADE:
+        raise Refusal(EXIT_OPEN, "%s has the list %s, not the closed one as a folder made closed reads (%s); it is"
+                                 " left as it is" % (place, dacl, CLOSED_AS_MADE))
     return place, road, owner, dacl
 
 
@@ -473,6 +475,7 @@ class Runner:
         self.caught = []            # where an interrupt was caught outside the watch's call
         self.outcome = None         # (how, result, trace) of the watch's call, once it is over
         self.decided = False        # self.code is the watch's verdict
+        self.finished = False       # the watch's end was said in the text file (AG-2)
         self.watching = False
         self.stopped = False        # STOPPED was reported: nothing is reported after it
         self.lock = threading.Lock()          # the interrupt is raised only while the watch's call runs
@@ -570,10 +573,14 @@ class Runner:
         try:        # one interrupt at most is raised; wherever it surfaces after the watch's call, it is caught
             try:
                 self._serve()
-            except KeyboardInterrupt:
+            except KeyboardInterrupt:   # AG-2: the end is still decided and still said
                 self._caught("in the runner, outside the watch's call")
-                if self.outcome is not None and not self.decided:
-                    self._decide()
+                if self.outcome is not None:
+                    self._finish()
+                elif self.text is not None and self.stop_asked.is_set():
+                    self.code = EXIT_TEXT_ENDED if self.text.failed else 0   # a Stop asked was obeyed
+                    self._note("the Stop's interrupt came before the watch's end was kept; the Stop was obeyed; the"
+                               " system is told %s" % told(self.code))
             except BaseException as exc:
                 self._own(exc)
             finally:
@@ -585,7 +592,7 @@ class Runner:
 
     def _caught(self, where):
         self.caught.append(where)
-        self._note("an interrupt came %s; it was caught and changed nothing (a Stop %s)"
+        self._note("an interrupt came %s; it was caught (a Stop %s)"
                    % (where, "was asked" if self.stop_asked.is_set() else "was not asked"))
 
     def _own(self, exc):
@@ -631,6 +638,14 @@ class Runner:
             if not self.stop_asked.is_set():
                 self._status(RUNNING)
         self.outcome = self._watch()
+        self._finish()
+
+    def _finish(self):
+        """The end of the watch's call: its exit decided, its trace and the runner's last line written. Once -
+        and again, whole, where the Stop's one interrupt surfaced in the middle of it (AG-2: the last line is
+        always there)."""
+        if self.finished or self.outcome is None:
+            return
         how, result, asked, code = self._decide()
         if self.outcome[2]:
             self.text.write(self.outcome[2])
@@ -643,6 +658,7 @@ class Runner:
                 told(code)))
         if self.code == 0 and self.text.failed:
             self.code = EXIT_TEXT_ENDED     # its last note was the write that failed
+        self.finished = True
 
     def _decide(self):
         """The exit of the watch's call as it ended (AE-4, AF-4), kept in self.code at once."""
@@ -679,8 +695,8 @@ class Runner:
 
 def cli_run(args, out, system=None):
     """`raqib service run` from raqib/cli.py (its only importer): exit 0 where the system was told exit 0, 2
-    otherwise (said on the error stream where there is one). Off Windows its one line comes first, whatever else
-    was given."""
+    otherwise (said on the error stream where there is one). Off Windows its one line comes first, with --no-start or
+    --purge given or not."""
     system = system or System()
     platform = system.platform()
     if platform != "win32":
