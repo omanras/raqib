@@ -1,0 +1,39 @@
+name: record-probe
+# Probe only (never merged): the eighteenth measurement - what Raqib's host watch keeps of the processes it samples,
+# on real Linux and Windows (asked for Raqib 2's threat model, T-16).
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/record_probe.py, .github/workflows/record-probe.yml]
+permissions:
+  contents: read
+env:
+  RAQIB_REF: main
+jobs:
+  field:
+    name: what the record keeps (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, windows-11-arm]
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Raqib at main
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin "$RAQIB_REF"
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          git rev-parse --short FETCH_HEAD
+          python -m pip install --disable-pip-version-check -q .
+      - name: counted
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: python "$GITHUB_WORKSPACE/tools/rig/record_probe.py"
