@@ -1070,3 +1070,40 @@ could not be started while it went on to RUNNING. The rig: X48 to X52 MET.
   first that a service of Windows made by hand from a tree a user may change stops watching with this version
   (T-4). Next: M12.4c2b2 (install, remove and status; the install refuses a tree the check does not take, starts
   the service by the system's own call and waits on its state), then the check-point (U-4).
+
+## Amendment V (the Table, 2026-11-27) - M12.4c2b2 in two; M12.4c2b2a: `raqib service status` on Windows, with no rights
+Measured before this ruling (the probe branch b1ee4fb, Amendment T's first paragraph; x64 and ARM64, the same):
+a caller with no rights may connect to the service manager and open a service to ask its state and its making,
+and reads them - the state with the process's id, the system's exit and the service's own; the type, the start,
+the account and the command (a first ask with no room answers error 122 and the bytes needed); and its
+description, as it was set. A name that is not there answers error 1060. A service never started reads state 1
+with the exit 1077. He is refused (error 5) the start, the stop, the removal and the change. Not measured, and
+so not read by this task: the delayed start, the failure actions and the failure flag read back by a caller with
+no rights; a service marked for removal as such a caller sees it.
+- V-1 (the parts). M12.4c2b2a: status, which changes nothing and needs no rights. M12.4c2b2b, after it: install
+  and remove (K-9, AG-5, O-5, U-1), which read their own work back through the same reader. Then M12.4c2b3
+  (U-4). FOR: the reader of the manager is built and measured alone before anything writes to the manager.
+- V-2 (the name and the mark). Raqib's service of Windows is the one named RaqibWatch whose description begins
+  with `raqib-service/1` - the mark the Linux unit carries in its first line. A service of that name without the
+  mark is not Raqib's, and is said so; nothing else is read as Raqib's. MUST NOT TOUCH: the runner, which serves
+  under any name.
+- V-3 (what status reads and says). By the system's own calls, opened with the least rights measured (the
+  manager to connect, the service to ask its state and its making): whether the name is there; the mark; the
+  command as the manager holds it, and whether it is one of the two forms Raqib's install writes (a quoted path
+  and `service run`; a quoted path, `-I -m raqib service run`); the type (a process of its own), the start by
+  its number and word, the account (the system's); the state by its number and word, with the process's id; and,
+  where it is not running, the exit the system holds - 1077 as never started, 1066 with the service's own number
+  said in the runner's own words (and, for 15, where its text file is), 0 as stopped. Nothing is said that was
+  not read; a call that fails is said with the system's number, and the answer is then NOT KNOWN.
+- V-4 (the answers, as on Linux). 0: RUNNING and as installed (the mark, the command's form, a process of its
+  own, the system's account). 1: installed and not running, or not as installed. 3: not installed, a service of
+  the name that is not Raqib's, or not known. 2: not Windows (the Linux command answers for Linux as before).
+  RUNNING says the service runs, not that the watch writes its record - said in the answer, as on Linux. A
+  service that is starting is said as starting, with the reason a start may be long (T-2), and is not ACTIVE.
+- V-5 (the rig). X53 is MET where the job asks status at three moments and reads: no service of the name - NOT
+  INSTALLED, 3; the job's service made with the mark from the copy under Program Files and running - ACTIVE, 0,
+  with its command; one made with the mark from the job's own Python, refused at its start - installed and not
+  active, 1, with the 15's words. The Table's wiring.
+- V-6 (not in this part). Anything that writes to the manager; the place's own list read by status (the
+  administrator's check says it); the delayed start and the failure actions, until they are measured as a caller
+  with no rights reads them (M12.4c2b2b measures them before it sets them).
