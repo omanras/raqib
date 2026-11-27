@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, windows-11-arm]
-        ref: [main, claude/M12.4c2b3-cand]
+        ref: [claude/M12.4c2b3]
     env:
       RAQIB_REF: ${{ matrix.ref }}
     steps:
