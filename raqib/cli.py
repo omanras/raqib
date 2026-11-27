@@ -723,11 +723,13 @@ def _parser():
                          " manager only): the host watch as a service of Windows, its record in Raqib under"
                          " ProgramData, closed to all but the system and the administrators (ADR-0013 Amendment"
                          " E; docs/specs/SERVICE.md); not started by the service manager, or not Windows: exit 2;"
-                         " check (Windows, Raqib packed with its own runtime; changes nothing, asks no right):"
-                         " whether the code a service would run is the system's alone, by the owners and lists"
-                         " of its folder, whole, and of each folder above it (exit 0 the system's alone, said by"
-                         " count, 1 not or not read, the name said, 2 not Windows or not packed; ADR-0013"
-                         " Amendment K)")
+                         " check (Windows; changes nothing, asks no right): whether the code a service would run"
+                         " is the system's alone, by the owners and lists of what it would load, whole, and of each"
+                         " folder above it - packed with its own runtime, the program's folder; for a plain"
+                         " interpreter asked with -I, its folder, its base's, its prefixes, every entry of its path"
+                         " and of its *.pth files, and the raqib package (exit 0 the system's alone, said by count,"
+                         " 1 not or not read, the name said, 2 not Windows, or a plain interpreter not started with"
+                         " -I or started with -S; ADR-0013 Amendments K and M)")
     sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
                                                             " started")
     sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"
@@ -1640,7 +1642,7 @@ def cmd_forward(args, out):
 
 
 def cmd_service(args, out):
-    """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its WALK_MAX) only; the
+    """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its three bounds) only; the
     watch does not know it. `run` (Amendment E, M12.4a): raqib/winservice.py, imported here only, the runner of the
     host watch as a service of Windows."""
     if args.action == "run":

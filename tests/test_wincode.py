@@ -262,18 +262,69 @@ GOOD_FILE = "O:BAD:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)"
 class Machine:
     """A made-up Windows: names read from the measured x64 rows (or as a test gives them), listings as given."""
 
-    def __init__(self, names=None, lists=None, platform="win32", packed=True, program=PROGRAM, modules=MODULES):
-        base = {p: (a, t) for p, a, t, _ in measured()["x64"]}
-        self.names = {ntpath.normcase(p): v for p, v in dict(base, **(names or {})).items()}
+    def __init__(self, names=None, lists=None, platform="win32", packed=True, program=PROGRAM, modules=MODULES,
+                 isolated=True, no_site=False, base=None, prefix=None, base_prefix=None, path=(), package=None,
+                 files=None, exec_prefix=None, base_exec_prefix=None, version=(3, 12)):
+        self._version = version
+        base_names = {p: (a, t) for p, a, t, _ in measured()["x64"]}
+        self.names = {ntpath.normcase(p): v for p, v in dict(base_names, **(names or {})).items()}
         self.lists = {ntpath.normcase(p): v for p, v in dict(TREE_LISTS, **(lists or {})).items()}
         self._platform, self._packed, self._program, self._modules = platform, packed, program, modules
-        self.reads, self.listed = [], []
+        self._isolated, self._no_site, self._base, self._prefix = isolated, no_site, base, prefix
+        self._base_prefix, self._path, self._package = base_prefix, list(path), package
+        self._exec_prefix, self._base_exec_prefix = exec_prefix, base_exec_prefix
+        self.files = {ntpath.normcase(p): v for p, v in (files or {}).items()}
+        self.reads, self.listed, self.asked, self.bytes_read = [], [], [], []
+        self.events = []   # every read of a name and of a file's bytes, in the order asked
+
+    # M-1, M-2: what the running interpreter says of itself (the plain road only)
+    def isolated(self):
+        self.asked.append("isolated")
+        return self._isolated
+
+    def no_site(self):
+        self.asked.append("no_site")
+        return self._no_site
+
+    def base_executable(self):
+        return self._base
+
+    def prefix(self):
+        return self._prefix
+
+    def base_prefix(self):
+        return self._base_prefix
+
+    def exec_prefix(self):
+        return self._exec_prefix
+
+    def base_exec_prefix(self):
+        return self._base_exec_prefix
+
+    def sys_path(self):
+        return list(self._path)
+
+    def package_dir(self):
+        return self._package
+
+    def read_bytes(self, path, limit):
+        self.bytes_read.append((path, limit))
+        self.events.append(("bytes", path))
+        got = self.files.get(ntpath.normcase(path))
+        if isinstance(got, BaseException):
+            raise got
+        if got is None:
+            raise AssertionError("read the bytes of a file the test did not give: %s" % path)
+        return got[:limit + 1]   # as the real object: at most one byte more than the bound
 
     def platform(self):
         return self._platform
 
     def packed(self):
         return self._packed
+
+    def version(self):
+        return self._version
 
     def program(self):
         return self._program
@@ -283,6 +334,7 @@ class Machine:
 
     def read(self, path):
         self.reads.append(path)
+        self.events.append(("read", path))
         got = self.names.get(ntpath.normcase(path))
         if got is None:
             raise FileNotFoundError(2, "The system cannot find the file specified")
@@ -300,6 +352,8 @@ class Machine:
         return list(got)
 
 
+PLAIN_COUNTS = ("folders", "files", "above", "alone", "entries", "missing", "beneath", "own", "own_there", "pth",
+                "pth_lines", "base", "exec")
 MEASURED_READS = ["C:\\", "C:\\Program Files", TOP, PROGRAM, MODULES, MODULES + "\\_bz2.pyd", MODULES + "\\raqib"]
 
 
@@ -420,10 +474,10 @@ def test_e2_modules_outside_the_programs_folder_or_not_said_are_refused_and_noth
         modules="C:\\Windows\\Temp\\_MEI1"))[0][1]
 
 
-def test_e2_a_plain_interpreter_and_not_windows_are_each_their_own_refusal_and_nothing_is_read():
-    m = Machine(packed=False, program=PY + "\\python.exe")
-    assert wincode.check(m) == ((PY + "\\python.exe", wincode.NOT_PACKED), {"folders": 0, "files": 0, "above": 0})
-    assert "not yet checked (ADR-0013 K-5)" in wincode.NOT_PACKED and m.reads == []
+def test_e2_a_plain_interpreter_not_asked_with_i_and_not_windows_are_each_their_own_refusal_and_nothing_is_read():
+    m = Machine(packed=False, program=PY + "\\python.exe", isolated=False)   # M-1 (was K-5's NOT_PACKED)
+    assert wincode.check(m) == ((PY + "\\python.exe", wincode.not_asked(m)), dict.fromkeys(PLAIN_COUNTS, 0))
+    assert "was not started with -I (isolated)" in wincode.not_asked(m) and m.reads == []
     m = Machine(platform="linux")
     assert wincode.check(m)[0] == (PROGRAM, "Windows only (it reads the owners and lists of Windows); this is linux")
     assert m.reads == []
@@ -512,13 +566,13 @@ def test_e3_not_windows_exit_2_said_which_never_a_pass(platform, monkeypatch, ca
                                       " Windows); this is %s\n" % platform
 
 
-def test_e3_not_packed_exit_2_its_road_not_yet_checked_never_a_pass(monkeypatch, capsys):
-    m = Machine(packed=False, program=PY + "\\python.exe")
+def test_e3_a_plain_interpreter_not_asked_with_i_exit_2_the_command_to_ask_by_never_a_pass(monkeypatch, capsys):
+    m = Machine(packed=False, program=PY + "\\python.exe", isolated=False)   # M-1 (was K-5's "not packed")
     code, out = through(monkeypatch, m)
     err = capsys.readouterr().err
     assert code == 2 and out == "" and m.reads == [] and err.count("\n") == 1
-    assert err == "raqib: raqib service check: %s\\python.exe: %s\n" % (PY, wincode.NOT_PACKED)
-    assert "a plain interpreter's roads" in err and "not yet checked" in err
+    assert err == "raqib: raqib service check: %s\\python.exe: %s\n" % (PY, wincode.not_asked(m))
+    assert err.endswith('; ask it as the service will run it: "%s\\python.exe" -I -m raqib service check\n' % PY)
 
 
 @pytest.mark.parametrize("more", [["--purge"], ["--no-start"]])
@@ -540,7 +594,9 @@ def test_e3_the_actions_help_says_check_and_the_cli_hands_it_to_wincode():
     sub = [a for a in cli._parser()._actions if getattr(a, "choices", None) and "service" in a.choices][0]
     action = [a for a in sub.choices["service"]._actions if a.dest == "action"][0]
     assert action.choices == ("install", "remove", "status", "run", "check")
-    assert "check (Windows, Raqib packed with its own runtime; changes nothing, asks no right)" in action.help
+    assert "check (Windows; changes nothing, asks no right)" in action.help
+    assert "for a plain interpreter asked with -I, its folder, its base's, its prefixes, every entry of its path" \
+           " and of its *.pth files, and the raqib package" in " ".join(action.help.split())
 
 
 # --- E5: the real reader, on Windows only -------------------------------------------------------------------------
@@ -565,8 +621,23 @@ def test_e7_ascii_ntpath_never_os_path_no_ctypes_nothing_at_import_nothing_writt
              and isinstance(n.value, ast.Name)}
     imported = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
     assert ("os", "path") not in attrs and "ctypes" not in imported and "subprocess" not in imported
-    assert "open" not in names and not {("os", a) for a in ("remove", "mkdir", "makedirs", "replace", "rename",
-                                                             "system", "startfile", "spawnl")} & attrs
+    assert not {("os", a) for a in ("remove", "mkdir", "makedirs", "replace", "rename", "system", "startfile",
+                                    "spawnl", "open", "fdopen")} & attrs
+    # M-4 (M12.4c1b): `open` is named once in the module, and that once is System.read_bytes's own call, in binary
+    # mode, its one read bounded; nothing else opens a file, and the check can run or import nothing of a *.pth file
+    opens = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "open"]
+    (system,) = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "System"]
+    (method,) = [n for n in system.body if isinstance(n, ast.FunctionDef) and n.name == "read_bytes"]
+    calls = [n for n in ast.walk(method) if isinstance(n, ast.Call)]
+    (call,) = [c for c in calls if isinstance(c.func, ast.Name) and c.func.id == "open"]
+    assert len(opens) == 1 and opens[0] is call.func and ast.unparse(call) == "open(path, 'rb')"
+    assert [ast.unparse(c) for c in calls if ast.unparse(c.func).endswith(".read")] == ["f.read(limit + 1)"]
+    assert not {("io", "open"), ("codecs", "open"), ("io", "FileIO")} & attrs
+    assert not {"exec", "eval", "compile", "__import__"} & names
+    said = " ".join(source.split()).lower()   # N-2: run by the code it judges, the check says only its own part
+    assert not [w for w in ("nothing of them run", "nothing of a *.pth file is run", "nothing of it is run",
+                            "nothing of the text is run", "nothing is written") if w in said]
+    assert not {"importlib", "io", "codecs", "pathlib", "runpy", "zipimport"} & imported
     for node in tree.body:   # nothing runs at import: imports, names bound to constants, functions, classes
         kinds = (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.Expr)
         assert isinstance(node, kinds), node
@@ -590,13 +661,35 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
                   "**What the check itself said on real machines (Amendment L).**",
                   "begins with a drive's letter (`X:\\`)",
                   "longer than the system opens plainly (259 characters)", "what was not read is never the system's",
-                  "a walk past 200000 names (WALK_MAX, the Linux number)", "`sys._MEIPASS`", "A plain interpreter is"
-                  " refused for now", "| 0 | Windows, packed, and every name walked is the system's alone |",
-                  "| 1 | a name is not the system's alone, or was not read |", "| 2 | not Windows, or not packed |",
+                  "a walk past 200000 names (WALK_MAX, the Linux number)", "`sys._MEIPASS`",
+                  "**The plain road (Amendment M).**", "the system's errors 2 and 3",
+                  "at most 1048576 bytes (PTH_MAX)",
+                  "| 0 | Windows, and every name walked of the road - packed, or a plain interpreter asked with `-I`"
+                  " - is the system's alone |",
+                  "| 1 | a name is not the system's alone, or was not read |",
+                  "| 2 | not Windows, or a plain interpreter not started with `-I` or started with `-S` |",
+                  "**What Amendment M measured, and by what.**",
+                  "Not measured: whether `-I` reads the registry's paths on x64 or on a later version",
+                  "**What Amendment O added, and what the names rest on.**", "is refused with those words (O-2)",
                   "**What Amendment K measured, and by what.**", "Not read: rights a user holds apart from any list",
                   "Not measured: a denying entry on a real file", "python.org's installer for all users",
-                  "cut at 200 characters"):
+                  "cut at 200 characters",
+                  # N-1 to N-3 (M12.4c1b REDO): both roads, the three names, who runs the check, beneath a file, dots
+                  "**The roads walked (K-5, M-2).** Two: the packed road, and the plain road below.",
+                  "**The names the interpreter itself looks for (Amendment N, N-1).**",
+                  "`pyvenv.cfg` in the folder above it, and `Modules\\Setup.local` and `Lib` two folders above it",
+                  "read in its source (CPython 3.11.9, 3.12.10, 3.13.9 and 3.14.0", "Amendment N), not measured",
+                  "it is refused on a machine whose root lets signed-in users add a folder",
+                  "one folder deeper (`C:\\Program Files\\NAME\\Python311`) it is taken",
+                  "**Who runs the check (Amendment N, N-2).**", "the check is run by the code it judges",
+                  "a gate against a tree put in the wrong place, not a judgement of a tree another already changed",
+                  "Ask it first as a plain user, who needs no rights for it",
+                  "may write bytecode caches beside what it imports, where the asker may write there",
+                  "is taken where that file was taken as the code itself",
+                  "one beginning with a dot, which site skips, is read even so",
+                  "none of their lines taken or run by the check"):
         assert words in spec, words
+    assert "Packed with its own runtime only" not in spec and "nothing of them run" not in spec
     for bit, _ in wincode.CODE_ALLOWED:
         assert ("0x%x" % bit in spec) or bit in (0x80000000, 0x20000000)
     for word, number in wincode.RIGHTS.items():
@@ -609,5 +702,572 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
     said = " ".join(commands.split())
     assert "Run `raqib service check` on Windows before a service of Windows is made to run" in said
     threat = flat("docs/THREAT_MODEL.md")
-    assert "**What the check of the code does not read (`raqib service check`; ADR-0013 Amendment K).**" in threat
+    assert "**What the check of the code does not read (`raqib service check`; ADR-0013 Amendments K to O).**" \
+        in threat
+    assert "whoever may add the missing thing decides what runs" in threat and "never passed (exit 2)" in threat
     assert "backup and restore, taking ownership, debugging programs" in threat
+    for words in ("the check is run by the code it judges", "a gate against a tree put in the wrong place",
+                  "asked first by a plain user, who needs no rights for it", "may write bytecode caches",
+                  "`Modules\\Setup.local` and `Lib` two folders above it", "one folder deeper it is taken"):
+        assert words in threat, words
+    assert "nothing of it is run" not in threat
+    for words in ("is refused on a machine whose drive's root lets signed-in users add a folder",
+                  "Put a Python a service will run one folder deeper instead", "Ask it first as a plain user",
+                  "the check is run by the code it judges", "may write bytecode caches"):
+        assert words in said, words
+
+
+# --- M12.4c1b (ADR-0013 Amendments M and N): a plain interpreter's road, on a made-up Windows ----------------------
+# The owners and lists of a Python under Program Files are read from tests/fixtures/wincode/python.txt (measured;
+# never retyped here); each interpreter's path, as its comment lines say it, is written below from the rows' own
+# folders. The folders above them (C:\, C:\Program Files) are measured.txt's x64 rows. What no machine gave is a
+# stand-in, said where it is made: the venv's Lib folder, the installer's raqib package and its one *.pth file, every
+# *.pth file's bytes, every folder's listing (tree()), and the folder that places the measured trees one folder deeper
+# (RIG, N-1).
+PYTHON = ROOT / "tests" / "fixtures" / "wincode" / "python.txt"
+
+
+def python_measured():
+    """{section: [(path, attributes, text)]} as python.txt holds them."""
+    out, section, path = {}, None, None
+    for line in PYTHON.read_text(encoding="ascii").splitlines():
+        if line.startswith("## "):
+            section = ("installer-x64" if "3.10.11" in line else "installer-arm64" if "3.11.9" in line
+                       else "venv" if "a venv" in line else "copy")
+            out[section] = []
+        elif line.startswith("#") or not line.strip():
+            continue
+        elif not line.startswith(" "):
+            path = line.strip()
+        else:
+            got = re.match(r"    a (folder|file) \(attributes (0x[0-9a-f]+)\); (\S+)\Z", line)
+            assert got, line
+            out[section].append((path, int(got.group(2), 16), got.group(3)))
+    return out
+
+
+ROWS = python_measured()
+COPY_AT, VENV_AT = ROWS["copy"][0][0], ROWS["venv"][0][0]   # where the copy and the venv were measured
+SAID_OF_ITSELF = PYTHON.read_text(encoding="ascii").split("# What each said of itself", 1)[1]
+RIG = "C:\\Program Files\\Rig"   # a stand-in folder (N-1, N-5): the measured trees placed one folder deeper, in it
+
+
+def reading(path):
+    (got,) = [(a, t) for rows in ROWS.values() for p, a, t in rows if p == path]
+    return got
+
+
+def deeper(path):
+    """A measured path placed one folder deeper: C:\\Program Files\\X\\... as C:\\Program Files\\Rig\\X\\..."""
+    head = "C:\\Program Files\\"
+    assert path.startswith(head), path
+    return RIG + "\\" + path[len(head):]
+
+
+COPY, VENV = deeper(COPY_AT), deeper(VENV_AT)
+
+
+def tree(rows):
+    """Stand-ins, not measured: the listings the rows make, each folder listing only the rows directly under it (one
+    to three names). A real tree lists more - `__pycache__` folders, bytecode, other *.pth files - and may give
+    another name refused first."""
+    folders = [p for p, a, _ in rows if a & winservice.ATTRIBUTE_FOLDER]
+    lists = {p: [] for p in folders}
+    for p, _, _ in rows:
+        for f in folders:
+            if ntpath.normcase(ntpath.dirname(p)) == ntpath.normcase(f):
+                lists[f].append(ntpath.basename(p))
+    return lists
+
+
+def measured_road(section):
+    """(rows, the machine's keywords) of one measured interpreter where it was measured, its path as its comment
+    lines say it; its exec prefixes its prefixes (N-3: not in the fixture)."""
+    rows = list(ROWS[section])
+    if section.startswith("installer"):
+        top = rows[0][0]
+        site = top + "\\Lib\\site-packages"
+        rows += [(site + "\\raqib", ) + reading(site),                                  # stand-ins: not measured
+                 (site + "\\distutils-precedence.pth", ) + reading(top + "\\Lib\\os.py")]
+        zipname = "python310.zip" if section == "installer-x64" else "python311.zip"   # the same shape on both
+        return rows, dict(program=top + "\\python.exe", base=top + "\\python.exe", prefix=top, base_prefix=top,
+                          exec_prefix=top, base_exec_prefix=top,
+                          path=[top + "\\" + zipname, top + "\\DLLs", top + "\\lib", top,
+                                top + "\\lib\\site-packages"],
+                          package=site + "\\raqib", files={site + "\\distutils-precedence.pth": b"import os\n"})
+    copy_path = [COPY_AT + "\\python312.zip", COPY_AT + "\\DLLs", COPY_AT + "\\Lib", COPY_AT,
+                 COPY_AT + "\\Lib\\site-packages"]
+    if section == "copy":
+        return rows, dict(program=COPY_AT + "\\python.exe", base=COPY_AT + "\\python.exe", prefix=COPY_AT,
+                          base_prefix=COPY_AT, exec_prefix=COPY_AT, base_exec_prefix=COPY_AT, path=copy_path,
+                          package=COPY_AT + "\\Lib\\site-packages\\raqib")
+    rows = ROWS["copy"] + rows + [(VENV_AT + "\\Lib", ) + reading(VENV_AT + "\\Scripts"),   # stand-ins: not measured
+                                  (VENV_AT + "\\Lib\\site-packages\\raqib", ) + reading(VENV_AT + "\\Scripts")]
+    return rows, dict(program=VENV_AT + "\\Scripts\\python.exe", base=COPY_AT + "\\python.exe", prefix=VENV_AT,
+                      base_prefix=COPY_AT, exec_prefix=VENV_AT, base_exec_prefix=COPY_AT,
+                      path=copy_path[:4] + [VENV_AT, VENV_AT + "\\Lib\\site-packages"],
+                      package=VENV_AT + "\\Lib\\site-packages\\raqib")
+
+
+def road(section, places=None):
+    """(rows, the machine's keywords) of one measured interpreter, each of its trees placed as `places` says
+    ({measured top folder: its place}; None: every tree one folder deeper, under RIG; {}: where measured). The folder
+    a tree is placed in, where it is not Program Files, reads as the measured copy's own folder row (a stand-in)."""
+    rows, given = measured_road(section)
+    if places is None:
+        places = {t: deeper(t) for t in {"\\".join(p.split("\\")[:3]) for p, _, _ in rows}}
+
+    def move(path):
+        for old, new in places.items():
+            if wincode._within(path, old):
+                return new + path[len(old):]
+        return path
+    holders = {ntpath.dirname(new) for new in places.values()} - {"C:\\Program Files"}
+    rows = [(move(p), a, t) for p, a, t in rows] + [(h, ) + reading(COPY_AT) for h in sorted(holders)]
+    for key, value in list(given.items()):
+        given[key] = ([move(e) for e in value] if key == "path" else {move(f): b for f, b in value.items()}
+                      if key == "files" else move(value))
+    return rows, given
+
+
+def plain(section="copy", names=None, lists=None, files=None, places=None, **kw):
+    rows, given = road(section, places)
+    given.update(kw)
+    given["files"] = dict(given.get("files", {}), **(files or {}))
+    return Machine(names=dict({p: (a, t) for p, a, t in rows}, **(names or {})),
+                   lists=dict(tree(rows), **(lists or {})), packed=False, **given)
+
+
+EXPECTED_PLAIN = {   # PLAIN_COUNTS of each measured tree placed one folder deeper (N-1)
+    "installer-x64": (6, 5, 1, 2, 5, 1, 0, 3, 0, 1, 0, 0, 0),
+    "installer-arm64": (6, 5, 1, 2, 5, 1, 0, 3, 0, 1, 0, 0, 0),
+    "copy": (6, 5, 1, 2, 5, 1, 0, 3, 0, 0, 0, 0, 0),
+    "venv": (11, 7, 1, 2, 6, 1, 0, 6, 1, 0, 0, 1, 0)}
+
+
+def test_m_every_line_of_the_measured_python_file_is_taken_as_code_and_each_folder_as_a_folder_above():
+    assert sorted(ROWS) == sorted(EXPECTED_PLAIN) and sum(len(r) for r in ROWS.values()) == 34
+    for rows in ROWS.values():
+        for path, attributes, text in rows:
+            assert wincode.as_code(attributes, text) is None, path
+            if attributes & winservice.ATTRIBUTE_FOLDER:
+                assert wincode.as_above(attributes, text) is None, path
+    # the paths written above are the comment lines' own: each name there, each zip said "not there"
+    for section in EXPECTED_PLAIN:
+        for places in (None, {}):
+            rows, given = road(section, places)
+            for entry in given["path"]:
+                assert entry.endswith(".zip") or ntpath.normcase(entry) in {ntpath.normcase(p) for p, _, _ in rows}
+    for said in ("python310.zip (not there)", "python312.zip (not there)", "pyvenv.cfg: home = " + COPY_AT,
+                 "executable " + VENV_AT + "\\Scripts\\python.exe, base executable the copy's",
+                 "executable and base executable " + COPY_AT + "\\python.exe", "distutils-precedence.pth (one `import`"):
+        assert said in " ".join(SAID_OF_ITSELF.replace("#", " ").split()), said
+
+
+def own_reads(m):
+    """The reads of N-1's names and of the folders made on the way to them, by normcase: each read at most once."""
+    keys = [ntpath.normcase(p) for p in m.reads]
+    assert len(keys) == len(set(keys)), m.reads
+    return keys
+
+
+@pytest.mark.parametrize("section", sorted(EXPECTED_PLAIN))
+def test_n1_the_installers_tree_the_copy_and_the_venv_one_folder_deeper_are_taken_each_name_read_once(section):
+    m = plain(section)
+    bad, counts = wincode.check(m)
+    assert bad is None and tuple(counts[k] for k in PLAIN_COUNTS) == EXPECTED_PLAIN[section], (bad, counts)
+    keys = own_reads(m)                                # each name read once, whatever the roles it was judged in
+    assert m.asked == ["isolated", "no_site"] and m.reads[:3] == ["C:\\", "C:\\Program Files", RIG]   # top first
+    # N-1: Modules\Setup.local and Lib two folders above (the base's, for the venv): judged, not there, read once
+    assert "c:\\program files\\modules" in keys and "c:\\program files\\lib" in keys
+    assert "c:\\program files\\modules\\setup.local" not in keys   # its folder not there: never asked
+    if section.startswith("installer"):                # its one *.pth file read once it was taken, by the bound
+        site = road(section)[1]["path"][-1]           # joined to the entry as the path says it (its "lib")
+        assert m.bytes_read == [(site + "\\distutils-precedence.pth", service.PTH_MAX)]
+    else:
+        assert m.bytes_read == []
+    if section == "venv":                              # M-2's order: the interpreter, its base, the prefixes
+        assert keys.index(ntpath.normcase(VENV + "\\Scripts\\python.exe")) < keys.index(ntpath.normcase(COPY)) \
+            < keys.index(ntpath.normcase(VENV + "\\pyvenv.cfg"))
+    assert wincode.plain_words(counts).startswith("checked %d names, each the system's alone" % sum(
+        counts[k] for k in ("folders", "files", "above")))
+
+
+@pytest.mark.parametrize("section", sorted(EXPECTED_PLAIN))
+def test_n1_each_tree_where_it_was_measured_is_refused_for_c_modules_setup_local_judged_by_c(section):
+    m = plain(section, places={})
+    bad = refused(m)
+    folder = COPY_AT if section in ("copy", "venv") else ROWS[section][0][0]   # the venv: refused for its base
+    what = "the base executable's folder" if section == "venv" else "the interpreter's folder"
+    assert bad == ("C:\\Modules\\Setup.local", "not there (error 2): the deepest folder of it that is there, C:\\,"
+                   " judged for it " + wincode.ROLE_CODE + ": the entry (A;;LC;;;AU) gives AU, a name outside the"
+                   " system's, 0x4: not allowed (" + wincode.CODE_MAY + ") (the name C:\\Modules\\Setup.local: "
+                   + wincode.OWN_NAMES[1] + " " + what + " " + folder + ")")
+    keys = own_reads(m)                                # each name read at most once; C:\Modules\Setup.local never
+    assert "c:\\modules" in keys and "c:\\modules\\setup.local" not in keys and m.reads[-1] == "C:\\Modules"
+    assert "c:\\program files\\pyvenv.cfg" in keys     # the first of the three: judged by Program Files, taken
+    (c,) = [(a, t) for p, a, t, _ in measured()["x64"] if p == "C:\\"]
+    (pf,) = [(a, t) for p, a, t, _ in measured()["x64"] if p == "C:\\Program Files"]
+    assert wincode.as_code(*c) is not None and wincode.as_code(*pf) is None   # measured.txt, read as the code itself
+
+
+def test_n1_a_venv_whose_base_is_one_folder_below_program_files_is_refused_one_folder_deeper_taken():
+    assert refused(plain("venv", places={}))[1].endswith("the base executable's folder %s)" % COPY_AT)
+    m = plain("venv", places={COPY_AT: COPY})          # the venv where measured, its base one folder deeper
+    bad, counts = wincode.check(m)
+    assert bad is None and (counts["own"], counts["own_there"], counts["base"], counts["alone"]) == (4, 1, 1, 2)
+    own_reads(m)
+
+
+def test_o1_the_base_prefixs_names_are_judged_where_no_base_executable_names_its_folder():
+    """O-1: the interpreter keys a venv's build tree on the home its pyvenv.cfg names, which is the base prefix; the
+    check asks the base prefix too, so a base executable unnamed, or said as the venv's own, hides nothing."""
+    rows, given = road("venv", places={})              # the venv and its base where measured
+    for base in (None, given["program"]):
+        m = plain("venv", places={}, base=base)
+        name, words = refused(m)
+        assert name == "C:\\Modules\\Setup.local" and "there, C:\\, judged for it" in words, (base, name, words)
+        assert words.endswith("the interpreter's base prefix %s)" % given["base_prefix"]), words
+    m = plain("venv", places={COPY_AT: COPY}, base=None)   # the base one folder deeper: taken, its names asked
+    bad, counts = wincode.check(m)
+    assert bad is None and counts["base"] == 0 and counts["own"] == 4, (bad, counts)
+    bad, counts = wincode.check(plain("copy"))             # a plain install: the base prefix is its own folder
+    assert bad is None and counts["own"] == 3
+
+
+@pytest.mark.parametrize("version", [(3, 14), (3, 15), (4, 0), None, "3.12", (3,), (3, 12, 1), (3.0, 12), (True, 12)])
+def test_o2_a_packed_runtime_of_3_14_or_later_or_of_no_known_version_is_refused_and_nothing_read(version):
+    m = Machine(version=version)
+    bad, counts = wincode.check(m)
+    assert bad[0] == PROGRAM and "pyvenv.cfg" in bad[1] and "from 3.14 on" in bad[1] and "O-2" in bad[1], bad
+    assert m.reads == [] and m.listed == [] and counts == {"folders": 0, "files": 0, "above": 0}
+
+
+@pytest.mark.parametrize("version", [(3, 11), (3, 12), (3, 13)])
+def test_o2_a_packed_runtime_older_than_3_14_is_walked_as_before(version):
+    bad, counts = wincode.check(Machine(version=version))
+    assert bad is None and counts == wincode.check(Machine())[1] and wincode.PACKED_BELOW == (3, 14)
+    assert wincode.check(plain("copy", version=(3, 14)))[0] is None   # the plain road judges that name (N-1)
+
+
+def test_n1_a_pyvenv_cfg_there_in_the_folder_above_is_judged_as_a_file_taken_and_counted_or_refused():
+    name = RIG + "\\pyvenv.cfg"
+    bad, base = wincode.check(plain())
+    m = plain(names={name: GOOD_PTH})                  # a stand-in reading: the measured os.py's
+    bad, counts = wincode.check(m)
+    assert bad is None and counts["files"] == base["files"] + 1 and counts["own_there"] == 1
+    assert counts["alone"] == base["alone"] - 1 and own_reads(m).count(ntpath.normcase(name)) == 1
+    m = plain(names={name: (0x20, "O:BAD:(A;;0x1301bf;;;AU)")})
+    assert refused(m) == (name, wincode.ROLE_CODE + ": the entry (A;;0x1301bf;;;AU) gives AU, a name outside the"
+                          " system's, 0x2, 0x4, 0x10, 0x100, 0x10000: not allowed (" + wincode.CODE_MAY + ") (the"
+                          " name " + name + ": " + wincode.OWN_NAMES[0] + " the interpreter's folder " + COPY + ")")
+
+
+def test_n1_a_folder_above_that_lets_users_add_a_file_is_refused_for_pyvenv_cfg_where_the_first_build_took_it():
+    drop = "C:\\Program Files\\Drop"                   # the review's finding 1, its input exactly
+    reading_of_drop = (0x10, "O:BAD:(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200ab;;;BU)")
+    assert wincode.as_above(*reading_of_drop) is None   # K-3 takes it: the first build's walk passed this tree
+    m = plain(places={COPY_AT: drop + "\\Py"}, names={drop: reading_of_drop})
+    bad = refused(m)
+    assert bad[0] == drop + "\\pyvenv.cfg" and bad[1].startswith(
+        "not there (error 2): the deepest folder of it that is there, %s, judged for it %s: the entry"
+        " (A;;0x1200ab;;;BU) gives BU, a name outside the system's, 0x2: not allowed" % (drop, wincode.ROLE_CODE))
+    assert bad[1].endswith("(the name %s\\pyvenv.cfg: %s the interpreter's folder %s\\Py)" % (
+        drop, wincode.OWN_NAMES[0], drop))
+    own_reads(m)
+
+
+def test_n1_lib_there_two_folders_above_is_walked_whole():
+    lib = "C:\\Program Files\\Lib"
+    bad, base = wincode.check(plain())
+    m = plain(names={lib: reading(COPY_AT + "\\Lib"), lib + "\\x.py": GOOD_PTH}, lists={lib: ["x.py"]})
+    bad, counts = wincode.check(m)
+    assert bad is None and counts["own_there"] == 1 and lib + "\\x.py" in m.reads and lib in m.listed
+    assert (counts["folders"], counts["files"]) == (base["folders"] + 1, base["files"] + 1)
+    m = plain(names={lib: reading(COPY_AT + "\\Lib"), lib + "\\x.py": (0x20, "O:BAD:(A;;0x1301bf;;;AU)")},
+              lists={lib: ["x.py"]})
+    bad = refused(m)
+    assert bad[0] == lib + "\\x.py" and bad[1].endswith("(the name %s: %s the interpreter's folder %s)" % (
+        lib, wincode.OWN_NAMES[2], COPY))
+    own_reads(m)
+
+
+def test_n1_the_three_names_with_ntpath_and_the_packed_road_never_asks_them():
+    assert wincode.own_names("C:\\Program Files\\Python311") == list(zip(
+        ("C:\\Program Files\\pyvenv.cfg", "C:\\Modules\\Setup.local", "C:\\Lib"), wincode.OWN_NAMES))
+    assert [n for n, _ in wincode.own_names("C:\\Python311")] == ["C:\\pyvenv.cfg", "C:\\Modules\\Setup.local",
+                                                                   "C:\\Lib"]   # nearer the root: the root
+    assert [n for n, _ in wincode.own_names("C:\\")] == ["C:\\pyvenv.cfg", "C:\\Modules\\Setup.local", "C:\\Lib"]
+    m = Machine()
+    assert wincode.check(m) == (None, {"folders": 3, "files": 2, "above": 2}) and m.reads == MEASURED_READS
+
+
+def test_m_exit_0_on_the_plain_road_says_its_counts(monkeypatch, capsys):
+    code, out = through(monkeypatch, plain("venv"))
+    assert code == 0 and capsys.readouterr().err == ""
+    counts = dict(zip(PLAIN_COUNTS, EXPECTED_PLAIN["venv"]))
+    assert out == "raqib service check: the code a service would run is the system's alone: %s\n" % (
+        wincode.plain_words(counts))
+    for piece in ("checked 19 names", "6 entries of its path and the raqib package's folder, whole, 11 folders and 7"
+                  " files", "(the creator's own inherit-only entry apart)", "1 of those entries not there",
+                  "0 *.pth files read, 0 of their lines walked as entries, none of their lines taken or run by the"
+                  " check", "and 1 folders above them to the drive's letter", "in the entries that apply to the folder"
+                  " itself", "and besides those 19 names, 2 folders judged themselves only"):
+        assert piece in out, piece
+    assert "nothing of them run" not in out
+
+
+def test_n3_each_number_of_the_pass_on_a_tree_where_none_is_zero():
+    vsite = VENV + "\\Lib\\site-packages"
+    m = plain("venv", base_exec_prefix=MODULES, path=road("venv")[1]["path"] + [COPY + "\\Lib\\os.py\\sub"],
+              names={vsite + "\\x.pth": GOOD_PTH, COPY + "\\Lib\\os.py\\sub": OSError(3, "path not found")},
+              lists={vsite: ["raqib", "x.pth"]}, files={vsite + "\\x.pth": b"import os\nsub\n"})
+    bad, counts = wincode.check(m)
+    assert bad is None and tuple(counts[k] for k in PLAIN_COUNTS) == (13, 9, 2, 2, 8, 2, 1, 6, 1, 1, 1, 1, 1), counts
+    assert all(counts.values())
+    words = wincode.plain_words(counts)
+    for piece in ("checked 24 names", "under the interpreter's folder, its base's, its prefix, base prefix and one"
+                  " exec prefix apart from them, 8 entries of its path and the raqib package's folder, whole, 13"
+                  " folders and 9 files,", "; 2 of those entries not there, each judged by the deepest folder of it"
+                  " that is there, itself only, and 1 beneath a file, each judged by that file; 6 names the"
+                  " interpreter itself looks for at every start for its folder, its base's (pyvenv.cfg in the folder"
+                  " above it, Modules\\Setup.local and Lib two folders above it), each judged as an entry is, 1 of"
+                  " them there; 1 *.pth files read, 1 of their lines walked as entries, none of their lines taken or"
+                  " run by the check; and 2 folders above them", "; and besides those 24 names, 2 folders judged"
+                  " themselves only, as the code itself"):
+        assert piece in words, piece
+    assert 24 == counts["folders"] + counts["files"] + counts["above"]
+    words = wincode.plain_words(dict(counts, base=0, exec=0))   # no base walked: its base's is not said
+    assert "its base's" not in words and "its prefix and base prefix (its exec prefixes among them)," in words
+    assert "two exec prefixes apart from them" in wincode.plain_words(dict(counts, exec=2))
+
+
+@pytest.mark.parametrize("which, said", [
+    ("program", "the interpreter's path"), ("prefix", "the interpreter's prefix"),
+    ("base_prefix", "the interpreter's base prefix"), ("exec_prefix", "the interpreter's exec prefix"),
+    ("base_exec_prefix", "the interpreter's base exec prefix")])
+@pytest.mark.parametrize("value", [None, 7, b"C:\\x"])
+def test_n3_a_program_or_a_prefix_not_named_or_not_a_string_is_refused_never_skipped(which, said, value):
+    m = plain(**{which: value})
+    bad = refused(m)
+    own = "is not named (None): only the base executable may be unnamed" if value is None else "is not a string ("
+    assert bad[1].startswith("%s %s" % (said, own)) and wincode.NOT_READ in bad[1] and m.reads == [], bad
+
+
+def test_n3_only_the_base_executable_may_be_unnamed_and_its_base_is_said_only_where_walked():
+    bad, counts = wincode.check(plain(base=None))
+    assert bad is None and counts["base"] == 0 and "its base's" not in wincode.plain_words(counts)
+    bad, counts = wincode.check(plain())                # the copy: its base in its own folder, walked as itself
+    assert bad is None and counts["base"] == 0
+    bad, counts = wincode.check(plain("venv"))
+    assert bad is None and counts["base"] == 1 and ", its base's, " in wincode.plain_words(counts)
+    assert refused(plain(base=7))[1].startswith("the base executable's path is not a string (7)")
+
+
+def test_n3_the_exec_prefixes_equal_are_one_walk_different_are_roots_and_refused_where_refused():
+    bad, counts = wincode.check(plain())
+    m = plain(exec_prefix=COPY.upper(), base_exec_prefix=COPY.lower())   # equal without case: one walk
+    assert wincode.check(m) == (bad, counts) and counts["exec"] == 0 and len(m.reads) == 18
+    bad = refused(plain(exec_prefix="C:\\ProgramData\\Raqib"))
+    assert bad[0] == "C:\\ProgramData" and bad[1].startswith(wincode.ROLE_ABOVE) and "0x10, 0x100:" in bad[1]
+    bad = refused(plain(base_exec_prefix=COPY + "\\later"))   # a root must be there
+    assert bad[0] == COPY + "\\later" and "not read" in bad[1]
+    bad, counts = wincode.check(plain(base_exec_prefix=MODULES))   # the packed tree's measured folder: taken
+    assert bad is None and counts["exec"] == 1
+
+
+@pytest.mark.parametrize("isolated, no_site, said", [
+    (False, False, "a plain interpreter that was not started with -I (isolated): "),
+    (True, True, "a plain interpreter that was started with -S (without its site): "),
+    (0, 1, "a plain interpreter that was not started with -I (isolated) and was started with -S (without its site)"),
+])
+def test_m1_not_asked_with_i_or_asked_with_s_exit_2_nothing_read(isolated, no_site, said, monkeypatch, capsys):
+    m = plain(isolated=isolated, no_site=no_site)
+    code, out = through(monkeypatch, m)
+    err = capsys.readouterr().err
+    assert code == 2 and out == "" and m.reads == [] and m.bytes_read == []
+    assert err == "raqib: raqib service check: %s\\python.exe: %s\n" % (COPY, wincode.not_asked(m))
+    assert said in err and "the path it would walk is not the path the service gets" in err
+    assert err.endswith('ask it as the service will run it: "%s\\python.exe" -I -m raqib service check\n' % COPY)
+
+
+def test_m1_the_packed_road_is_chosen_first_and_its_flags_are_never_asked():
+    m = Machine(isolated=False, no_site=True)
+    assert wincode.check(m) == (None, {"folders": 3, "files": 2, "above": 2}) and m.asked == []
+
+
+def refused(m):
+    bad, counts = wincode.check(m)
+    assert bad is not None, counts
+    return bad
+
+
+def test_m2_an_entry_in_a_folder_users_may_write_is_refused_by_that_folder():
+    rows, given = road("copy")
+    bad = refused(plain(path=given["path"] + ["C:\\ProgramData\\Raqib"]))
+    assert bad[0] == "C:\\ProgramData" and bad[1].startswith(wincode.ROLE_ABOVE) and "0x10, 0x100:" in bad[1]
+
+
+def test_m3_an_entry_not_there_under_c_is_judged_by_c_as_the_code_itself_and_refused():
+    rows, given = road("copy")
+    m = plain(path=given["path"] + ["C:\\made-later\\x"])
+    bad = refused(m)
+    assert bad[0] == "C:\\made-later\\x" and bad[1].startswith("not there (error 2): the deepest folder of it that is"
+                                                               " there, C:\\, judged for it " + wincode.ROLE_CODE)
+    assert "(A;;LC;;;AU)" in bad[1] and "0x4:" in bad[1] and m.reads.count("C:\\") == 1   # read once, judged twice
+
+
+def test_m3_not_there_is_the_readers_errors_2_and_3_only():
+    rows, given = road("copy")
+    late = COPY + "\\later"
+    for error, there in ((FileNotFoundError(2, "not found"), None), (OSError(3, "path not found"), None),
+                         (PermissionError(5, "Access is denied"), "not read (Access is denied (error 5))"),
+                         (OSError(1920, "cannot be accessed"), "not read (cannot be accessed (error 1920))"),
+                         (OSError("2"), "not read"), (ValueError("a NUL"), "not read")):
+        bad, counts = wincode.check(plain(path=given["path"] + [late + "\\x"], names={late: error}))
+        if there is None:    # not there: judged by the copy's folder, the system's alone - taken, counted
+            assert bad is None and counts["missing"] == 2 and counts["entries"] == 6, (error, bad)
+        else:
+            assert bad[0] == late and there in bad[1] and wincode.NOT_READ in bad[1], (error, bad)
+    bad = refused(plain(path=["Q:\\x"]))
+    assert bad == ("Q:\\x", "not there (error 2), and neither is its drive: no folder of it is there to be judged; "
+                   + wincode.NOT_READ)
+
+
+GOOD_PTH = reading(COPY_AT + "\\Lib\\os.py")
+SITE = COPY + "\\Lib\\site-packages"
+
+
+def with_pth(data, name="x.pth", kind=GOOD_PTH):
+    lists = {SITE: ["raqib", name], SITE + "\\" + name: []}   # the listing of a *.pth name that reads as a folder
+    return plain(names={SITE + "\\" + name: kind}, lists=lists, files={SITE + "\\" + name: data})
+
+
+def test_m4_the_lines_of_a_pth_file_by_sites_rule_with_ntpath():
+    text = ("# a comment\n\n   \nimport os\nimport\tos\nimportx\nsub\\one  \n..\\..\\elsewhere\n"
+            "C:\\Program Files\\Other\r\n\\\\server.example\\share\\x\n")
+    assert wincode.pth_lines(text, SITE) == [SITE + "\\importx", SITE + "\\sub\\one", COPY + "\\elsewhere",
+                                             "C:\\Program Files\\Other", "\\\\server.example\\share\\x"]
+    assert wincode.PTH_MAX is service.PTH_MAX and wincode.PTH_ODD is service.PTH_ODD   # imported, not copied
+
+
+def test_m4_a_pth_file_read_once_taken_its_path_lines_entries_its_import_line_nothing():
+    m = with_pth(b"# a comment\n\nimport os\nLib\n")
+    bad, counts = wincode.check(m)
+    assert bad is None and (counts["pth"], counts["pth_lines"], counts["entries"], counts["missing"]) == (1, 1, 6, 2)
+    assert m.bytes_read == [(SITE + "\\x.pth", service.PTH_MAX)]
+    assert m.events.index(("read", SITE + "\\x.pth")) < m.events.index(("bytes", SITE + "\\x.pth"))   # judged, then read
+    assert ntpath.normcase(SITE + "\\lib") in [ntpath.normcase(r) for r in m.reads]   # the line, not there, judged by
+    # its deepest folder (the site)
+
+
+def test_m4_a_pth_line_that_leads_outside_is_refused_there_its_file_said():
+    bad = refused(with_pth(b"..\\..\\..\\..\\..\\Users\\user\n"))   # five up: the tree is one folder deeper
+    assert bad[0] == "C:\\Users\\user" and bad[1].startswith(wincode.ROLE_CODE) and "(A;OICI;FA;;;LA)" in bad[1]
+    assert bad[1].endswith("(the entry C:\\Users\\user, a line of %s\\x.pth)" % SITE)
+    bad = refused(with_pth(b"\\\\server.example\\share\\x\n"))
+    assert bad[0] == "\\\\server.example\\share\\x" and bad[1].startswith("a line of %s\\x.pth, made whole: " % SITE)
+
+
+@pytest.mark.parametrize("data, kind, said", [
+    (b"#" * (service.PTH_MAX + 1), GOOD_PTH, "a *.pth file longer than 1048576 bytes (PTH_MAX): not read whole"),
+    (b"#" * service.PTH_MAX, GOOD_PTH, None),
+    (b"C:\\x\n\xe9", GOOD_PTH, "a *.pth file holding byte 0xe9 at offset 5, outside printable ASCII, tab, LF and CR"),
+    (b"a\x00b\n", GOOD_PTH, "byte 0x00 at offset 1"),
+    (PermissionError(5, "Access is denied"), GOOD_PTH,
+     "a *.pth file that cannot be read (Access is denied (error 5))"),
+    ("text, not bytes", GOOD_PTH, "a *.pth file whose bytes are not read"),
+    (b"x\n", (0x20, "O:BAD:(A;;0x1301bf;;;AU)"), wincode.ROLE_CODE + ": the entry (A;;0x1301bf;;;AU)"),
+    (b"x\n", (0x10, reading(COPY_AT + "\\Lib\\site-packages")[1]), "a *.pth name that is not a file as read"),
+])
+def test_m4_a_pth_file_too_long_with_an_odd_byte_not_read_or_not_taken_is_refused(data, kind, said):
+    m = with_pth(data, kind=kind)
+    bad, _ = wincode.check(m)
+    if said is None:
+        assert bad is None
+        return
+    assert bad[0] == SITE + "\\x.pth" and said in bad[1], bad
+    if kind is not GOOD_PTH:
+        assert m.bytes_read == []    # never read before it was taken as a file, the system's alone
+
+
+def test_m2_a_base_executable_in_a_refused_folder_is_refused():
+    stand_in = reading(COPY_AT)   # not measured: the two folders above GitHub's Python, given a folder's taken list
+    bad = refused(plain("venv", base=PY + "\\python.exe", names={"C:\\hostedtoolcache": stand_in,
+                                                                 "C:\\hostedtoolcache\\windows": stand_in}))
+    assert bad[0] == "C:\\hostedtoolcache\\windows\\Python" and bad[1].startswith(wincode.ROLE_ABOVE)
+    assert "(A;ID;0x1301bf;;;AU)" in bad[1]
+
+
+def test_m2_the_raqib_package_is_walked_outside_every_entry_and_refused_or_taken_by_its_own_lists():
+    m = plain(package="D:\\a\\raqib\\raqib\\raqib")
+    assert refused(m) == ("D:\\", wincode.ROLE_ABOVE + ": owned by NS, not the system (SY), the administrators (BA)"
+                                                       " or the system's installer")
+    assert m.reads[-1] == "D:\\" and SITE + "\\raqib\\cli.py" in m.reads   # every entry walked before it
+    m = plain(package=MODULES + "\\raqib")    # the packed tree's measured raqib, outside every entry: taken
+    bad, counts = wincode.check(m)
+    assert bad is None and counts["folders"] == 7 and m.reads[-1] == MODULES + "\\raqib"
+    assert counts["above"] == 3 and counts["alone"] == 2   # C:\, RaqibProbe8, _internal; Program Files and RIG alone
+
+
+def test_m2_an_entry_that_is_a_file_is_judged_as_itself():
+    rows, given = road("copy")
+    bad, counts = wincode.check(plain(path=given["path"] + [PROGRAM]))   # the packed program, measured: taken
+    assert bad is None and counts["files"] == 6 and counts["above"] == 2 and counts["entries"] == 6   # C:\, its folder
+    bad = refused(plain(path=given["path"] + [COPY + "\\extra.zip"],
+                        names={COPY + "\\extra.zip": (0x20, "O:BAD:(A;;0x1301bf;;;AU)")}))
+    assert bad[0] == COPY + "\\extra.zip" and bad[1].startswith(wincode.ROLE_CODE + ": the entry (A;;0x1301bf;;;AU)")
+
+
+@pytest.mark.parametrize("entry, said", [
+    (7, "an entry of the interpreter's path that is not a string: not read"),
+    (None, "an entry of the interpreter's path that is not a string"),
+    ("", "an entry of the interpreter's path: is not said"),
+    ("relative\\x", "does not begin with a drive's letter"),
+    ("\\\\server.example\\share\\x", "does not begin with a drive's letter"),
+    ("C:\\Program Files\\..\\x", "not a whole path of a drive: an empty part, . or .."),
+    (COPY + "\\", "an empty part"), ("C:\\x\\NUL", "a device's name"),
+    ("C:\\" + "a" * 300, "longer than the system opens plainly"),
+])
+def test_m2_an_entry_that_is_not_a_whole_drive_path_is_refused_with_its_own_words(entry, said):
+    rows, given = road("copy")
+    m = plain(path=[entry] + given["path"])
+    bad = refused(m)
+    assert said in bad[1] and len(m.reads) == 17, bad   # the roots (3 above, 11 under the copy), N-1's 3; no entry
+    assert bad[1].startswith("an entry of the interpreter's path")
+
+
+@pytest.mark.parametrize("which, said", [("program", "the interpreter's path"),
+                                         ("base", "the base executable's path"),
+                                         ("prefix", "the interpreter's prefix"),
+                                         ("base_prefix", "the interpreter's base prefix")])
+def test_m2_a_root_not_a_whole_drive_path_is_refused_and_nothing_is_read(which, said):
+    m = plain(**{which: "\\\\server.example\\share\\python.exe"})
+    bad = refused(m)
+    assert bad[1].startswith(said + " \\\\server.example") and m.reads == []
+
+
+def test_m2_names_compared_without_case_and_one_walk_max_for_the_whole_walk(monkeypatch):
+    rows, given = road("copy")
+    m = plain(path=given["path"] + [COPY.upper() + "\\LIB", "c:\\program files\\rig\\raqibprobe9py\\lib\\SITE-PACKAGES"])
+    bad, counts = wincode.check(m)
+    assert bad is None and counts["entries"] == 5 and len(m.reads) == 18   # met again, never read again (RIG, N-1's 3)
+    monkeypatch.setattr(wincode, "WALK_MAX", 10)
+    m = plain()
+    bad, counts = wincode.check(m)
+    assert bad[1] == "more than 10 names to walk (WALK_MAX): a walk that is not whole is not a pass"
+    assert sum(counts[k] for k in ("folders", "files", "above", "alone")) == 10 and len(m.reads) == 10
+
+
+def test_m_the_real_system_objects_answers_are_the_running_interpreters(tmp_path):
+    import raqib
+    s = wincode.System()
+    assert s.isolated() is bool(sys.flags.isolated) and s.no_site() is bool(sys.flags.no_site)
+    assert s.base_executable() == getattr(sys, "_base_executable", None) and s.sys_path() == list(sys.path)
+    assert s.prefix() == sys.prefix and s.base_prefix() == sys.base_prefix
+    assert s.exec_prefix() == sys.exec_prefix and s.base_exec_prefix() == sys.base_exec_prefix
+    assert s.version() == tuple(sys.version_info[:2]) and len(s.version()) == 2
+    assert s.package_dir() == ntpath.dirname(raqib.__file__) and Path(s.package_dir()) == Path(raqib.__file__).parent
+    f = tmp_path / "x.pth"
+    f.write_bytes(b"0123456789")
+    assert s.read_bytes(str(f), 4) == b"01234" and s.read_bytes(str(f), 100) == b"0123456789"
