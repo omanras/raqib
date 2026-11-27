@@ -1393,6 +1393,23 @@ def test_q1_a_device_name_not_whole_of_the_form_measured_is_refused_with_the_nam
     assert "first met" not in bad[1] and "share" not in bad[1]
 
 
+def test_r2_an_answer_of_a_kind_of_the_plain_types_is_not_read():
+    """R-2 (the second review's finding 8): a tuple's or a str's subclass could say one thing to the match and
+    another to the pass; only the plain types are read."""
+    class Name(str):
+        def __str__(self):
+            return "\\Device\\HarddiskVolume3\\elsewhere"
+
+    class Pair(tuple):
+        pass
+
+    for got in ((3, Name("\\Device\\HarddiskVolume3")), Pair((3, "\\Device\\HarddiskVolume3")),
+                [3, "\\Device\\HarddiskVolume3"]):
+        root, words = wincode.drive_refused("C:", got)
+        assert root == "C:\\" and "not read" in words and wincode.NOT_READ in words, (got, words)
+    assert wincode.drive_refused("C:", (3, "\\Device\\HarddiskVolume3")) is None
+
+
 def test_q1_the_form_is_one_pattern_matched_whole_with_its_case():
     assert wincode.DISK_DEVICE.pattern == r"\\Device\\HarddiskVolume[0-9]+" and wincode.DISK_FORM == \
         "\\Device\\HarddiskVolumeN" and not wincode.DISK_DEVICE.flags & re.IGNORECASE

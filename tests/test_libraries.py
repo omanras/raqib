@@ -34,6 +34,15 @@ eval, importlib; loads the interpreter itself makes, outside raqib/ (ctypes' own
 _ctypes' dependencies, tkinter's libraries); folders the interpreter's own start adds to the search (site, a *.pth
 line, sitecustomize), which no test here reads; whether a library's own dependencies are searched as the library is
 (Amendment P: not measured).
+
+Not yet held, though Q-4 asked for it (the second review of the REDO, ADR-0013 R-3; a task of its own re-makes this
+hold as a list of every mention that is allowed, where today it is a list of the forms that are refused): a folder
+reaching CI-3's call through its parameter bound again inside the function that holds it; a loader lambda handed to a
+call inside its own binding line; a table of names changed from another module; a folder added by the interpreter's
+own low call (nt._add_dll_directory); ctypes reached by __import__ or sys.modules; a loader of ctypes' reached
+through an attribute of one (windll.LoadLibrary bound to a name, a class's __init__ or __base__, an instance's
+__class__); a function of a library asked by ordinal; the whole environment set by one call of the system's; a
+docstring read as a value.
 """
 import ast
 import os

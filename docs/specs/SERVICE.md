@@ -792,23 +792,24 @@ lists (FAT32, exFAT) is a fixed disk whose every name reads with the owner `WD` 
 K-3 as they are); a letter that is not there has no root (kind 1) and its device's name is not read (the system's
 error 2). Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10), not measured: a library
 asked for by a bare name is searched with the system's default folders - the application's own folder, System32, and
-folders the process itself added - and not along the PATH or in the folder the process was started in. So the
-system's PATH is closed by a test (P-2, tests/test_libraries.py): it reads every place in raqib/ where a library is
-loaded and holds that each name is a plain name written in the code, with no path and no name worked out, no folder
-added to the search and no search mode given, and on one list (advapi32, dnsapi, dwmapi, iphlpapi, kernel32, shcore,
-shell32, user32); on Windows it also finds each name of the list in System32. The one call that changes the search,
+folders the process itself added - and not along the PATH or in the folder the process was started in. So the system's
+PATH is closed by a test (P-2, tests/test_libraries.py): it reads every place in raqib/ where a library is loaded and
+holds that each name is a plain name written in the code, with no path and no name worked out, no folder added to the
+search and no search mode given, and on one list (advapi32, dnsapi, dwmapi, iphlpapi, kernel32, shcore, shell32,
+user32); on Windows it also finds each name of the list in System32. The one call that changes the search,
 SetDllDirectoryW with no folder at the entry (ADR-0007 CI-3), takes the folder searched first back to the system's
-own. The reading names three places a library is searched: the program's own folder, which the check walks as the
-code itself; System32; and folders the process itself added. Of the third, the test's "no folder added" holds that
-raqib/ adds none; nothing holds what the interpreter's own start adds (site, an `import` line of a *.pth file,
-sitecustomize), which the check walks as files and does not read for what it adds. Since Amendment Q (Q-4) the test
-also refuses a loader asked by index, ctypes' low loader and the class its loaders are made by, a loading call given
-more than its name, a search call's name written in a string, the environment written whole or past `os.environ`, a
-table of names changed after it was written, a loader handed on as a value, and a second call of CI-3's call or one
-given a folder; what it still does not see is said in its own first lines. Not measured, and said: a network drive, a
-removable disk and a disc (their kinds are the system's own numbers, read in its documents, not seen); a letter the
-system's account has and the asker has not, or names otherwise; a folder mounted on a volume with no letter; whether a
-library's own dependencies are searched as the library is.
+own. The reading names three places a library is searched: the program's own folder, which the check walks as the code
+itself; System32; and folders the process itself added. Of the third, the test holds the ways it knows by which raqib/
+could add one, not every way (Amendment R: its first lines say what it does not yet hold, and a task of its own
+re-makes it as a list of what is allowed); nothing holds what the interpreter's own start adds (site, an `import` line
+of a *.pth file, sitecustomize), which the check walks as files and does not read for what it adds. Since Amendment Q
+(Q-4) the test also refuses a loader asked by index, ctypes' low loader and the class its loaders are made by, a
+loading call given more than its name, a search call's name written in a string, the environment written whole or by
+the setters it knows past `os.environ`, a table of names changed after it was written, a loader handed on as a value,
+and a second call of CI-3's call or one given a folder; what it still does not see is said in its own first lines. Not
+measured, and said: a network drive, a removable disk and a disc (their kinds are the system's own numbers, read in
+its documents, not seen); a letter the system's account has and the asker has not, or names otherwise; a folder
+mounted on a volume with no letter; whether a library's own dependencies are searched as the library is.
 
 **What Amendment Q measured, and what it changed.** P-1 took a device's name that begins with `\Device\`; what was
 measured of a disk is narrower, and Q-1 takes only that: the readings of x64 and ARM64 (the probe branches cf233f5 and

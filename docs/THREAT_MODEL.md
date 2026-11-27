@@ -2239,8 +2239,10 @@ collector that is slow, down or refusing never delays or loses a capture
   worked out at run time, and on Windows finds each in System32; ctypes'
   search as read in its source (not measured) names three places, never the
   PATH: the program's own folder, which the check walks; System32; and
-  folders the process itself added - of these the test holds that raqib/
-  adds none, and nothing holds what the interpreter's own start adds (site,
+  folders the process itself added - of these the test holds the ways it
+  knows by which raqib/ could add one, not every way (its own first lines
+  say what it does not yet hold), and nothing holds what the interpreter's
+  own start adds (site,
   an `import` line of a *.pth file, sitecustomize). On the plain road it
   does not read what the system's own account would add to the path that the
   asker's does not (only the system writes there), a finder or hook a

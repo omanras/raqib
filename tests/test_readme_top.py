@@ -386,7 +386,9 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
     "The letter is read as the session that asks names it, and the system's account may name it otherwise: the"
     " install is to have the service ask the check again at its own start, as the system (not built yet).",
     "A library Raqib loads by name is searched in the program's own folder, in System32 and in folders the process"
-    " itself added: a test holds that Raqib adds none, and nothing holds what the interpreter's own start adds.",
+    " itself added - read in the interpreter's library, not measured: a test holds the ways it knows of adding one"
+    " and of loading by another name (its own text says what it does not see), and nothing holds what the interpreter's"
+    " own start adds.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK

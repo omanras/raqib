@@ -877,3 +877,40 @@ refused by its lists; on one without lists, by the null list.
   refused outright.
 - M12.4c2b gains, from this review: the runner asks the check at its start, as the system, and does not watch a
   tree it does not take (its own number for it); the install writes the command by the path the check judged.
+
+## Amendment R (the Table, 2026-11-27) - the review of M12.4c2a REDO (docs/review/2026-11-27-M12.4c2a-redo.md) and its field run: the drive lands; the libraries' hold is re-made
+The field's word on f27ccef (the probe branch bcf1a7c; x64 and ARM64): the gate green on six jobs and the rig
+green, X49, X50 and X51 MET; the tests passed on both. Measured there, the thing the first review named: a letter
+given to a volume's own name followed by a folder's path reads as the fixed kind with exactly that name - P-1
+would have taken it - and is refused before any name is read. A letter given to the volume's name alone is
+another letter of that volume's root: taken, the whole tree walked from the root, the pass naming the letter and
+its device. Letters given to a folder (the `\??\` form), and the disk images with and without lists: as before.
+The second reviewer's verdict is REDO, for the libraries' test alone: the drive is built as Q-1 ruled, with no
+input found that is taken outside the form; the scan still passes three forms Q-4 named (a folder reaching CI-3's
+call through its parameter bound again; a loader lambda handed on inside its own binding line; a table of names
+changed from another module), and its list of what it does not see was not whole. Ruled:
+- R-1 (the drive lands). P-1 as Q-1 corrected it, with its words, its rig claim and its documents, lands now. It is
+  the part an install will rest on, it was measured on real machines in every case ruled, and both reviews found
+  it sound.
+- R-2 (small, by the Table's hand; findings 7, 8). The system's answer is read only as the plain types - a tuple,
+  an int, a str, never a kind of them. The guide, the spec and the threat model say of the libraries' test what
+  it holds - the ways it knows - and that the search's three places were read, not measured.
+- R-3 (the libraries' hold is re-made, a task of its own: M12.4c2a2). A scan that lists the forms it refuses is
+  out-written by the next form; two reviews each found forms the one before had not. The hold is turned round:
+  every mention in raqib/ of a word by which a library can be loaded, the search changed, or ctypes reached - as
+  a name, an attribute, an import, a keyword or a string, docstrings too - is on a list the test holds, by file,
+  function and count, and any other mention fails; every attribute taken of ctypes is on a list of those Raqib
+  uses; the one function that calls CI-3's call is held word for word; each table of names is mentioned only
+  where the test says. A new load then cannot be written without changing the test's own list, where a reviewer
+  reads it. Until it lands, the scan stands as the first hold, its own first lines saying what it does not yet
+  hold; nothing in the tree today is one of those forms (two reviewers read every load by hand). FOR: the hold
+  no longer depends on knowing every way. MUST NOT TOUCH: any loader.
+- R-4 (kept, and recorded; findings 6, 9, 10, 12, 15 and the builder's questions). The lines of the rig's check
+  that describe X51 follow its reading. The pattern takes any number of digits; the numbers measured were 3 to 7.
+  A volume is taken as the system names it: what can write it beneath its file system is not read. A letter
+  given to a disk's own root behind `\??\` is refused by its form (kept: it errs toward refusal). The drives are
+  said at the end of the pass; a refused drive names no role; the stand-in's default disk is a stand-in.
+- R-5 (lands, and next). M12.4c2a lands as 0.13.0 after the gate and the rig on the commit to be merged. Next:
+  M12.4c2a2 (R-3), then M12.4c2b (K-9, O-5, Q's two additions: the runner asks the check at its own start as the
+  system and does not watch a tree it does not take; the install writes the command by the path the check
+  judged).

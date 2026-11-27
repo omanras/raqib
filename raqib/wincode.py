@@ -573,11 +573,11 @@ def drive_refused(letter, got):
     head = "the drive %s, asked before any name of it is read (ADR-0013 P-1, Q-1)" % letter
     if isinstance(got, BaseException):
         return root, "%s: its device's name was not read (%s); %s; %s" % (head, _why(got), DRIVE_ONLY, NOT_READ)
-    if not isinstance(got, tuple) or len(got) != 2:
+    if type(got) is not tuple or len(got) != 2:      # R-2: the plain types only; a kind of them is not read
         return root, "%s: the system's answer is not a kind and a device's name (%s): not read; %s; %s" % (
             head, _said(repr(got), 80), DRIVE_ONLY, NOT_READ)
     kind, name = got
-    if type(kind) is not int or not isinstance(name, str):
+    if type(kind) is not int or type(name) is not str:
         return root, ("%s: a kind or a device's name of a type the check does not know (kind %s, device's name %s):"
                       " not read; %s; %s" % (head, _said(repr(kind), 40), _said(repr(name), 80), DRIVE_ONLY,
                                              NOT_READ))
