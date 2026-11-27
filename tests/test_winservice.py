@@ -83,6 +83,9 @@ class Machine:
         # M12.4c2b1 (ADR-0013 T-1): the check of its own code - a pass by default; own_fn/own_error: a stand-in's
         # answer or exception; own_seconds: what it takes on the waiting clock (0: the clocks above stay as they were)
         self.own_fn, self.own_error, self.own_seconds, self.hints = None, None, 0.0, []
+        # M12.4c2b3 (ADR-0013 ZB-4): each status told with its check-point and its wait, in order (points); on_status:
+        # a stand-in's answer to a status (machine, state, check_point) - None: taken; False: not taken; or raises
+        self.points, self.on_status = [], None
 
     def platform(self):
         return self.os
@@ -114,10 +117,13 @@ class Machine:
         self.handler = handler
         return "handle"
 
-    def set_status(self, handle, state, accepted, win32_exit, specific_exit, wait_hint):
+    def set_status(self, handle, state, accepted, win32_exit, specific_exit, wait_hint, check_point=0):
         assert handle == "handle"
         self.log.append(("status", state, win32_exit, specific_exit))
         self.hints.append((state, wait_hint))
+        self.points.append((state, check_point, wait_hint))
+        if self.on_status is not None:
+            return self.on_status(self, state, check_point) is not False
         return True
 
     def raise_interrupt(self):
@@ -1282,3 +1288,222 @@ def test_t1_wincode_is_imported_only_inside_own_check_and_the_check_is_never_ski
     said = ast.unparse(serve)
     assert said.index("self._status(START_PENDING, CHECK_WAIT_HINT)") < said.index("self._own_code()") < said.index(
         "self._status(RUNNING)") < said.index("self._wait_for(place)")
+
+
+# --- M12.4c2b3 (ADR-0013 Amendment ZB): the check-point raised while the check walks --------------------------------
+# No test here sleeps and hopes: the runner's beat is made small (runner.beat), the made-up check lasts until the
+# raisings it wants were seen (events), and a raising it wants last is held in the system's call until the runner
+# marks the check over. WAIT is only a bound, so that a fault fails instead of hanging; no test needs that time.
+WAIT = 10.0
+RAISED = [(START_PENDING, n, winservice.CHECK_WAIT_HINT) for n in (1, 2, 3)]
+BEFORE = [(START_PENDING, 0, 5000), (START_PENDING, 0, winservice.CHECK_WAIT_HINT)]   # the two told until now
+POINT_FAILED = ("raqib service run: the check-point 1, raised while the check walks, failed: %s; said once (ADR-0013"
+                " ZB-3): those after it are counted and said when the check is over")
+FAILED_AFTER = ("raqib service run: the raisings of the check-point that failed after the first: %d (ADR-0013 ZB-3;"
+                " the check's answer and the exit are as they would be without them)")
+
+
+def beating(machine, monkeypatch, beat=0.01):
+    """The runner's road on `machine` as served() runs it, the runner's beat made small (ZB-4); machine.runner is
+    the runner. Each line the runner notes is in machine.log as ("line", words, the raising still alive), and is
+    handed to machine.on_note where it is set."""
+    monkeypatch.setattr(winservice, "CONNECT_WAIT", 10.0)
+    runner = winservice.Runner(machine)
+    runner.beat = beat
+    machine.runner = runner
+    real = runner._note
+
+    def noted(words):
+        machine.log.append(("line", words, runner.raising is not None and runner.raising.is_alive()))
+        if getattr(machine, "on_note", None):
+            machine.on_note(words)
+        return real(words)
+    monkeypatch.setattr(runner, "_note", noted)
+    code = runner.run()
+    if runner.text is not None:
+        runner.text.close()
+    return code, runner
+
+
+def raisings(machine, hold=None, answer=None):
+    """machine.seen[n] is set as the raising n is told; the raising `hold` is held in the system's call until the
+    runner marks the check over (so no raising after it can race the check's end); `answer(n)`: the system's
+    answer to the raising n (None: taken; False: not taken; or it raises)."""
+    machine.seen = [threading.Event() for _ in range(100)]
+
+    def on_status(m, state, point):
+        if point:
+            m.seen[min(point, 99)].set()
+            if point == hold:
+                m.runner.checked.wait(WAIT)
+            if answer is not None:
+                return answer(point)
+        return None
+    machine.on_status = on_status
+
+
+def walking(until, end="passed", then=None):
+    """A made-up check that walks until the raising `until` was told, then `then(machine)`, then ends as `end`."""
+    bad = refused_kinds()[0][1]
+
+    def walks(machine):
+        assert machine.seen[until].wait(WAIT)
+        if then is not None:
+            then(machine)
+        machine.log.append("check over")
+        if end == "raised":
+            raise RuntimeError("a folder could not be listed")
+        if end == "refused":
+            return bad, dict(COUNTS), [], None
+        return None, dict(COUNTS), list(DRIVES), "the pass's words"
+    return walks
+
+
+def test_zb1_the_systems_set_status_puts_the_check_point_in_the_structure_and_its_default_is_0():
+    made, told_ = [], []
+    system = winservice.System()
+    system._api = SimpleNamespace(status=lambda *fields: made.append(fields) or fields,
+                                  ctypes=SimpleNamespace(byref=lambda s: ("byref", s)),
+                                  adv=SimpleNamespace(SetServiceStatus=lambda h, p: told_.append((h, p)) or 1))
+    assert system.set_status("h", START_PENDING, 0, 0, 0, winservice.CHECK_WAIT_HINT, 3) is True
+    assert system.set_status("h", RUNNING, 5, 0, 0, 0) is True
+    assert made == [(winservice.SERVICE_WIN32_OWN_PROCESS, START_PENDING, 0, 0, 0, 3, winservice.CHECK_WAIT_HINT),
+                    (winservice.SERVICE_WIN32_OWN_PROCESS, RUNNING, 5, 0, 0, 0, 0)]
+    assert told_ == [("h", ("byref", made[0])), ("h", ("byref", made[1]))]
+    assert winservice.CHECK_BEAT == 2.0 and winservice.CHECK_END_MORE == 5.0 and winservice.CHECK_WAIT_HINT == 60000
+    assert winservice.Runner(Machine(None)).beat == winservice.CHECK_BEAT
+
+
+@pytest.mark.parametrize("end", ["passed", "refused", "raised"])
+def test_zb4_a_check_of_several_beats_is_told_1_2_3_with_60_s_then_its_end_with_0(end, tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    raisings(m, hold=3)
+    m.own_fn = walking(3, end)
+    code, runner = beating(m, monkeypatch)
+    if end == "passed":
+        assert code == 0 and m.points == BEFORE + RAISED + [(RUNNING, 0, 0), (STOP_PENDING, 0, 30000),
+                                                            (STOPPED, 0, 0)]
+        assert kinds(m, "watch") == [("watch", winservice.WATCH_ARGV)]
+    else:   # STOPPED with 15 straight from START_PENDING, no RUNNING (T-1)
+        assert code == 2 and m.points == BEFORE + RAISED + [(STOPPED, 0, 0)]
+        assert m.statuses()[-1] == (STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE) and not kinds(m, "watch")
+    assert m.statuses()[:5] == [(START_PENDING, 0, 0)] * 5   # the raisings are START_PENDING, nothing else
+    # nothing is told between the check's end and its line, and the raising is over at that line
+    after = m.log[m.log.index("check over"):]
+    line = next(i for i, e in enumerate(after) if e[0] == "line" and e[1].startswith("its own code"))
+    assert not [e for e in after[:line] if isinstance(e, tuple) and e[0] in ("status", "line")]
+    assert after[line][2] is False and not runner.raising.is_alive() and runner.points_failed == 0
+    assert not [x for x in runner_lines(m) if "check-point" in x]   # every raising taken: no line of it
+    lines = runner_lines(m)
+    if end == "passed":
+        assert lines[1] == HEAD % 0 + winservice.PASS_SAID % "the pass's words"
+    else:
+        assert lines[-1].startswith(HEAD % 0) and lines[-1].endswith(TOLD_15)
+
+
+def test_zb4_a_check_shorter_than_a_beat_tells_no_raising(tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    raisings(m)
+    code, runner = beating(m, monkeypatch, beat=60.0)      # the check is over at once; the beat is never reached
+    assert code == 0 and m.points == BEFORE + [(RUNNING, 0, 0), (STOP_PENDING, 0, 30000), (STOPPED, 0, 0)]
+    assert all(point == 0 for _, point, _ in m.points) and not m.seen[1].is_set()
+    assert runner.checked.is_set() and not runner.raising.is_alive()   # ended by the check's end, not by its beat
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_zb4_a_stop_asked_while_the_check_walks_ends_the_raisings(refused, tmp_path, monkeypatch):
+    m = Machine(tmp_path, place=thing())
+    raisings(m)
+    ended = []
+
+    def stop(machine):
+        machine.handler(CONTROL_STOP)                       # the system's Stop, while the check walks
+        machine.runner.raising.join(WAIT)                    # the raising ends of itself, the check still walking
+        ended.append(not machine.runner.raising.is_alive())
+    m.own_fn = walking(2, "refused" if refused else "passed", then=stop)
+    code, runner = beating(m, monkeypatch)
+    assert ended == [True] and code == (2 if refused else 0)
+    stop_at = m.points.index((STOP_PENDING, 0, 30000))
+    raised = [p for _, p, _ in m.points[:stop_at] if p]
+    assert len(raised) >= 2 and raised == list(range(1, len(raised) + 1))
+    assert m.points[stop_at:] == [(STOP_PENDING, 0, 30000), (STOPPED, 0, 0)]   # no START_PENDING after the Stop
+    assert all(s == START_PENDING and h == winservice.CHECK_WAIT_HINT for s, p, h in m.points if p)
+    assert m.statuses()[-1] == ((STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE) if refused
+                                else (STOPPED, 0, 0)) and not kinds(m, "watch")
+
+
+@pytest.mark.parametrize("refused", [False, True])
+@pytest.mark.parametrize("failing", ["not taken", "an exception"])
+def test_zb3_a_raising_that_fails_is_said_once_counted_after_and_changes_nothing(failing, refused, tmp_path,
+                                                                                monkeypatch):
+    def answer(point):
+        if failing == "an exception":
+            raise OSError(6, "The handle is invalid")
+        return False
+    m = Machine(tmp_path, place=thing())
+    raisings(m, hold=3, answer=answer)
+    m.own_fn = walking(3, "refused" if refused else "passed")
+    code, runner = beating(m, monkeypatch)
+    assert code == (2 if refused else 0) and runner.points_failed == 3
+    assert m.points[:5] == BEFORE + RAISED   # each beat still raises, one higher
+    assert (RUNNING, 0, 0) in m.statuses() if not refused else m.statuses()[-1] == (
+        STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE)
+    why = ("the system did not take the status 2" if failing == "not taken" else
+           "the status 2 could not be told: OSError: [Errno 6] The handle is invalid")
+    lines = runner_lines(m)
+    said = [x for x in lines if "check-point" in x or "status 2" in x]
+    assert said == [POINT_FAILED % why, FAILED_AFTER % 2]   # one line each, never a line every beat
+    check = next(i for i, x in enumerate(lines) if x.startswith(HEAD % 0))
+    assert lines.index(said[1]) < check                       # counted when the check is over, before its line
+    if refused:
+        assert lines[check].endswith(TOLD_15)
+    else:
+        assert lines[check] == HEAD % 0 + winservice.PASS_SAID % "the pass's words"
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_zb3_a_raising_whose_thread_cannot_be_begun_is_one_line_and_the_check_runs_without_it(refused, tmp_path,
+                                                                                              monkeypatch):
+    real = threading.Thread
+
+    class NotBegun(real):
+        def start(self):
+            if self.name == winservice.RAISING_NAME:
+                raise RuntimeError("can't start new thread")
+            return super().start()
+    monkeypatch.setattr(threading, "Thread", NotBegun)
+    m = Machine(tmp_path, place=thing())
+    if refused:
+        m.own_fn = answer(refused_kinds()[0][1])
+    code, runner = beating(m, monkeypatch)
+    assert "check" in m.log and runner.raising is None and code == (2 if refused else 0)
+    assert all(point == 0 for _, point, _ in m.points)
+    lines = runner_lines(m)
+    said = [x for x in lines if "check-point" in x]
+    assert said == ["raqib service run: the check-point is not raised while the check walks: its thread could not"
+                    " be begun (RuntimeError: can't start new thread); the check runs without it (ADR-0013 ZB-3)"]
+    assert lines.index(said[0]) == lines.index(next(x for x in lines if x.startswith(HEAD % 0))) - 1
+    assert m.statuses()[-1] == ((STOPPED, SERVICE_SPECIFIC, winservice.EXIT_NOT_ALONE) if refused
+                                else (STOPPED, 0, 0))
+
+
+def test_zb2_a_raising_that_does_not_end_in_its_bound_is_one_line_and_the_start_goes_on(tmp_path, monkeypatch):
+    monkeypatch.setattr(winservice, "CHECK_END_MORE", 0.0)   # the bound: the beat alone (0.01 s)
+    m = Machine(tmp_path, place=thing())
+    said, first = threading.Event(), threading.Event()
+    m.on_note = lambda words: "did not end" in words and said.set()
+
+    def held(machine, state, point):
+        if point:
+            first.set()
+            said.wait(WAIT)          # held in the system's call until the runner said that it did not end
+        return None
+    m.on_status = held
+    m.own_fn = lambda machine: (None, dict(COUNTS), list(DRIVES), "the pass's words") if first.wait(WAIT) else None
+    code, runner = beating(m, monkeypatch)
+    assert code == 0 and said.is_set() and not runner.raising.is_alive()
+    assert m.points == BEFORE + [RAISED[0], (RUNNING, 0, 0), (STOP_PENDING, 0, 30000), (STOPPED, 0, 0)]
+    lines = runner_lines(m)
+    assert lines[1:3] == ["raqib service run: the raising of the check-point did not end in 0.01 s after the check"
+                          " (ADR-0013 ZB-2); the start goes on",
+                          HEAD % 0 + winservice.PASS_SAID % "the pass's words"]
