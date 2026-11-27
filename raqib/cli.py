@@ -712,7 +712,8 @@ def _parser():
                          " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
                          " no state, unreadable, or written more than two beats ago or in the future (silent)")
     sv = sub.add_parser("service", help="the host watch as a unit of the system's, Linux (systemd): install, remove"
-                                        " or say its status (M12.1, ADR-0013)")
+                                        " or say its status (M12.1, ADR-0013); Windows: run it as a service, or"
+                                        " check whose the code a service would run is")
     sv.add_argument("action", choices=("install", "remove", "status", "run", "check"),
                     help="install (root): write raqib-watch.service, enable and start it, and say whether it is"
                          " active and as installed after 3 s; remove (root): stop, disable and remove it, the"
@@ -1639,8 +1640,9 @@ def cmd_forward(args, out):
 
 
 def cmd_service(args, out):
-    """M12.1 (ADR-0013): raqib/service.py, imported here only; the watch does not know it. `run` (Amendment E,
-    M12.4a): raqib/winservice.py, imported here only, the runner of the host watch as a service of Windows."""
+    """M12.1 (ADR-0013): raqib/service.py, imported here and by raqib/wincode.py (for its WALK_MAX) only; the
+    watch does not know it. `run` (Amendment E, M12.4a): raqib/winservice.py, imported here only, the runner of the
+    host watch as a service of Windows."""
     if args.action == "run":
         from raqib import winservice
         return winservice.cli_run(args, out)

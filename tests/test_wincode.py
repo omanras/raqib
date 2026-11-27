@@ -63,7 +63,7 @@ EXPECTED_X64 = {
     "C:\\Windows\\System32": (T, T),
     "C:\\Windows\\System32\\kernel32.dll": (T, None),
     "C:\\Windows\\System32\\sc.exe": (T, None),
-    "C:\\ProgramData": (R, T),
+    "C:\\ProgramData": (R, R),   # L-1: 0x10 and 0x100 are no longer allowed above
     "C:\\hostedtoolcache\\windows\\Python\\3.12.10\\x64\\python.exe": (R, None),
     "C:\\hostedtoolcache\\windows\\Python\\3.12.10\\x64": (R, R),
     "C:\\hostedtoolcache\\windows\\Python\\3.12.10": (R, R),
@@ -92,7 +92,7 @@ DECIDES = {
     "C:\\": (["(A;;LC;;;AU)", "0x4"], []),
     "D:\\": (["owned by NS"], ["owned by NS"]),
     "C:\\Users\\user": (["(A;OICI;FA;;;LA)"], ["(A;OICI;FA;;;LA)"]),
-    "C:\\ProgramData": (["(A;CI;DCLCRPCR;;;BU)", "0x2, 0x4, 0x10, 0x100:"], []),
+    "C:\\ProgramData": (["(A;CI;DCLCRPCR;;;BU)", "0x2, 0x4, 0x10, 0x100:"], ["(A;CI;DCLCRPCR;;;BU)", "0x10, 0x100:"]),
     PY + "\\python.exe": (["(A;ID;0x1301bf;;;AU)"], []),
     PY: (["(A;ID;0x1301bf;;;AU)"], ["(A;ID;0x1301bf;;;AU)", "0x10000"]),
     PY + "\\Lib\\os.py": (["(A;ID;0x1301bf;;;AU)"], []),
@@ -159,7 +159,7 @@ def test_e1_the_rights_words_are_the_fixtures_table_and_the_allowed_bits_are_lis
     words = dict((w, int(n, 16)) for w, n in re.findall(r"\b([A-Z]{2}) (0x[0-9a-f]+)\b", table))
     assert words == wincode.RIGHTS and len(words) == 21
     assert [b for b, _ in wincode.CODE_ALLOWED] == [0x1, 0x8, 0x20, 0x80, 0x20000, 0x100000, 0x80000000, 0x20000000]
-    assert [b for b, _ in wincode.ABOVE_ALLOWED] == [b for b, _ in wincode.CODE_ALLOWED] + [0x2, 0x4, 0x10, 0x100]
+    assert [b for b, _ in wincode.ABOVE_ALLOWED] == [b for b, _ in wincode.CODE_ALLOWED] + [0x2, 0x4]
     assert all(isinstance(w, str) and w for _, w in wincode.ABOVE_ALLOWED)
     assert wincode.SYSTEM_NAMES == ("SY", "S-1-5-18", "BA", "S-1-5-32-544", INSTALLER)
     assert wincode.CREATOR_NAMES == ("CO", "S-1-3-0")
@@ -219,7 +219,9 @@ SECOND = [   # (text, attributes, as the code itself, as a folder above, a piece
     ("O:BAD:(A;;FA;;;SY)", 0x410, R, R, "a reparse point (attributes 0x410)"),
     ("O:BAD:(A;;FA;;;BU)", 0x420, R, R, "a reparse point"),
     ("not a text", 0x400, R, R, "a reparse point"),
-    ("O:BAD:(A;;0x1200a9;;;BU)(A;;0x100;;;BU)", 0x10, R, T, "0x100:"),
+    ("O:BAD:(A;;0x1200a9;;;BU)(A;;0x100;;;BU)", 0x10, R, R, "0x100:"),   # L-1
+    ("O:BAD:(A;;0x1200a9;;;BU)(A;;0x10;;;BU)", 0x10, R, R, "0x10:"),      # L-1
+    ("O:BAD:(A;;0x1200a9;;;BU)(A;;0x6;;;BU)", 0x10, R, T, "0x2, 0x4:"),   # adding a thing beside: above only
     ("O:BAD:(A;;0x40;;;BU)", 0x10, R, R, "0x40:"),
     ("O:BAD:(A;;0x10000;;;BU)", 0x10, R, R, "0x10000:"),
     ("O:BAD:(A;;0x40000;;;BU)", 0x10, R, R, "0x40000:"),
@@ -358,6 +360,10 @@ def test_e2_a_folder_not_listed_is_refused_as_not_read(name):
     bad, _ = wincode.check(m)
     assert bad == (name, wincode.ROLE_CODE + ": a folder that cannot be listed (Access is denied (error 5)); "
                    + wincode.NOT_READ)
+    as_windows_raises = PermissionError(13, "Access is denied")   # L-5: listing a folder there gives both numbers;
+    as_windows_raises.winerror = 5                                # the system's own is the one said
+    bad, _ = wincode.check(Machine(lists={name: as_windows_raises}))
+    assert "(Access is denied (error 5))" in bad[1] and "error 13" not in bad[1]
 
 
 def test_e2_a_name_longer_than_the_system_opens_plainly_is_refused_unread():
@@ -564,8 +570,11 @@ def test_e7_ascii_ntpath_never_os_path_no_ctypes_nothing_at_import_nothing_writt
     for node in tree.body:   # nothing runs at import: imports, names bound to constants, functions, classes
         kinds = (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.Expr)
         assert isinstance(node, kinds), node
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            assert ast.unparse(node.value.func) in ("re.compile", "namedtuple"), ast.unparse(node)
+        if isinstance(node, ast.Expr):   # L-6: a bare expression at the top is the module's docstring, nothing else
+            assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, str), ast.unparse(node)
+        if isinstance(node, ast.Assign):   # every call an assignment makes, anywhere in its value, is one of two
+            for call in (n for n in ast.walk(node.value) if isinstance(n, ast.Call)):
+                assert ast.unparse(call.func) in ("re.compile", "namedtuple"), ast.unparse(node)
     assert max(len(line) for line in source.splitlines()) <= 118
 
 
@@ -576,14 +585,16 @@ def test_e6_the_spec_the_guide_and_the_threat_model_say_the_check():
     spec = flat("docs/specs/SERVICE.md").split("## Windows: the check (`raqib service check`)", 1)[1]
     for words in ("`SY`, `S-1-5-18`", "`BA`, `S-1-5-32-544`", "by its whole SID only, `%s`" % INSTALLER,
                   "0x1, 0x8, 0x20, 0x80, 0x20000, 0x100000, GR, GX",
-                  "add a file 0x2, add a folder 0x4, write extended attributes 0x10, write attributes 0x100",
+                  "add a file 0x2, add a folder 0x4, and no other bit", "(0x10, 0x100) refuses as well",
+                  "the packed runtime's own roads", "what the drive's letter names",
+                  "**What the check itself said on real machines (Amendment L).**",
                   "begins with a drive's letter (`X:\\`)",
                   "longer than the system opens plainly (259 characters)", "what was not read is never the system's",
                   "a walk past 200000 names (WALK_MAX, the Linux number)", "`sys._MEIPASS`", "A plain interpreter is"
                   " refused for now", "| 0 | Windows, packed, and every name walked is the system's alone |",
                   "| 1 | a name is not the system's alone, or was not read |", "| 2 | not Windows, or not packed |",
                   "**What Amendment K measured, and by what.**", "Not read: rights a user holds apart from any list",
-                  "Not measured: the kind of the drive", "an install of Python for all users",
+                  "Not measured: a denying entry on a real file", "python.org's installer for all users",
                   "cut at 200 characters"):
         assert words in spec, words
     for bit, _ in wincode.CODE_ALLOWED:

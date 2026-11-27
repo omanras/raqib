@@ -569,10 +569,11 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib --version` | print raqib <version> and exit 0 |
 
 Run `raqib service check` on Windows before a service of Windows is made to run Raqib as the system,
-from the packed copy that service would run, once it is where it will stay: Amendment K measured an
-administrator's copy in `C:\Program Files`, its lists the ones Windows gave it, taken. A copy in a
-user's folder or in the drive's root, or one GitHub's Python runs, is refused, and the name refused
-is said. It is a reading at one moment: run it again after anything there changes.
+from the packed copy that service would run, once it is where it will stay: on GitHub's Windows
+machines a copy an administrator put under `C:\Program Files` was taken, asked by an administrator
+and by a plain user alike. A copy in a folder made at the drive's root or under `C:\ProgramData` was
+refused, with the name refused said; a Raqib a plain interpreter runs is not checked yet and gets
+exit 2. It is a reading at one moment: run it again after anything there changes.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

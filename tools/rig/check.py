@@ -1297,7 +1297,7 @@ SERVICE_CHECK_NAME = ("X49 `raqib service check` takes the packed copy in Progra
                       " job's own folder, naming the path and the role it refused")
 CHECK_KEYS = ("system-exit", "system-words", "open-exit", "open-words")
 CHECK_COUNTS = re.compile(r"checked (\d+) names, each the system's alone \(.*?\): under the program's folder, whole,"
-                          r" (\d+) folders and (\d+) files, .*?, and (\d+) folders above it to the drive")
+                          r" (\d+) folders and (\d+) files, .*?, and (\d+) folders above it to the drive's letter")
 CHECK_PATH = re.compile(r"[A-Za-z]:\\")
 CHECK_ROLES = ("as the code itself (K-2)", "as a folder above it (K-3)")   # raqib/wincode.py ROLE_CODE, ROLE_ABOVE
 

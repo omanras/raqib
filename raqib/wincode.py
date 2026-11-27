@@ -61,9 +61,9 @@ RIGHTS = {"CC": 0x1, "DC": 0x2, "LC": 0x4, "SW": 0x8, "RP": 0x10, "WP": 0x20, "D
 CODE_ALLOWED = ((0x1, "read the data, or list the folder"), (0x8, "read extended attributes"),
                 (0x20, "execute, or pass through the folder"), (0x80, "read attributes"), (0x20000, "read the list"),
                 (0x100000, "wait on it (synchronize)"), (0x80000000, "read (GR)"), (0x20000000, "execute (GX)"))
-# K-3: what a folder above may give: K-2's bits and adding a thing beside (never deleting, renaming, the list, owner)
-ABOVE_ALLOWED = CODE_ALLOWED + ((0x2, "add a file"), (0x4, "add a folder"), (0x10, "write extended attributes"),
-                                (0x100, "write attributes"))
+# K-3, L-1: what a folder above may give: K-2's bits and adding a thing beside, and no other bit (never deleting,
+# renaming, the list, the owner; never writing the folder's own attributes: allowed by K, measured nowhere, taken out)
+ABOVE_ALLOWED = CODE_ALLOWED + ((0x2, "add a file"), (0x4, "add a folder"))
 ENTRY_FLAGS = ("OI", "CI", "NP", "IO", "ID")   # IO: inherit-only
 INHERIT_ONLY = "IO"
 LIST_FLAGS = re.compile(r"(?:P|AI|AR)*\Z")
@@ -290,7 +290,9 @@ def _above(path):
 
 
 def _why(exc):
-    number = exc.errno if getattr(exc, "errno", None) is not None else getattr(exc, "winerror", None)
+    number = getattr(exc, "winerror", None)   # L-5: the system's own number where there is one (listing a folder
+    if number is None:                        # gives both; the reader raises with the system's alone)
+        number = getattr(exc, "errno", None)
     words = getattr(exc, "strerror", None) or str(exc) or type(exc).__name__
     return "%s%s" % (_said(words, 80), " (error %s)" % number if number is not None else "")
 
@@ -409,8 +411,9 @@ def checked_words(counts):
     total = counts["folders"] + counts["files"] + counts["above"]
     return ("checked %d names, each the system's alone (its owner the system, the administrators or the system's"
             " installer, no reparse point, its list there): under the program's folder, whole, %d folders and %d"
-            " files, each giving any other name only reading and executing, and %d folders above it to the drive,"
-            " each giving any other name only that and adding a thing beside" % (
+            " files, each giving any other name only reading and executing (the creator's own inherit-only entry"
+            " apart), and %d folders above it to the drive's letter, each giving any other name, in the entries that"
+            " apply to the folder itself, only that and adding a thing beside" % (
                 total, counts["folders"], counts["files"], counts["above"]))
 
 

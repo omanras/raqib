@@ -580,3 +580,66 @@ through one handle on the name, whole; the texts are the fixtures of this task.
   the check (it is a reading at one moment, as the Linux one is). Not measured: the kind of the drive (a
   removable or shared drive, a volume with no lists - being measured, ruled with M12.4c2); a machine joined to a
   domain; Program Files on a machine whose lists an administrator changed; an install of Python for all users.
+
+## Amendment L (the Table, 2026-11-27) - the review of M12.4c1 (docs/review/2026-11-27-M12.4c1.md) and its field run: lands
+The builder ended with STOP (bb5aa89): the work whole and inside its scope, the gate red on one test - the scan of
+tests/fixtures for a person's home folder refused the made-up name the Table had put in the measured file. The
+fault was the Table's; the name is now the placeholder that scan allows (ce2eac8), and the gate is green.
+The field's word on the branch (the probe branch 0a59bbc; GitHub's Windows machines, x64 and ARM64, the same on
+both; the branch's Raqib packed by the rig's packer): the check's tests passed there, the one real reading among
+them. A copy an administrator put under Program Files: taken, about 150 names and 2 folders above in under half a
+second; a plain user who asked got the same sentence and exit 0 (K-6's "measured" rests on this run, not on the
+runs before K). In that copy, one thing changed at a time and undone: a file users were let modify - refused, the
+file and the entry said; the same file, users given reading and executing by an entry of its own - taken; the file
+owned by the administrator's own account - refused; a junction inside - refused; a folder and a file an
+administrator added - taken, two names more. A copy in a folder an administrator made at the drive's root: refused
+(it inherits modify for signed-in users); under ProgramData: refused; in the job's own folder: refused (x64 `D:\`,
+its owner; ARM64 the job's folder on `C:\`, which signed-in users may delete); three folders deep under Program
+Files with a space in a name: taken, 5 folders above; packed as one file: refused, its modules under the user's
+temporary folder (K-5's sentence rests on this run); a plain interpreter: exit 2. X49 read MET on both.
+Measured since K (the probe branch cf233f5, 4de9aec): a volume that keeps no lists (FAT32, exFAT) reads as a fixed
+drive and gives every name the owner `WD` and a null list - refused by K-2 and K-3 as they are; a letter given to
+a folder (`subst`) reads as a fixed drive too, and only its device's name tells it apart (`\??\...` where a disk's
+is `\Device\...`); python.org's installer for all users put an interpreter under Program Files, owned by the
+system (the interpreter, its library, its site folder) and the administrators (its Scripts folder), Program
+Files' list inherited, no reparse point, its `-I` path wholly inside its folder; an administrator's copy of a
+Python there refused a plain user's six writes and one renaming, and the watch ran as a service from it by
+`python -I -m raqib service run`.
+The reviewer's verdict is NEXT: no text, path or listing found that is taken where K says refuse. Ruled, and done by
+the Table's hand:
+- L-1 (K-3 narrower; the review's reading of K against the fixture, b). K-3 allowed a name outside the system's to
+  write a folder's own extended attributes and attributes (0x10, 0x100) on a folder above. Nothing measured what
+  the two give, K's own reason covers adding a thing beside only, and K-2 says a bit not on the list refuses. They
+  are taken out: a folder above may give another name K-2's bits, add a file (0x2), add a folder (0x4), and no
+  other bit. `C:\ProgramData` is then refused as a folder above (it gives users both); `C:\` and Program Files
+  pass as before. FOR: no bit is allowed that was not measured as harmless. MUST NOT TOUCH: K-2.
+- L-2 (the words say what was judged; findings 1, 3, 4, 5, 9). The pass says that the creator's own inherit-only
+  entry was left apart, that above only the entries that apply to the folder itself were read, and "to the
+  drive's letter". The spec says the program's folder is judged as code and the folders above it begin above it;
+  the guide says what the field run gave and no more; K's sentence on a user's folders is corrected in the spec
+  (the profile read was the built-in administrator's, owned by the system; a plain user's profile was not read),
+  and K-1's "each measured as the owner of what Windows itself runs" is true of the system's installer only: the
+  system and the administrators were measured as owners of the system's folders and of what an administrator or
+  an installer put. A name or text said is cut at 200 (the entry that decides is said whole); the spec says the
+  shorter cuts inside.
+- L-3 (said as not read or not measured; findings 2, 12, 13, Q2, Q8). The packed runtime's own roads outside the
+  program's folder; what a drive's letter names (refused with the install: the device's name must be a disk's -
+  M12.4c2); the order below the root is the file system's; a file the system itself marks as a reparse point; a
+  denying entry that still lets the asker read (the one tried took reading from the asker, and was refused as
+  not read).
+- L-4 (small, by hand; findings 6, 7, 10, Q11). An error's number said is the system's own where there is one; the
+  test of "nothing at import" takes only a docstring as a bare expression and reads every call inside an
+  assignment; the command's help and docstring say the Windows actions and who imports the Linux module.
+- L-5 (the builder's questions, kept as built). A packed runtime that does not say where its modules are: refused
+  (Q1). Two names of one folder that differ only in case, a name ending in a dot or a space, a device's name, a
+  path past 259 characters, a flag, a rights form or a list flag not known, a short form of the modules' folder:
+  each refused, none repaired (Q3, Q4, Q5, Q7, Q9). Breadth first below the root (Q8). Three sentences left as
+  they were stay true (Q11). E5 ran on both machines in the field run, and on x64 at every gate (Q12).
+- L-6 (the rig, K-8; Q10). The rig's Windows job packs with the same pinned packer and pack.sh's arguments
+  (tools/rig/service_check.ps1), for the check only; the test that held "no packer in the Windows job" now holds
+  one pinned packer there and no packed watch. X49 asks only for a path of a drive and a role in the refusal: on
+  x64 it is `D:\`, on ARM64 the job's own folder.
+- L-7 (lands, and next). M12.4c1 lands as 0.11.0 after the gate and the rig on the commit to be merged. Next:
+  M12.4c1b, a plain interpreter's road (its folder whole, a venv's base and the venv, every entry of the `-I`
+  path, the lines of *.pth files as on Linux), on the measurements above; then M12.4c2 (K-9), with the drive's
+  device and the test of the libraries loaded by name.
