@@ -387,15 +387,17 @@ SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the pa
     " install is to have the service ask the check again at its own start, as the system (not built yet).",
     # M12.4c2a2 REDO (ADR-0013 S-1, S-2): what the libraries' test holds, what it is for, and what it does not hold
     "A library Raqib loads by name is searched in the program's own folder, in System32 and in folders the"
-    " process itself added - read in the interpreter's library, not measured: a test holds every mention in"
-    " Raqib's code of a word by which a library is loaded, a folder added or ctypes reached, exactly as it is, so"
-    " that a change made in good faith and written the ordinary way (a new library, a library's path, a folder"
-    " added, the PATH set) changes what the test holds, and a reviewer reads it.",
-    "It is no wall against code written to get past it: it does not hold a library's object, a name or a table"
-    " reached from elsewhere, the interpreter's own roads to code (its imports by a path, sys.path, extension"
-    " modules), what the system's own libraries load by the registry's word, a word built from pieces at run"
-    " time, the loads the interpreter itself makes, or whether a library's own dependencies are searched as it is"
-    " (not measured), and nothing holds what the interpreter's own start adds.",
+    " process itself added - read in the interpreter's library, not measured: a test holds each mention in"
+    " Raqib's code of a word on its lists (words by which a library is loaded, a folder added or ctypes"
+    " reached), exactly as it is, so that a change made in good faith and written the ordinary way (a new"
+    " library, a library's path, a folder added, the PATH set) changes what the test holds, and a reviewer"
+    " reads it.",
+    "It is no wall against code written to get past it: it does not hold a library's object reached from"
+    " elsewhere or through what holds it, a name it reads bound elsewhere, a table reached from elsewhere, the"
+    " interpreter's own roads to code (its imports by a path, sys.path, extension modules), what the system's"
+    " own libraries load by the registry's word, a word built from pieces at run time, the loads the"
+    " interpreter itself makes, or whether a library's own dependencies are searched as it is (not measured),"
+    " and nothing holds what the interpreter's own start adds.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK

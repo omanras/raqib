@@ -1,5 +1,5 @@
 """M12.4c2a (ADR-0013 P-2, Q-4) and M12.4c2a2 (Amendments R and S): every library Raqib loads by name, held by one
-list; and every mention in raqib/ by which one could be loaded otherwise, held as it is.
+list; and each mention in raqib/ of a word on the lists below, by which one could be loaded otherwise, held as it is.
 
 What the hold is for (S-1): it guards against a change made in good faith that no reader notices - a new library's
 name, a library loaded by a path, a folder added to the search, the PATH or the whole environment set, a loader
@@ -20,24 +20,24 @@ Read in the interpreter's library (Lib/ctypes/__init__.py at 3.11.9 and 3.12.10;
 library asked for by a bare name is searched with the system's default folders - the application's own folder,
 System32, and folders the process itself added - and not along the PATH or in the folder the process was started in.
 
-The first hold (Scan; P-2, Q-4) reads every .py file of raqib/ by its syntax tree, finds every place a library is
-loaded (ctypes' classes, its loaders by attribute and by LoadLibrary, find_library, and Raqib's own loader functions
-and lambdas, whose callers give the names), and holds: every name is a string written in the code, followed through
-a table of strings written once, plain, and on one list (LIBRARIES); CI-3's one call (SetDllDirectoryW with no
-folder, raqib/cli.py) on its one road. It refuses the forms it knows of a search mode given, a folder added and the
-PATH set.
+The first hold (Scan; P-2, Q-4) reads every .py file of raqib/ by its syntax tree, finds each place a library is
+loaded in the forms it knows (ctypes' classes, its loaders by attribute and by LoadLibrary, find_library, and Raqib's
+own loader functions and lambdas, whose callers give the names), and holds: every name is a string written in the
+code, followed through a table of strings written once, plain, and on one list (LIBRARIES); CI-3's one call
+(SetDllDirectoryW with no folder, raqib/cli.py) on its one road. It refuses the forms it knows of a search mode given,
+a folder added and the PATH set.
 
 The hold on it (Mentions; R-3, S-3, S-4) holds what is in the tree as it is. Each table below is what the scan found
 in raqib/, printed by dump_held() and pasted, compared whole and exactly - a mention more, a mention fewer and a
 statement changed by one token each fail:
-- E1 MENTIONS: every mention of a word of WORDS (by which a library is loaded, the search changed, the environment
-  set past os.environ, or ctypes and its loaders reached by another road) and of sys.modules - as a name, an
-  attribute, each part of an imported or aliased name, a keyword, a parameter, a def's name, a class pattern's
-  keyword, and as a whole word in every string and bytes constant, docstrings too - by (file, function, word): count;
-  but compile, exec and eval (S-4) are not counted in a docstring, or as an attribute of a name that `import re`
-  alone binds. ENVIRON: every use of os.environ, and of a name it is bound to in a function (followed through that
-  function: S-3), but a read of one name (a subscript read, .get given a string written in the code, `in`), by file,
-  function and its statement's text.
+- E1 MENTIONS: every mention of a word of WORDS (by which a library is loaded, the search changed, the environment set
+  past os.environ, or ctypes and its loaders reached by another road) and of sys.modules - as a name, an attribute,
+  each part of an imported or aliased name, a keyword, a parameter, a def's name, a class pattern's keyword, and as a
+  whole word in every string and bytes constant, docstrings too - by (file, function, word): count; but compile, exec
+  and eval (S-4) are not counted in a docstring, or as an attribute of a name that `import re` alone binds. ENVIRON:
+  every use of os.environ, and of a name it is bound to in a function (followed through that function; bound at a
+  file's top, through the file: S-3), but a read of one name (a subscript read, .get given a string written in the
+  code, `in`), by file, function and its statement's text.
 - E2 STATEMENTS: the statement around each mention in code of a loader's, a search call's or a setter's word, as
   ast.unparse writes it. E3 CI3_TEXT, CI3_HANDOVER: CI-3's function in cli.main and own.library_folder, whole
   (docstrings apart), and the one statement that hands the first to the second.
@@ -1728,33 +1728,35 @@ def test_r3_the_held_tables_are_not_vacuous(filename, anchor, lines, replace, wh
 
 AFTER_ENVIRON = "    environ = os.environ if environ is None else environ"   # autostart.default_folders binds it
 ORDINARY = [   # S-3, S-4: (what it proves, the file, the line it goes after (None: at the end), its lines, the line
-    # of them where it fails (None: it changes nothing), the words its reason says, whether every problem says them).
+    # of them where it fails (None: it changes nothing), the words its reason says, the other reasons its lines may
+    # give (none: every problem says those words)).
     # Each is one harmless statement in a copy of a real file, which the test parses and never runs.
     ("S-3 a store through a name os.environ is bound to", "raqib/autostart.py", AFTER_ENVIRON,
-     ['environ["PATH"] = "C:\\\\x"'], 0, ("E1 (os.environ): a statement not held, in default_folders",), True),
+     ['environ["PATH"] = "C:\\\\x"'], 0, ("E1 (os.environ): a statement not held, in default_folders",), ()),
     ("S-3 getattr of a library's object by a name beginning with _", W32, K32, ['getattr(k32, "_handle")'], 0,
-     ("E6 (a library's object used otherwise): a statement not held",), True),
+     ("E6 (a library's object used otherwise): a statement not held",), ()),
     ("S-3 a class pattern's keyword name", "raqib/wincode.py", None,
      ["match value:", "    case object(LoadLibraryW=f):", "        pass"], 1,
-     ("E1: a mention more than held", "'LoadLibraryW')"), False),
+     ("E1: a mention more than held", "'LoadLibraryW')"), ("E2: a statement not held, in <module>: match value:",)),
     ("S-3 sys.modules counted where the file imports sys", "raqib/cli.py", None, ["loaded = sorted(sys.modules)"], 0,
-     ("E1: a mention more than held", "'sys.modules')"), True),
-    ("S-4 a new regular expression", "raqib/event.py", None, ['NEW_RE = re.compile("x")'], None, (), True),
+     ("E1: a mention more than held", "'sys.modules')"), ()),
+    ("S-4 a new regular expression", "raqib/event.py", None, ['NEW_RE = re.compile("x")'], None, (), ()),
     ("S-4 a docstring's exec, eval and compile", "raqib/event.py", None,
-     ["def made_up():", '    """Says exec, eval and compile, as help does."""'], None, (), True),
-    ("S-4 eval as a name", "raqib/event.py", None, ["got = eval(x)"], 0, ("E1: a mention more", "'eval')"), True),
+     ["def made_up():", '    """Says exec, eval and compile, as help does."""'], None, (), ()),
+    ("S-4 eval as a name", "raqib/event.py", None, ["got = eval(x)"], 0, ("E1: a mention more", "'eval')"), ()),
     ("S-4 exec as an attribute of builtins", "raqib/event.py", None, ["run = builtins.exec"], 0,
-     ("E1: a mention more", "'exec')"), False),
+     ("E1: a mention more", "'exec')"),
+     ("E1: a mention more than held, ('raqib/event.py', '<module>', 'builtins')",)),
     ("S-4 compile as an attribute of a name that is not re", "raqib/event.py", None, ['got = obj.compile("x")'], 0,
-     ("E1: a mention more", "'compile')"), True),
+     ("E1: a mention more", "'compile')"), ()),
     ("S-4 eval in a string given to getattr", "raqib/event.py", None, ['got = getattr(obj, "eval")'], 0,
-     ("E1: a mention more", "'eval')"), True),
+     ("E1: a mention more", "'eval')"), ()),
 ]
 
 
-@pytest.mark.parametrize("what, filename, anchor, lines, fails, why, alone", ORDINARY, ids=[o[0] for o in ORDINARY])
+@pytest.mark.parametrize("what, filename, anchor, lines, fails, why, also", ORDINARY, ids=[o[0] for o in ORDINARY])
 def test_s3_s4_each_ordinary_form_changes_a_table_or_does_not_as_ruled(what, filename, anchor, lines, fails, why,
-                                                                       alone):
+                                                                       also):
     sources, at = edited(filename, anchor, lines)
     found = problems(scan_all(sources)[1])
     if fails is None:
@@ -1762,4 +1764,5 @@ def test_s3_s4_each_ordinary_form_changes_a_table_or_does_not_as_ruled(what, fil
         return
     assert [p for p in found if p[0] == filename and p[1] == at + fails and all(w in p[2] for w in why)], (what, found)
     assert all(p[1] == 0 or at <= p[1] < at + len(lines) for p in found), (what, found)   # at its lines alone
-    assert not alone or all(all(w in p[2] for w in why) for p in found), (what, found)   # for that reason alone
+    said = [p for p in found if not all(w in p[2] for w in why)]
+    assert all(any(p[2].startswith(a) for a in also) for p in said), (what, found)   # for the reasons named alone

@@ -2233,28 +2233,30 @@ collector that is slow, down or refusing never delays or loses a capture
   the system's account may name it otherwise or not at all, which the
   install is to close by having the service ask the check at its own start,
   as the system (not built). The system's PATH: a test
-  (tests/test_libraries.py) reads every place in raqib/ where a library is
-  loaded and holds that each is a plain name written in the code, on one
-  list, with no folder added to the search, no search mode and no name
-  worked out at run time, and on Windows finds each in System32; ctypes'
-  search as read in its source (not measured) names three places, never the
-  PATH: the program's own folder, which the check walks; System32; and
-  folders the process itself added - of these the test holds every mention
-  in raqib/ of a word by which a library is loaded, the search changed, the
-  environment set past os.environ or ctypes reached by another road, by
-  file, function and count, exactly, with the statement around each load and
-  CI-3's road word for word, so that a change made in good faith and written
-  the ordinary way (a new library, a library's path, a folder added, the
-  PATH set, a loader handed somewhere new) changes what the test holds, and
-  a reviewer reads it. It is no wall against code written to get past it: it
-  does not hold a library's object, a name or a table reached from
-  elsewhere, the interpreter's own roads to code (its imports by a path,
-  sys.path, extension modules), what the system's own libraries load by the
-  registry's word, a word built from pieces at run time that is on no list,
-  the loads the interpreter itself makes outside raqib/, or whether a
-  library's own dependencies are searched as the library is (not measured),
-  and nothing holds what the interpreter's own start adds (site, an `import`
-  line of a *.pth file, sitecustomize). On the plain road it
+  (tests/test_libraries.py) reads each place in raqib/ where a library is
+  loaded, in the forms it knows, and holds that each is a plain name written
+  in the code, on one list, with no folder added to the search, no search
+  mode and no name worked out at run time, and on Windows finds each in
+  System32; ctypes' search as read in its source (not measured) names three
+  places, never the PATH: the program's own folder, which the check walks;
+  System32; and folders the process itself added - of these the test holds
+  each mention in raqib/ of a word on its lists (words by which a library is
+  loaded, the search changed, the environment set past os.environ or ctypes
+  reached by another road), by file, function and count, exactly, with the
+  statement around each load and CI-3's road word for word, so that a change
+  made in good faith and written the ordinary way (a new library, a
+  library's path, a folder added, the PATH set, a loader handed somewhere
+  new) changes what the test holds, and a reviewer reads it. It is no wall
+  against code written to get past it: it does not hold a library's object
+  reached from elsewhere or through what holds it, a name it reads bound
+  elsewhere, a table reached from elsewhere, the interpreter's own roads to
+  code (its imports by a path, sys.path, extension modules), what the
+  system's own libraries load by the registry's word, a word built from
+  pieces at run time that is on no list, the loads the interpreter itself
+  makes outside raqib/, or whether a library's own dependencies are searched
+  as the library is (not measured), and nothing holds what the interpreter's
+  own start adds (site, an `import` line of a *.pth file, sitecustomize). On
+  the plain road it
   does not read what the system's own account would add to the path that the
   asker's does not (only the system writes there), a finder or hook a
   package installs (an editable install is met only as its *.pth file and
