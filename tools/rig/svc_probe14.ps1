@@ -43,7 +43,7 @@ $t = Get-Date
 python $probe make $name "`"$own`" -I -m raqib service run" | ForEach-Object { Cut (Mask $_) 300 }
 "--- 50 s of what the system does with it"
 $last = ""
-while (((Get-Date) - $t).TotalSeconds -lt 50) {
+while (((Get-Date) - $t).TotalSeconds -lt 55) {
   $s = Get-CimInstance Win32_Service -Filter "Name='$name'"
   $now = "state $($s.State), pid $($s.ProcessId), exit $($s.ExitCode), its own $($s.ServiceSpecificExitCode)"
   if ($now -ne $last) { "{0,6:n1} s: {1}" -f ((Get-Date) - $t).TotalSeconds, $now; $last = $now }
@@ -51,7 +51,7 @@ while (((Get-Date) - $t).TotalSeconds -lt 50) {
 }
 "--- the system's log of it, with the seconds since it was made"
 Get-WinEvent -FilterHashtable @{ LogName = "System"; ProviderName = "Service Control Manager"; StartTime = $t } -ErrorAction SilentlyContinue |
-  Where-Object { $_.Message -match $name } | Sort-Object TimeCreated |
+  Where-Object { $_.Message -match "Raqib watch|$name" } | Sort-Object TimeCreated |
   ForEach-Object { "{0,6:n1} s: {1}: {2}" -f ($_.TimeCreated - $t).TotalSeconds, $_.Id, (Cut (($_.Message -replace "\s+", " ").Trim()) 230) }
 "--- how many times the runner began its text file"
 "service.txt: $(@(Get-Content "$place\service.txt" -ErrorAction SilentlyContinue | Where-Object { $_ -match 'its own code, checked at this start' }).Count) check line(s); the files there: $((Get-ChildItem $place -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', ')"
