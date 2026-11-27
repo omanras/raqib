@@ -1,0 +1,38 @@
+name: service-probe8
+# Probe only (never merged): measured before ADR-0013's ruling on "the code is the system's alone" for Windows - a
+# packed Raqib in Program Files: its owner and lists, the folders above it, a plain user's attempts, the service.
+on:
+  push:
+    branches: [claude/rig-probe]
+    paths: [tools/rig/svc_probe8.ps1, .github/workflows/service-probe8.yml]
+permissions:
+  contents: read
+jobs:
+  service:
+    name: a packed Raqib in Program Files (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: main's Raqib, packed as the rig packs it
+        shell: bash
+        run: |
+          git fetch -q --depth 1 origin main
+          git checkout -q FETCH_HEAD -- raqib pyproject.toml
+          python -m pip install --disable-pip-version-check -q . pyinstaller==6.11.1
+          mkdir -p "$RUNNER_TEMP/p8" && cd "$RUNNER_TEMP/p8"
+          printf 'import sys\nfrom raqib.cli import main\nsys.exit(main())\n' > entry.py
+          python -m PyInstaller --noconfirm --onedir --name raqib --collect-all raqib --exclude-module tkinter --log-level WARN entry.py 2>&1 | tail -2
+      - name: in Program Files
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\rig\svc_probe8.ps1" -PackedDir "$env:RUNNER_TEMP\p8\dist\raqib"
