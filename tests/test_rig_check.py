@@ -914,6 +914,8 @@ def test_x47_the_packer_is_pinned_one_folder_no_window_toolkit_and_no_dependency
     assert "Administrators" not in asked.replace("administrators' group", "")   # the user joins Users alone
     assert all("%s: " % key in asked for key in check.STATUS_KEYS)
     assert "raqib-service/1 " in asked and "sc.exe description $name $mark" in asked
+    # Z-3: the running service is made by Raqib's own install (only that reads as installed), and removed by it
+    assert "& $copy -I -m raqib service install" in asked and "& $copy -I -m raqib service remove" in asked
     assert "tools\\rig\\service_status.ps1 -Out $env:RUNNER_TEMP\\service-status" in windows
     assert "--service-status $env:RUNNER_TEMP\\service-status\\service-status.txt" in windows
     # X-7, Y-6 (X54): Raqib's own install and remove asked by the job; status after each by a user with no rights
