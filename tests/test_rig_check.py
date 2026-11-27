@@ -1146,12 +1146,21 @@ def plain_line():
     from raqib import wincode
     return ("raqib service check: the code a service would run is the system's alone: %s"
             % wincode.plain_words({"folders": 120, "files": 2400, "above": 2, "entries": 5, "missing": 1, "pth": 0,
-                                   "pth_lines": 0}))
+                                   "pth_lines": 0, "alone": 2, "beneath": 0, "own": 3, "own_there": 0, "base": 0,
+                                   "exec": 0}))
 
 
 PLAIN_REFUSED = ("raqib service check: NOT the system's alone: C:\\hostedtoolcache\\windows\\Python, as a folder"
-                 " above it (K-3): the entry (A;ID;0x1301bf;;;AU) gives AU, a name outside the system's, 0x10000:"
-                 " not allowed")
+                 " above it (K-3): the entry (A;ID;0x1301bf;;;AU) gives AU, a name outside the system's, 0x10, 0x100,"
+                 " 0x10000: not allowed")
+
+
+def test_x50_the_refusal_held_is_the_checks_own_words_for_that_entry():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import wincode
+    words = wincode.as_above(0x10, "O:BAD:(A;ID;0x1301bf;;;AU)")   # the bits the check says for that entry above
+    assert words.startswith(PLAIN_REFUSED.split("Python, ", 1)[1]) and "0x10, 0x100, 0x10000:" in words
 
 
 def plainfile(**kw):

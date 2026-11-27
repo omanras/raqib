@@ -564,7 +564,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib service install [--no-start]` | Linux, as root (it asks for no elevation): write `/etc/systemd/system/raqib-watch.service` and enable and start it, the host watch as a unit of the system's that serves no page, with its record under `/var/lib/raqib` (`docs/specs/SERVICE.md`); refused, exit 2 and nothing written, for an interpreter run with `-S` or one reading `PYTHONHOME` or `PYTHONPLATLIBDIR` from its environment, a raqib not directly in that interpreter's own site folders, or a `*.pth` file holding a byte outside printable ASCII, tab and the line ends, and unless the interpreter, its `pyvenv.cfg`, every file and folder under sys.path and under the paths its `*.pth` files name, the raqib package, systemctl, ss, the unit's folder and every folder above them are root's and writable by nobody else (the first that is not is said), or where a unit of the name does not carry Raqib's mark, or, with no unit file, where systemd holds a unit of the name (loaded from any place, or running) or gives no answer; it says how many paths of which kinds it checked; after the reload, a unit not as installed is not started (exit 1); over Raqib's own unit it restarts it; 3 s after the start it asks systemctl, and a unit not active or not as installed then is exit 1; `--no-start`: neither enabled nor started; exit 1 where systemctl failed |
 | `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one without Raqib's mark is not touched: exit 2), and have systemd forget a failed state of it (`systemctl reset-failed`, said); the record under `/var/lib/raqib` stays and its path is said, unless `--purge` removes that folder too, and only it; with no unit file, exit 0 only where systemd holds no unit of the name (LoadState not-found, ActiveState inactive or failed), else exit 1, nothing touched and nothing purged |
 | `raqib service status` | no rights needed: installed, enabled and active by systemctl's own words, whether it is as installed (the file's whole text the one Raqib writes, loaded from that file, no drop-in, not changed since it was loaded), the restarts, and the last result where not active; with no unit file, a unit of the name that systemd holds is said; exit 0 active as installed, 1 installed and not active, or not as installed, 3 not installed or not known, 2 not Linux |
-| `raqib service check` | Windows; no rights needed, nothing written: whether the code a service of Windows would run is the system's alone, by the owners and lists Windows gives (`docs/specs/SERVICE.md`) - packed with its own runtime, the program's folder, whole, and each folder above it to the drive; run by a plain interpreter asked with `-I`, its folder, its base's, its prefixes, every entry of its path and the lines of its *.pth files (an entry not there judged by the deepest folder of it that is there), and the raqib package, each whole, and each folder above them; exit 0 the system's alone, with how many names of which kinds it checked, 1 not or not read, the first name refused said with its role and why, 2 not Windows, or a plain interpreter not started with `-I` or started with `-S` (the command to ask it by said) |
+| `raqib service check` | Windows; no rights needed (ask it first as a plain user), the check writes nothing: whether the code a service of Windows would run is the system's alone, by the owners and lists Windows gives (`docs/specs/SERVICE.md`) - on two roads: packed with its own runtime, the program's folder, whole, and each folder above it to the drive; run by a plain interpreter asked with `-I`, its folder, its base's, its prefixes, the names it looks for itself at every start (`pyvenv.cfg` in the folder above its folder, `Modules\Setup.local` and `Lib` two folders above), every entry of its path and the lines of its *.pth files (an entry not there judged by the deepest folder of it that is there), and the raqib package, each whole, and each folder above them; exit 0 the system's alone, with how many names of which kinds it checked, 1 not or not read, the first name refused said with its role and why, 2 not Windows, or a plain interpreter not started with `-I` or started with `-S` (the command to ask it by said) |
 | `raqib discover` | find AI agents on a host by what they do |
 | `raqib --version` | print raqib <version> and exit 0 |
 
@@ -573,11 +573,19 @@ from the packed copy that service would run, once it is where it will stay: on G
 machines a copy an administrator put under `C:\Program Files` was taken, asked by an administrator
 and by a plain user alike. A copy in a folder made at the drive's root or under `C:\ProgramData` was
 refused, with the name refused said. For a Raqib a plain interpreter runs, ask it with that
-interpreter as the service will run it, `"PATH\python.exe" -I -m raqib service check`: asked
-without `-I`, or with `-S`, it gets exit 2 and that command. The plain road is held by tests on
-the owners and lists measured of a Python an administrator put under Program Files (taken); it
-was not yet asked on a real machine. It is a reading at one moment: run it again after anything
-there changes.
+interpreter as the service will run it, `"PATH\python.exe" -I -m raqib service check`: asked without
+`-I`, or with `-S`, it gets exit 2 and that command. Ask it first as a plain user, who needs no
+rights for it: the check is run by the code it judges, which has run its site and the `import` lines
+of its *.pth files at its start, so it is a gate against a tree put in the wrong place, not a
+judgement of a tree another already changed. The check writes nothing, but the interpreter that runs
+it may write bytecode caches beside what it imports, where the asker may write there. A plain
+interpreter looks at every start for `pyvenv.cfg` in the folder above its own and for
+`Modules\Setup.local` two folders above it, so python.org's default folder for all users
+(`C:\Program Files\Python311`) is refused on a machine whose drive's root lets signed-in users add a
+folder, as GitHub's does. Put a Python a service will run one folder deeper instead, as `C:\Program
+Files\NAME\Python311`, where it is taken. The plain road is held by tests on the owners and lists
+measured of a Python under Program Files; the names the interpreter itself looks for were read in
+its source, not measured. It is a reading at one moment: run it again after anything there changes.
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source

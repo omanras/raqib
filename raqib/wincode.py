@@ -34,21 +34,27 @@ plainly, a name not read, a folder not listed, two names of one folder that diff
 WALK_MAX names, modules outside the program's folder: each refused with its own words. Names are compared without
 case where a set of what was walked is kept; paths are made with ntpath, on any system.
 
-The plain road (Amendment M, M-1 to M-5; the packed road is chosen first): a plain interpreter is walked only where
+The plain road (Amendments M and N; the packed road is chosen first): a plain interpreter is walked only where
 it was started with -I and with its site (no -S), so that its path is the path the service gets; otherwise exit 2,
 with the command to ask it by. Then, each by K-2 and whole, the folders above each by K-3, top first, one WALK_MAX
-for the whole walk and each name read once: the interpreter's folder, its base executable's (a venv's base), its
-prefix and base prefix, every entry of its path, the folder of the raqib package. An entry that is a file is judged
-as itself; one that is not there (the reader's errors 2 and 3, and no other) is judged by the deepest folder of it
-that is there, as the code itself, itself only (M-3). In every entry that is a folder each *.pth file, once taken,
-is read - at most PTH_MAX bytes, no byte PTH_ODD finds - and its lines that are paths by site's rule (pth_lines,
-with ntpath) become entries; nothing of it is run or imported.
+for the whole walk and each name read once: the interpreter's folder, its base executable's (a venv's base) where
+it is another, its prefix and base prefix, its exec prefix and base exec prefix where they are neither (N-3), then
+the names the interpreter itself looks for at every start (N-1, OWN_NAMES) for its folder and its base's, every
+entry of its path, the folder of the raqib package. Only the base executable may be unnamed: a program or a prefix
+not named, or not a string, is refused (N-3). An entry that is a file is judged as itself; one that is not there
+(the reader's errors 2 and 3, and no other) is judged by the deepest folder of it that is there, as the code itself,
+itself only (M-3), or by the file it lies beneath where that is a file taken. N-1's names are judged so too, and
+counted apart from the entries. In every entry that is a folder each *.pth file, once taken, is read - at most
+PTH_MAX bytes, no byte PTH_ODD finds - and its lines that are paths by site's rule (pth_lines, with ntpath) become
+entries; the check takes or runs none of its lines as code. The check is run by the code it judges (N-2): the
+interpreter that asks has run its site, and the import lines of its *.pth files, at its start.
 
 Every call of the system (the platform, whether packed, the program's path, the modules' folder, the running
 interpreter's flags, base, prefixes, path and package, the one read of a name, a folder's listing, a *.pth file's
 bytes) goes through one object, System; a test hands its own. The *.pth file's bytes are the only file this module
 opens: one bounded read in binary mode, in System.read_bytes. Nothing runs at import; ctypes is only in winservice's
-reader, declared at its first call. The standard library only; nothing is written; no right is asked; no program is
+reader, declared at its first call. The standard library only; the check writes nothing (the interpreter that runs
+it may write bytecode caches beside what it imports, where the asker may write); no right is asked; no program is
 started; no network.
 """
 from __future__ import annotations
@@ -91,6 +97,13 @@ ABOVE_MAY = "a folder above may give any other name only reading, executing and 
 NOT_READ = "what was not read is never the system's"
 NOT_THERE = (2, 3)              # M-3: the system's "file not found" and "path not found", the reader's first argument
 ASK_BY = "-I -m raqib service check"   # M-1: the command the check of a plain interpreter is asked by
+# N-1: the names a plain interpreter itself looks for at every start, for a folder it is in (own_names makes them),
+# each with which of the three it is - read in the interpreter's source (Amendment N), not measured
+OWN_NAMES = ("a venv's file pyvenv.cfg, which the interpreter itself looks for at every start in the folder above",
+             "a build tree's marker Modules\\Setup.local, which the interpreter itself looks for at every start two"
+             " folders above",
+             "a build tree's library Lib, which the interpreter itself looks for at every start two folders above")
+THERE, MISSING, BENEATH = "there", "not there", "beneath a file"   # how a road ended (M-3, N-3)
 DEVICE_NAMES = re.compile(r"(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9\u00b9\u00b2\u00b3]"
                           r"|LPT[0-9\u00b9\u00b2\u00b3])(?:\..*)?\Z", re.I)   # a device's name, any extension
 NOT_IN_A_NAME = '\\/:*?"<>|'
@@ -321,13 +334,14 @@ class _Walk:
 
     def __init__(self, system):
         self.system, self.code, self.above, self.alone, self.walked = system, set(), set(), set(), 0
-        self.counts = {"folders": 0, "files": 0, "above": 0}
+        self.counts = {"folders": 0, "files": 0, "above": 0}   # the plain road adds "alone" (N-3)
         self.got, self.kind, self.lists = {}, {}, {}
 
     def _count(self, key, kind):
-        """Each name counted once, by the strictest role it was taken in (as the code itself over a folder above)."""
+        """Each name counted once, by the strictest role it was taken in: as the code itself, whole (folders,
+        files), over itself only (alone, N-3), over a folder above."""
         old = self.kind.get(key)
-        if old == kind or (old is not None and kind == "above"):
+        if old == kind or (old is not None and kind == "above") or (old in ("folders", "files") and kind == "alone"):
             return
         if old is not None:
             self.counts[old] -= 1
@@ -415,44 +429,51 @@ class _Walk:
         return None
 
     def road(self, top, folder, missing_ok):
-        """M-2, M-3: (bad, there). Each folder above `top`, top first, by K-3, then `top` whole by K-2. Where
-        missing_ok and a name of it is not there, the deepest folder of it that is there is judged as the code
-        itself, itself only (its folders above by K-3), and there is False."""
+        """M-2, M-3, N-3: (bad, how). Each folder above `top`, top first, by K-3, then `top` whole by K-2, and how is
+        THERE. Where missing_ok and a name of it is not there, the deepest folder of it that is there is judged as
+        the code itself, itself only (its folders above by K-3; counted "alone"), and how is MISSING; where the
+        deepest name of it that is there is a file taken as the code itself, that file judges it, and how is
+        BENEATH."""
         chain = _above(top) + [top]
         for k, here in enumerate(chain):
             bad, got = self._reading(here, ROLE_ABOVE if k + 1 < len(chain) else ROLE_CODE)
             if bad:
-                return bad, False
+                return bad, None
             if missing_ok and _not_there(got):
-                return self._missing(top, chain[k - 1] if k else None, got), False
+                return self._missing(top, chain[k - 1] if k else None, got)
             if k + 1 < len(chain):
                 bad = self.folder_above(here)
                 if bad:
-                    return bad, False
-        return self.whole(top, folder), True
+                    return bad, None
+        return self.whole(top, folder), THERE
 
     def _missing(self, entry, deepest, error):
         if deepest is None:
-            return _said(entry), "not there (error %d), and neither is its drive: no folder of it is there to be" \
-                                 " judged; %s" % (error.args[0], NOT_READ)
+            return (_said(entry), "not there (error %d), and neither is its drive: no folder of it is there to be"
+                                  " judged; %s" % (error.args[0], NOT_READ)), None
         key = ntpath.normcase(deepest)
+        if self.kind.get(key) == "files":    # a file taken as the code itself, whole: what lies beneath it is its
+            return None, BENEATH             # own (N-3)
         if key in self.code or key in self.alone:
-            return None
+            return None, MISSING
         self.alone.add(key)
-        bad, _ = self._read(deepest, ROLE_CODE)
+        bad, attributes = self._read(deepest, ROLE_CODE)
         if bad:
-            return _said(entry), "not there (error %d): the deepest folder of it that is there, %s, judged for it" \
-                                 " %s" % (error.args[0], _said(deepest), bad[1])
-        self._count(key, "folders")
-        return None
+            return (_said(entry), "not there (error %d): the deepest folder of it that is there, %s, judged for it"
+                                  " %s" % (error.args[0], _said(deepest), bad[1])), None
+        if not attributes & winservice.ATTRIBUTE_FOLDER:   # not met: a folder above is a folder, or refused
+            self._count(key, "files")
+            return None, BENEATH
+        self._count(key, "alone")
+        return None, MISSING
 
 
 def check(system):
     """E2 (K-4, K-5; M-1 to M-5): (bad, counts). bad is (name, words) of the first name refused - or of the program,
     where it is not Windows', or a plain interpreter not asked with -I and its site - or None where the code a
     service would run is the system's alone; counts says what was walked: folders and files judged as the code itself
-    (K-2), folders above (K-3), and on the plain road its entries, those not there, the *.pth files read and their
-    lines taken as entries. Packed, the packed road; else the plain one. Nothing is written."""
+    (K-2), folders above (K-3), and on the plain road what plain_words says. Packed, the packed road; else the plain
+    one. The check writes nothing."""
     walk = _Walk(system)
 
     def done(bad):
@@ -505,7 +526,7 @@ def not_asked(system):
 def pth_lines(text, folder):
     """M-4 (service.pth_entries' rule, with ntpath): the lines of a *.pth file's text that are paths, by site's own
     rule - not blank, not `#`, not `import` - each, its trailing whitespace stripped, joined to the folder the file is
-    in and made whole lexically, there or not. Nothing of the text is run."""
+    in and made whole lexically, there or not. This takes or runs no line as code."""
     out = []
     for line in text.splitlines():
         if line.startswith("#") or not line.strip() or line.startswith(("import ", "import\t")):
@@ -514,32 +535,75 @@ def pth_lines(text, folder):
     return out
 
 
+def own_names(folder):
+    """N-1: [(name, which)] the names the interpreter itself looks for at every start, for a folder it is in:
+    pyvenv.cfg in the folder above it; Modules\\Setup.local and Lib two folders above it (made with ntpath: for a
+    folder nearer the drive's root than that, the root)."""
+    up, top = ntpath.dirname(folder), ntpath.normpath(ntpath.join(folder, "..", ".."))
+    return list(zip((ntpath.join(up, "pyvenv.cfg"), ntpath.join(top, "Modules", "Setup.local"),
+                     ntpath.join(top, "Lib")), OWN_NAMES))
+
+
+def _root_said(path):
+    """N-3: None where a root the system object gave is a whole path of a drive; else why not, in its own words."""
+    if path is None:
+        return "is not named (None): only the base executable may be unnamed (ADR-0013 N-3); %s" % NOT_READ
+    if not isinstance(path, str):
+        return "is not a string (%s): not read; %s" % (_said(repr(path), 80), NOT_READ)
+    return path_refused(path)
+
+
 def _plain(system, walk, program):
-    """M-1 to M-5: the plain interpreter's road, in M-2's order; (bad, counts) as check gives them."""
-    counts = {"entries": 0, "missing": 0, "pth": 0, "pth_lines": 0}
+    """M-1 to M-5, N-1, N-3: the plain interpreter's road, in M-2's order; (bad, counts) as check gives them."""
+    counts = {"entries": 0, "missing": 0, "beneath": 0, "own": 0, "own_there": 0, "pth": 0, "pth_lines": 0,
+              "base": 0, "exec": 0}
+    walk.counts["alone"] = 0
 
     def done(bad):
         return bad, dict(walk.counts, **counts)
     words = not_asked(system)
     if words:
         return done((_said(program), words))
-    roots = []
-    base = system.base_executable()
-    for said, path, top, what in (
-            ("the interpreter's path", program, ntpath.dirname, "the interpreter's folder"),
-            ("the base executable's path", base, ntpath.dirname, "the base executable's folder"),
-            ("the interpreter's prefix", system.prefix(), None, "the interpreter's prefix"),
-            ("the interpreter's base prefix", system.base_prefix(), None, "the interpreter's base prefix")):
-        if path is None and path is base:
-            continue    # an interpreter that names no base executable: its own folder is walked
-        why = path_refused(path)
+    base, prefixes = system.base_executable(), (system.prefix(), system.base_prefix())
+    given = (("the interpreter's path", program, "the interpreter's folder"),
+             ("the base executable's path", base, "the base executable's folder"),
+             ("the interpreter's prefix", prefixes[0], "the interpreter's prefix"),
+             ("the interpreter's base prefix", prefixes[1], "the interpreter's base prefix"),
+             ("the interpreter's exec prefix", system.exec_prefix(), "the interpreter's exec prefix"),
+             ("the interpreter's base exec prefix", system.base_exec_prefix(), "the interpreter's base exec prefix"))
+    for said, path, _ in given:
+        if path is None and said == given[1][0]:
+            continue    # N-3: the base executable alone may be unnamed; its interpreter's own folder is walked
+        why = _root_said(path)
         if why:
             return done((_said(path), "%s %s" % (said, why)))
-        roots.append((top(path) if top else path, what))
+    folders = [ntpath.dirname(program)]
+    if base is not None and ntpath.normcase(ntpath.dirname(base)) != ntpath.normcase(folders[0]):
+        folders.append(ntpath.dirname(base))    # a base in another folder (a venv's): walked, and its names judged
+        counts["base"] = 1
+    roots = list(zip(folders, ("the interpreter's folder", "the base executable's folder")))
+    roots += [(path, what) for _, path, what in given[2:4]]
+    for _, path, what in given[4:]:            # N-3: an exec prefix that is neither prefix is a root of its own
+        if ntpath.normcase(path) not in [ntpath.normcase(p) for p in prefixes]:
+            roots.append((path, what))
+            counts["exec"] += 1
     for top, what in roots:
         bad, _ = walk.road(top, what, False)
         if bad:
             return done(bad)
+    judged = set()
+    for folder, what in roots[:len(folders)]:   # N-1: judged as an entry is, counted apart from the entries
+        for name, which in own_names(folder):
+            if ntpath.normcase(name) in judged:
+                continue
+            judged.add(ntpath.normcase(name))
+            counts["own"] += 1
+            bad, how = walk.road(name, None, True)
+            if bad:
+                return done((bad[0], "%s (the name %s: %s %s %s)" % (bad[1], _said(name), which, what,
+                                                                       _said(folder))))
+            if how == THERE:
+                counts["own_there"] += 1
     entries, seen = [(e, None) for e in list(system.sys_path())], set()
     while entries:
         entry, source = entries.pop(0)
@@ -550,12 +614,14 @@ def _plain(system, walk, program):
                 continue
             seen.add(key)
             counts["entries"] += 1
-            bad, there = walk.road(entry, None, True)
+            bad, how = walk.road(entry, None, True)
             if bad:
                 bad = bad if source is None else (bad[0], "%s (the entry %s, a line of %s)" % (
                     bad[1], _said(entry), _said(source)))
-            elif not there:
+            elif how == MISSING:
                 counts["missing"] += 1
+            elif how == BENEATH:
+                counts["beneath"] += 1
         if bad:
             return done(bad)
         if walk.kind.get(ntpath.normcase(entry)) != "folders" or ntpath.normcase(entry) not in walk.lists:
@@ -623,18 +689,27 @@ def checked_words(counts):
 
 
 def plain_words(counts):
-    """M-5 (service.checked_words' twin, the plain road): what the check walked, by count."""
+    """M-5, N-2, N-3 (service.checked_words' twin, the plain road): what the check walked, by count. The first number
+    is the names walked whole and the folders above; the folders judged themselves only are said apart, after it."""
     total = counts["folders"] + counts["files"] + counts["above"]
+    base = ", its base's" if counts["base"] else ""
+    prefixes = ("its prefix and base prefix (its exec prefixes among them)", "its prefix, base prefix and one exec"
+                " prefix apart from them", "its prefix, base prefix and two exec prefixes apart from them")
     return ("checked %d names, each the system's alone (its owner the system, the administrators or the system's"
-            " installer, no reparse point, its list there): under the interpreter's folder, its base's, its prefix"
-            " and base prefix, %d entries of its path and the raqib package's folder, whole, %d folders and %d files,"
-            " each giving any other name only reading and executing (the creator's own inherit-only entry apart);"
-            " %d of those entries not there, each judged by the deepest folder of it that is there, itself only; %d"
-            " *.pth files read, %d of their lines taken as entries, nothing of them run; and %d folders above them to"
-            " the drive's letter, each giving any other name, in the entries that apply to the folder itself, only"
-            " that and adding a thing beside" % (
-                total, counts["entries"], counts["folders"], counts["files"], counts["missing"], counts["pth"],
-                counts["pth_lines"], counts["above"]))
+            " installer, no reparse point, its list there): under the interpreter's folder%s, %s, %d entries of its"
+            " path and the raqib package's folder, whole, %d folders and %d files, each giving any other name only"
+            " reading and executing (the creator's own inherit-only entry apart); %d of those entries not there, each"
+            " judged by the deepest folder of it that is there, itself only, and %d beneath a file, each judged by"
+            " that file; %d names the interpreter itself looks for at every start for its folder%s (pyvenv.cfg in the"
+            " folder above it, Modules\\Setup.local and Lib two folders above it), each judged as an entry is, %d of"
+            " them there; %d *.pth files read, %d of their lines walked as entries, none of their lines taken or run"
+            " by the check; and %d folders above them to the drive's letter, each giving any other name, in the"
+            " entries that apply to the folder itself, only that and adding a thing beside; and besides those %d"
+            " names, %d folders judged themselves only, as the code itself, each the deepest folder that is there of"
+            " a name not there" % (
+                total, base, prefixes[counts["exec"]], counts["entries"], counts["folders"], counts["files"],
+                counts["missing"], counts["beneath"], counts["own"], base, counts["own_there"], counts["pth"],
+                counts["pth_lines"], counts["above"], total, counts["alone"]))
 
 
 def not_windows(platform):
@@ -683,6 +758,12 @@ class System:
 
     def base_prefix(self):
         return sys.base_prefix
+
+    def exec_prefix(self):                   # N-3
+        return sys.exec_prefix
+
+    def base_exec_prefix(self):
+        return sys.base_exec_prefix
 
     def sys_path(self):
         return list(sys.path)

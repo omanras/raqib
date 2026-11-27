@@ -337,27 +337,40 @@ NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing list
            " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
 GUIDE_NEW += NO_PAGE
 # ADR-0013 Amendment K (M12.4c1, K-6): `raqib service check`'s row in the guide's table, and when to run it
-SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendment M): the row and the paragraph say the plain road
-    "| `raqib service check` | Windows; no rights needed, nothing written: whether the code a service of"
-    " Windows would run is the system's alone, by the owners and lists Windows gives (`docs/specs/SERVIC"
-    "E.md`) - packed with its own runtime, the program's folder, whole, and each folder above it to the "
-    "drive; run by a plain interpreter asked with `-I`, its folder, its base's, its prefixes, every entr"
-    "y of its path and the lines of its *.pth files (an entry not there judged by the deepest folder of "
-    "it that is there), and the raqib package, each whole, and each folder above them; exit 0 the system"
-    "'s alone, with how many names of which kinds it checked, 1 not or not read, the first name refused "
-    "said with its role and why, 2 not Windows, or a plain interpreter not started with `-I` or started "
-    "with `-S` (the command to ask it by said) |",
-    "Run `raqib service check` on Windows before a service of Windows is made to run Raqib as the system"
-    ", from the packed copy that service would run, once it is where it will stay: on GitHub's Windows m"
-    "achines a copy an administrator put under `C:\\Program Files` was taken, asked by an administrator a"
-    "nd by a plain user alike.",
+SERVICE_CHECK = [   # M12.4c1b (ADR-0013 Amendments M and N): the row and the paragraph say both roads, N-1, N-2
+    "| `raqib service check` | Windows; no rights needed (ask it first as a plain user), the check writes"
+    " nothing: whether the code a service of Windows would run is the system's alone, by the owners and l"
+    "ists Windows gives (`docs/specs/SERVICE.md`) - on two roads: packed with its own runtime, the progra"
+    "m's folder, whole, and each folder above it to the drive; run by a plain interpreter asked with `-I`"
+    ", its folder, its base's, its prefixes, the names it looks for itself at every start (`pyvenv.cfg` i"
+    "n the folder above its folder, `Modules\\Setup.local` and `Lib` two folders above), every entry of i"
+    "ts path and the lines of its *.pth files (an entry not there judged by the deepest folder of it that"
+    " is there), and the raqib package, each whole, and each folder above them; exit 0 the system's alone"
+    ", with how many names of which kinds it checked, 1 not or not read, the first name refused said with"
+    " its role and why, 2 not Windows, or a plain interpreter not started with `-I` or started with `-S` "
+    "(the command to ask it by said) |",
+    "Run `raqib service check` on Windows before a service of Windows is made to run Raqib as the system,"
+    " from the packed copy that service would run, once it is where it will stay: on GitHub's Windows mac"
+    "hines a copy an administrator put under `C:\\Program Files` was taken, asked by an administrator and"
+    " by a plain user alike.",
     "A copy in a folder made at the drive's root or under `C:\\ProgramData` was refused, with the name re"
     "fused said.",
     "For a Raqib a plain interpreter runs, ask it with that interpreter as the service will run it, `\"PA"
-    "TH\\python.exe\" -I -m raqib service check`: asked without `-I`, or with `-S`, it gets exit 2 and tha"
-    "t command.",
-    "The plain road is held by tests on the owners and lists measured of a Python an administrator put u"
-    "nder Program Files (taken); it was not yet asked on a real machine.",
+    "TH\\python.exe\" -I -m raqib service check`: asked without `-I`, or with `-S`, it gets exit 2 and th"
+    "at command.",
+    "Ask it first as a plain user, who needs no rights for it: the check is run by the code it judges, wh"
+    "ich has run its site and the `import` lines of its *.pth files at its start, so it is a gate against"
+    " a tree put in the wrong place, not a judgement of a tree another already changed.",
+    "The check writes nothing, but the interpreter that runs it may write bytecode caches beside what it "
+    "imports, where the asker may write there.",
+    "A plain interpreter looks at every start for `pyvenv.cfg` in the folder above its own and for `Modul"
+    "es\\Setup.local` two folders above it, so python.org's default folder for all users (`C:\\Program Fi"
+    "les\\Python311`) is refused on a machine whose drive's root lets signed-in users add a folder, as Gi"
+    "tHub's does.",
+    "Put a Python a service will run one folder deeper instead, as `C:\\Program Files\\NAME\\Python311`, "
+    "where it is taken.",
+    "The plain road is held by tests on the owners and lists measured of a Python under Program Files; th"
+    "e names the interpreter itself looks for were read in its source, not measured.",
     "It is a reading at one moment: run it again after anything there changes.",
 ]
 GUIDE_NEW += SERVICE_CHECK
